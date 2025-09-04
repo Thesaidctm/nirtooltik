@@ -1,15 +1,54 @@
+"""Utility plotting functions used across the project."""
 
 from __future__ import annotations
+
 from pathlib import Path
-import numpy as np, matplotlib.pyplot as plt, seaborn as sns
+
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from sklearn.metrics import roc_curve
 from sklearn.preprocessing import label_binarize
-from sklearn.metrics import roc_curve, auc
+
 
 def plot_confusion(cm, classes, out_base: Path):
-    cmn = cm.astype(float)/(cm.sum(axis=1, keepdims=True)+1e-12)
-    plt.figure(figsize=(7,6)); sns.heatmap(cmn, annot=True, fmt=".2f", cmap="Blues", xticklabels=classes, yticklabels=classes)
-    plt.title("Confusion Matrix (normalized)"); plt.xlabel("Pred"); plt.ylabel("True")
-    out_base.parent.mkdir(parents=True, exist_ok=True); plt.tight_layout(); plt.savefig(out_base.with_suffix(".png")); plt.savefig(out_base.with_suffix(".svg")); plt.close()
+    cmn = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-12)
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    sns.heatmap(
+        cmn,
+        annot=True,
+        fmt=".2f",
+        cmap="viridis",
+        ax=ax,
+        xticklabels=classes,
+        yticklabels=classes,
+        annot_kws={"size": 12},
+        linewidths=0.5,
+        linecolor="gray",
+        cbar_kws={"label": "Taxa de acerto normalizada"},
+    )
+
+    ax.set_xlabel("Pred", fontweight="bold")
+    ax.set_ylabel("True", fontweight="bold")
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right", fontweight="bold")
+    ax.set_yticklabels(ax.get_yticklabels(), fontweight="bold")
+    ax.set_title("Confusion Matrix (normalized)", fontsize=16, fontweight="bold")
+
+    for text in ax.texts:
+        text.set_fontsize(12)
+        x, y = text.get_position()
+        if int(x - 0.5) == int(y - 0.5):
+            text.set_fontweight("bold")
+
+    ax.set_aspect("equal")
+    plt.tight_layout()
+
+    out_base.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_base.with_suffix(".png"))
+    fig.savefig(out_base.with_suffix(".svg"))
+    plt.close(fig)
+
 
 def plot_roc_ovr(y_true, y_proba, classes, out_base: Path):
     """Plot one-vs-rest ROC curves for multi-class or binary problems."""
@@ -37,14 +76,30 @@ def plot_roc_ovr(y_true, y_proba, classes, out_base: Path):
     plt.savefig(out_base.with_suffix(".svg"))
     plt.close()
 
-def plot_reliability(y_true, y_proba, out_base: Path, n_bins=10):
-    conf = y_proba.max(axis=1); pred = y_proba.argmax(axis=1); acc = (pred==y_true).astype(float)
-    bins = np.linspace(0,1,n_bins+1); mids, accs = [], []
+
+def plot_reliability(y_true, y_proba, out_base: Path, n_bins: int = 10):
+    conf = y_proba.max(axis=1)
+    pred = y_proba.argmax(axis=1)
+    acc = (pred == y_true).astype(float)
+    bins = np.linspace(0, 1, n_bins + 1)
+    mids, accs = [], []
     for i in range(n_bins):
-        m,M=bins[i],bins[i+1]; mask=(conf>=m)&(conf<M if i<n_bins-1 else conf<=M)
-        if not np.any(mask): continue
-        mids.append((m+M)/2); accs.append(acc[mask].mean())
-    plt.figure(figsize=(6,4)); plt.plot([0,1],[0,1],"--"); 
-    if mids: plt.plot(mids, accs, marker="o")
-    plt.xlabel("Confidence"); plt.ylabel("Accuracy"); plt.title("Reliability Diagram")
-    out_base.parent.mkdir(parents=True, exist_ok=True); plt.tight_layout(); plt.savefig(out_base.with_suffix(".png")); plt.savefig(out_base.with_suffix(".svg")); plt.close()
+        m, M = bins[i], bins[i + 1]
+        mask = (conf >= m) & (conf < M if i < n_bins - 1 else conf <= M)
+        if not np.any(mask):
+            continue
+        mids.append((m + M) / 2)
+        accs.append(acc[mask].mean())
+    plt.figure(figsize=(6, 4))
+    plt.plot([0, 1], [0, 1], "--")
+    if mids:
+        plt.plot(mids, accs, marker="o")
+    plt.xlabel("Confidence")
+    plt.ylabel("Accuracy")
+    plt.title("Reliability Diagram")
+    out_base.parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(out_base.with_suffix(".png"))
+    plt.savefig(out_base.with_suffix(".svg"))
+    plt.close()
+
