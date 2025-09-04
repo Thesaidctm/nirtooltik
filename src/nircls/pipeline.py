@@ -2,6 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
+import warnings
 import json, numpy as np, pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -22,6 +23,12 @@ from .metrics.calibration import expected_calibration_error
 from .utils.plots import plot_confusion, plot_roc_ovr, plot_reliability
 from .report import generate_report
 from .utils.logging import logger
+
+warnings.filterwarnings(
+    "ignore",
+    message="This Pipeline instance is not fitted yet",
+    category=FutureWarning,
+)
 
 def _make_preprocess(steps_cfg, cfg):
     """Create preprocessing steps and optional parameter grid.
@@ -109,8 +116,9 @@ def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer, progress: Progress) -> No
                 yhat = gs.predict(Xte)
                 scores["F1-macro"].append(f1_score(yte, yhat, average="macro"))
                 scores["BalancedAcc"].append(balanced_accuracy_score(yte, yhat))
-                if hasattr(gs.best_estimator_, "predict_proba"):
-                    proba = gs.best_estimator_.predict_proba(Xte)
+                proba_fn = getattr(gs.best_estimator_, "predict_proba", None)
+                if proba_fn is not None:
+                    proba = proba_fn(Xte)
                     y_proba_all.append(proba)
                     brier = np.mean([brier_score_loss((yte == k).astype(int), proba[:, k]) for k in range(len(classes))])
                     scores["Brier"].append(brier)
@@ -177,8 +185,9 @@ def _run_holdout(cfg: Dict[str, Any], out_dir: Path, test_size: float, random_st
                 "F1-macro_mean": float(f1_score(yte, yhat, average="macro")),
                 "BalancedAcc_mean": float(balanced_accuracy_score(yte, yhat)),
             }
-            if hasattr(gs.best_estimator_, "predict_proba"):
-                proba = gs.best_estimator_.predict_proba(Xte)
+            proba_fn = getattr(gs.best_estimator_, "predict_proba", None)
+            if proba_fn is not None:
+                proba = proba_fn(Xte)
                 brier = np.mean([brier_score_loss((yte == k).astype(int), proba[:, k]) for k in range(len(classes))])
                 row["Brier_mean"] = float(brier)
                 row["ECE_mean"] = float(expected_calibration_error(yte, proba, n_bins=15))
@@ -187,7 +196,7 @@ def _run_holdout(cfg: Dict[str, Any], out_dir: Path, test_size: float, random_st
             out_fig.mkdir(parents=True, exist_ok=True)
             cm = confusion_matrix(yte, yhat)
             plot_confusion(cm, classes, out_fig / f"{Path(ds['file']).stem}__{ds['target']}__{name}__cm")
-            if hasattr(gs.best_estimator_, "predict_proba"):
+            if proba_fn is not None:
                 plot_roc_ovr(
                     yte,
                     proba,
