@@ -12,11 +12,30 @@ def plot_confusion(cm, classes, out_base: Path):
     out_base.parent.mkdir(parents=True, exist_ok=True); plt.tight_layout(); plt.savefig(out_base.with_suffix(".png")); plt.savefig(out_base.with_suffix(".svg")); plt.close()
 
 def plot_roc_ovr(y_true, y_proba, classes, out_base: Path):
-    y_bin = label_binarize(y_true, classes=list(range(len(classes)))); plt.figure(figsize=(7,6))
-    for i in range(len(classes)):
-        fpr,tpr,_ = roc_curve(y_bin[:,i], y_proba[:,i]); plt.plot(fpr,tpr,label=f"{classes[i]}")
-    plt.plot([0,1],[0,1],"--"); plt.xlabel("FPR"); plt.ylabel("TPR"); plt.title("ROC OvR"); plt.legend()
-    out_base.parent.mkdir(parents=True, exist_ok=True); plt.tight_layout(); plt.savefig(out_base.with_suffix(".png")); plt.savefig(out_base.with_suffix(".svg")); plt.close()
+    """Plot one-vs-rest ROC curves for multi-class or binary problems."""
+
+    plt.figure(figsize=(7, 6))
+    n_classes = len(classes)
+    if y_proba.shape[1] == 2:
+        # binary case: use positive class probability
+        y_bin = (y_true == 1).astype(int)
+        fpr, tpr, _ = roc_curve(y_bin, y_proba[:, 1])
+        plt.plot(fpr, tpr, label=str(classes[1]))
+    else:
+        y_bin = label_binarize(y_true, classes=list(range(n_classes)))
+        for i in range(n_classes):
+            fpr, tpr, _ = roc_curve(y_bin[:, i], y_proba[:, i])
+            plt.plot(fpr, tpr, label=f"{classes[i]}")
+    plt.plot([0, 1], [0, 1], "--")
+    plt.xlabel("FPR")
+    plt.ylabel("TPR")
+    plt.title("ROC OvR")
+    plt.legend()
+    out_base.parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(out_base.with_suffix(".png"))
+    plt.savefig(out_base.with_suffix(".svg"))
+    plt.close()
 
 def plot_reliability(y_true, y_proba, out_base: Path, n_bins=10):
     conf = y_proba.max(axis=1); pred = y_proba.argmax(axis=1); acc = (pred==y_true).astype(float)
