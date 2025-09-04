@@ -6,7 +6,6 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from nircls.pipeline import (
     build_pipeline_from_config,
     run_multiple_eval,
-    nested_crossval_run,
     train_and_save,
 )
 from nircls.io import prepare_inputs
@@ -155,12 +154,19 @@ def test_nested_crossval_report(tmp_path):
     cfg = {
         "data": {"input_path": str(data_file), "target_col": "target"},
         "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
-        "cv": {"outer_folds": 2, "outer_repeats": 1, "inner_folds": 2},
+        "cv": {
+            "inner_folds": 2,
+            "random_state": 0,
+            "strategies": [
+                {"type": "kfold", "n_splits": [2], "n_repeats": 1}
+            ],
+        },
     }
 
     out_dir = tmp_path / "nested"
-    nested_crossval_run(cfg, out_dir, "run1")
-    assert (out_dir / "metrics_summary.csv").exists()
-    assert any((out_dir / "figures").glob("*.png"))
-    assert (out_dir / "report.md").exists()
+    run_multiple_eval(cfg, out_dir)
+    strat_dir = out_dir / "kfold_2"
+    assert (strat_dir / "metrics_summary.csv").exists()
+    assert any((strat_dir / "figures").glob("*.png"))
+    assert (strat_dir / "report.md").exists()
 
