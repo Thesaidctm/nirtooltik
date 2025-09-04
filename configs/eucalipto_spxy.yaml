@@ -1,0 +1,27 @@
+
+data:
+  input_path: data/raw/*.xlsx
+  x_sheet: X
+  y_sheet: Y
+  target_col: especie
+  spectral_range: [1000, 2500]
+  drop_nans: true
+  out_dir: results
+
+preprocess:
+  steps: [SNV, SG, SCALE]
+  sg: {window: 15, polyorder: 2, deriv: 1}
+
+cv:
+  outer_folds: 5
+  outer_repeats: 2
+  inner_folds: 3
+  random_state: 42
+
+models:
+  - name: PLSDA
+    grid: {n_components: [5,10,15], method: [logreg], C: [0.5,1.0,2.0]}
+  - name: SVM_RBF
+    grid: {C: [0.5,1.0,2.0], gamma: [scale, auto]}
+  - name: RF
+    grid: {n_estimators: [200,400], max_depth: [null, 20]}
