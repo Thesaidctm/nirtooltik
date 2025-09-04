@@ -16,10 +16,14 @@ preprocess:
     deriv: 1
 
 cv:
-  outer_folds: 5
-  outer_repeats: 2
-  inner_folds: 3
   random_state: 42
+  strategies:
+    - type: kfold
+      n_splits: [5,10]
+      n_repeats: 2
+    - type: loo
+    - type: holdout
+      test_size: 0.3
 
 models:
   - name: PLSDA

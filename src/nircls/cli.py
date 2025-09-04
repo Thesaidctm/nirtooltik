@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse, sys, yaml
 from pathlib import Path
 from .io import prepare_inputs, export_xy_xlsx
-from .pipeline import nested_crossval_run, train_and_save, evaluate_saved_model, predict_with_model, explain_model
+from .pipeline import run_multiple_eval, train_and_save, evaluate_saved_model, predict_with_model, explain_model
 from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id
 
@@ -34,7 +34,7 @@ def main(argv=None):
     elif args.cmd == "train":
         cfg = yaml.safe_load(open(args.config)); run_id = make_run_id("train"); out_dir = Path(cfg.get("data",{}).get("out_dir","results"))/run_id; ensure_dirs(out_dir); train_and_save(cfg, out_dir)
     elif args.cmd == "crossval":
-        cfg = yaml.safe_load(open(args.config)); run_id = make_run_id("cv"); out_dir = Path(cfg.get("data",{}).get("out_dir","results"))/run_id; ensure_dirs(out_dir); nested_crossval_run(cfg, out_dir, run_id)
+        cfg = yaml.safe_load(open(args.config)); run_id = make_run_id("cv"); out_dir = Path(cfg.get("data",{}).get("out_dir","results"))/run_id; ensure_dirs(out_dir); run_multiple_eval(cfg, out_dir)
     elif args.cmd == "evaluate":
         evaluate_saved_model(Path(args.model), Path(args.data))
     elif args.cmd == "predict":
