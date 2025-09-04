@@ -28,6 +28,12 @@ def test_pipeline_fit_predict_with_cv_and_windows():
 
 
 
+def test_logreg_default_grid_contains_C():
+    cfg = {"models": [{"name": "LOGREG"}]}
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "LOGREG"
+    assert "clf__C" in grid
+    assert pipe.named_steps["clf"].max_iter == 5000
 def test_mlp_accepts_hidden_layer_and_alpha():
     X = np.random.RandomState(0).randn(20, 10)
 def test_decision_tree_with_grid():
