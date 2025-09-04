@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Tuple, Optional
 import json, numpy as np, pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, LabelEncoder
+from rich.progress import Progress
 from sklearn.model_selection import (
     GridSearchCV,
     RepeatedStratifiedKFold,
@@ -20,6 +21,7 @@ from .models.factory import make_models_from_config
 from .metrics.calibration import expected_calibration_error
 from .utils.plots import plot_confusion, plot_roc_ovr, plot_reliability
 from .report import generate_report
+from .utils.logging import logger
 
 def _make_preprocess(steps_cfg, cfg):
     """Create preprocessing steps and optional parameter grid.
@@ -77,20 +79,28 @@ def build_pipeline_from_config(cfg: Dict[str, Any]):
     return out
 
 
-def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer) -> None:
+def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer, progress: Progress) -> None:
     data = prepare_inputs(cfg["data"])
     rows = []
+    tgt_task = progress.add_task("Target", total=len(data))
     for ds in data:
+        progress.update(tgt_task, description=f"Target: {ds['target']}")
         X, y = ds["X"], ds["Y"]
         le = LabelEncoder().fit(y)
         y_enc = le.transform(y)
         classes = le.classes_
         inner = StratifiedKFold(n_splits=cfg.get("cv", {}).get("inner_folds", 3), shuffle=True, random_state=123)
-        for name, pipe, grid in build_pipeline_from_config(cfg):
+        models = build_pipeline_from_config(cfg)
+        model_task = progress.add_task("Model", total=len(models))
+        for name, pipe, grid in models:
+            progress.update(model_task, description=f"Model: {name}")
+            steps_cfg = cfg.get("preprocess", {}).get("steps", [])
+            logger.info(f"Running {name} with steps: {steps_cfg}")
             scores = {"F1-macro": [], "BalancedAcc": [], "Brier": [], "ECE": []}
             y_true_all: List[np.ndarray] = []
             y_pred_all: List[np.ndarray] = []
             y_proba_all: List[np.ndarray] = []
+            fold_task = progress.add_task("Fold", total=outer.get_n_splits())
             for tr, te in outer.split(X, y_enc):
                 Xtr, Xte = X.iloc[tr].values, X.iloc[te].values
                 ytr, yte = y_enc[tr], y_enc[te]
@@ -107,6 +117,7 @@ def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer) -> None:
                     scores["ECE"].append(expected_calibration_error(yte, proba, n_bins=15))
                 y_true_all.append(yte)
                 y_pred_all.append(yhat)
+                progress.advance(fold_task)
             row = {"file": ds["file"], "target": ds["target"], "model": name}
             row.update({f"{k}_mean": float(np.mean(v)) for k, v in scores.items() if v})
             row.update({f"{k}_std": float(np.std(v, ddof=1)) for k, v in scores.items() if len(v) > 1})
@@ -130,6 +141,8 @@ def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer) -> None:
                     y_proba,
                     out_fig / f"{Path(ds['file']).stem}__{ds['target']}__{name}__reliability",
                 )
+            progress.advance(model_task)
+        progress.advance(tgt_task)
     pd.DataFrame(rows).to_csv(out_dir / "metrics_summary.csv", index=False)
     with open(out_dir / "metrics.json", "w") as f:
         json.dump(rows, f, indent=2)
@@ -152,6 +165,8 @@ def _run_holdout(cfg: Dict[str, Any], out_dir: Path, test_size: float, random_st
                 random_state=random_state,
                 stratify=y_enc,
             )
+            steps_cfg = cfg.get("preprocess", {}).get("steps", [])
+            logger.info(f"Running {name} with steps: {steps_cfg}")
             gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
             gs.fit(Xtr, ytr)
             yhat = gs.predict(Xte)
@@ -192,34 +207,38 @@ def _run_holdout(cfg: Dict[str, Any], out_dir: Path, test_size: float, random_st
 def run_multiple_eval(cfg: Dict[str, Any], out_dir: Path) -> None:
     strategies = cfg.get("cv", {}).get("strategies", [])
     random_state = cfg.get("cv", {}).get("random_state", 42)
-    for strat in strategies:
-        stype = strat.get("type", "").lower()
-        if stype == "kfold":
-            n_repeats = strat.get("n_repeats", 1)
-            for k in strat.get("n_splits", [5]):
-                if n_repeats > 1:
-                    outer = RepeatedStratifiedKFold(
-                        n_splits=int(k), n_repeats=int(n_repeats), random_state=random_state
-                    )
-                else:
-                    outer = StratifiedKFold(n_splits=int(k), shuffle=True, random_state=random_state)
-                sub = out_dir / f"kfold_{k}"
+    with Progress() as progress:
+        strat_task = progress.add_task("CV strategy", total=len(strategies))
+        for strat in strategies:
+            stype = strat.get("type", "").lower()
+            progress.update(strat_task, description=f"Strategy: {stype}")
+            if stype == "kfold":
+                n_repeats = strat.get("n_repeats", 1)
+                for k in strat.get("n_splits", [5]):
+                    if n_repeats > 1:
+                        outer = RepeatedStratifiedKFold(
+                            n_splits=int(k), n_repeats=int(n_repeats), random_state=random_state
+                        )
+                    else:
+                        outer = StratifiedKFold(n_splits=int(k), shuffle=True, random_state=random_state)
+                    sub = out_dir / f"kfold_{k}"
+                    sub.mkdir(parents=True, exist_ok=True)
+                    _run_cv(cfg, sub, outer, progress)
+                    generate_report(sub / "metrics.json", sub / "figures", sub / "report.md")
+            elif stype == "loo":
+                sub = out_dir / "loo"
                 sub.mkdir(parents=True, exist_ok=True)
-                _run_cv(cfg, sub, outer)
+                _run_cv(cfg, sub, LeaveOneOut(), progress)
                 generate_report(sub / "metrics.json", sub / "figures", sub / "report.md")
-        elif stype == "loo":
-            sub = out_dir / "loo"
-            sub.mkdir(parents=True, exist_ok=True)
-            _run_cv(cfg, sub, LeaveOneOut())
-            generate_report(sub / "metrics.json", sub / "figures", sub / "report.md")
-        elif stype == "holdout":
-            sub = out_dir / "holdout"
-            sub.mkdir(parents=True, exist_ok=True)
-            test_size = float(strat.get("test_size", 0.3))
-            _run_holdout(cfg, sub, test_size, random_state)
-            generate_report(sub / "metrics.json", sub / "figures", sub / "report.md")
-        else:
-            raise ValueError(f"Unknown CV strategy: {stype}")
+            elif stype == "holdout":
+                sub = out_dir / "holdout"
+                sub.mkdir(parents=True, exist_ok=True)
+                test_size = float(strat.get("test_size", 0.3))
+                _run_holdout(cfg, sub, test_size, random_state)
+                generate_report(sub / "metrics.json", sub / "figures", sub / "report.md")
+            else:
+                raise ValueError(f"Unknown CV strategy: {stype}")
+            progress.advance(strat_task)
 
 
 def train_and_save(cfg: Dict[str, Any], out_dir: Path):
@@ -227,6 +246,8 @@ def train_and_save(cfg: Dict[str, Any], out_dir: Path):
     X, y = ds["X"], ds["Y"]
     le = LabelEncoder().fit(y); y_enc = le.transform(y)
     name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    steps_cfg = cfg.get("preprocess", {}).get("steps", [])
+    logger.info(f"Running {name} with steps: {steps_cfg}")
     gs = GridSearchCV(
         pipe,
         grid,
