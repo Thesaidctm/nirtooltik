@@ -40,7 +40,7 @@ def main(argv=None):
         if args.run == "one":
             ds_list = ds_list[:1]
         for ds in ds_list:
-            out_file = out_dir / f"prepared_XY_{ds['target']}.xlsx"
+            out_file = out_dir / f"prepared_{ds['target']}.xlsx"
             export_xy_xlsx(
                 out_file,
                 ds["X"],
