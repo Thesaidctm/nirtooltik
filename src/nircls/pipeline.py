@@ -19,6 +19,7 @@ from .preprocessors.spectro import SNV, MSC, Detrend, SavitzkyGolayTransformer, 
 from .models.factory import make_models_from_config
 from .metrics.calibration import expected_calibration_error
 from .utils.plots import plot_confusion, plot_roc_ovr, plot_reliability
+from .report import generate_report
 
 def _make_preprocess(steps_cfg, cfg):
     """Create preprocessing steps and optional parameter grid.
@@ -186,15 +187,18 @@ def run_multiple_eval(cfg: Dict[str, Any], out_dir: Path) -> None:
                 sub = out_dir / f"kfold_{k}"
                 sub.mkdir(parents=True, exist_ok=True)
                 _run_cv(cfg, sub, outer)
+                generate_report(sub / "metrics.json", sub / "figures", sub / "report.md")
         elif stype == "loo":
             sub = out_dir / "loo"
             sub.mkdir(parents=True, exist_ok=True)
             _run_cv(cfg, sub, LeaveOneOut())
+            generate_report(sub / "metrics.json", sub / "figures", sub / "report.md")
         elif stype == "holdout":
             sub = out_dir / "holdout"
             sub.mkdir(parents=True, exist_ok=True)
             test_size = float(strat.get("test_size", 0.3))
             _run_holdout(cfg, sub, test_size, random_state)
+            generate_report(sub / "metrics.json", sub / "figures", sub / "report.md")
         else:
             raise ValueError(f"Unknown CV strategy: {stype}")
 
@@ -239,6 +243,7 @@ def nested_crossval_run(cfg: Dict[str, Any], out_dir: Path, run_id: str):
     import pandas as pd, json
     pd.DataFrame(rows).to_csv(out_dir / "metrics_summary.csv", index=False)
     with open(out_dir / "metrics.json","w") as f: json.dump(rows, f, indent=2)
+    generate_report(out_dir / "metrics.json", out_dir / "figures", out_dir / "report.md")
 
 def train_and_save(cfg: Dict[str, Any], out_dir: Path):
     ds = prepare_inputs(cfg["data"])[0]
