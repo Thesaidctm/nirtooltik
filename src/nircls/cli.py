@@ -70,3 +70,6 @@ def main(argv=None):
         predict_with_model(Path(args.model), Path(args.data), Path(args.output))
     elif args.cmd == "explain":
         explain_model(Path(args.model), Path(args.data), Path(args.output))
+
+if __name__ == "__main__":
+    main()
