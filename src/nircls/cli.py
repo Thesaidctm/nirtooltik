@@ -3,18 +3,25 @@ from __future__ import annotations
 import argparse, sys, yaml
 from pathlib import Path
 from .io import prepare_inputs, export_xy_xlsx
-from .pipeline import run_multiple_eval, train_and_save, evaluate_saved_model, predict_with_model, explain_model
+from .pipeline import (
+    run_multiple_eval,
+    train_and_save,
+    evaluate_saved_model,
+    predict_with_model,
+    explain_model,
+)
 from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id
-
-def _ask_run_mode():
-    ans = input("Rodar [1] uma análise ou [2] todas? ").strip()
-    return "one" if ans == "1" else "all"
 
 def main(argv=None):
     argv = argv or sys.argv[1:]
     parser = argparse.ArgumentParser(prog="nircls", description="NIR Species Classification Toolkit")
-    parser.add_argument("--run", choices=["one","all"], help="Perguntar/forçar uma ou todas as análises")
+    parser.add_argument(
+        "--run",
+        choices=["one", "all"],
+        default="all",
+        help="Rodar somente uma ou todas as análises",
+    )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data"); p_prep.add_argument("--config", required=True)
     p_tr = sp.add_parser("train"); p_tr.add_argument("--config", required=True)
@@ -24,17 +31,39 @@ def main(argv=None):
     p_ex = sp.add_parser("explain"); p_ex.add_argument("--model", required=True); p_ex.add_argument("--data", required=True); p_ex.add_argument("--output", default="results")
     args = parser.parse_args(argv)
     setup_logging(); log_versions()
-    if not args.run: args.run = _ask_run_mode()
     if args.cmd == "prepare-data":
         cfg = yaml.safe_load(open(args.config))
-        run_id = make_run_id("prepare"); out_dir = Path(cfg.get("data",{}).get("out_dir","results"))/run_id; ensure_dirs(out_dir)
-        ds = prepare_inputs(cfg["data"])
-        if ds:
-            export_xy_xlsx(out_dir/"prepared_XY.xlsx", ds[0]["X"], ds[0]["Y"], cfg["data"].get("x_sheet","X"), cfg["data"].get("y_sheet","Y"))
+        run_id = make_run_id("prepare")
+        out_dir = Path(cfg.get("data", {}).get("out_dir", "results")) / run_id
+        ensure_dirs(out_dir)
+        ds_list = prepare_inputs(cfg["data"])
+        if args.run == "one":
+            ds_list = ds_list[:1]
+        for ds in ds_list:
+            out_file = out_dir / f"prepared_XY_{ds['target']}.xlsx"
+            export_xy_xlsx(
+                out_file,
+                ds["X"],
+                ds["Y"],
+                cfg["data"].get("x_sheet", "X"),
+                cfg["data"].get("y_sheet", "Y"),
+            )
     elif args.cmd == "train":
-        cfg = yaml.safe_load(open(args.config)); run_id = make_run_id("train"); out_dir = Path(cfg.get("data",{}).get("out_dir","results"))/run_id; ensure_dirs(out_dir); train_and_save(cfg, out_dir)
+        cfg = yaml.safe_load(open(args.config))
+        run_id = make_run_id("train")
+        out_dir = Path(cfg.get("data", {}).get("out_dir", "results")) / run_id
+        ensure_dirs(out_dir)
+        train_and_save(cfg, out_dir)
     elif args.cmd == "crossval":
-        cfg = yaml.safe_load(open(args.config)); run_id = make_run_id("cv"); out_dir = Path(cfg.get("data",{}).get("out_dir","results"))/run_id; ensure_dirs(out_dir); run_multiple_eval(cfg, out_dir)
+        cfg = yaml.safe_load(open(args.config))
+        if args.run == "one":
+            first = prepare_inputs(cfg["data"])
+            if first:
+                cfg["data"]["target_cols"] = first[0]["target"]
+        run_id = make_run_id("cv")
+        out_dir = Path(cfg.get("data", {}).get("out_dir", "results")) / run_id
+        ensure_dirs(out_dir)
+        run_multiple_eval(cfg, out_dir)
     elif args.cmd == "evaluate":
         evaluate_saved_model(Path(args.model), Path(args.data))
     elif args.cmd == "predict":
