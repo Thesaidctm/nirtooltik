@@ -68,11 +68,22 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
     out = []
     for m in models_cfg:
         name = m["name"]
-        if name.upper()=="PLSDA": est = PLSDA()
-        elif name.upper()=="SVM_RBF": est = SVC(probability=True)
-        elif name.upper()=="SVM_LINEAR": est = SVC(kernel="linear", probability=True)
-        elif name.upper()=="RF": est = RandomForestClassifier()
-        elif name.upper()=="GB": est = GradientBoostingClassifier()
-        else: raise ValueError(f"Modelo não suportado: {name}")
-        out.append({"name": name, "estimator": est, "grid": m.get("grid", {})})
+        if name.upper()=="PLSDA":
+            est = PLSDA()
+        elif name.upper()=="SVM_RBF":
+            est = SVC(probability=True)
+        elif name.upper()=="SVM_LINEAR":
+            est = SVC(kernel="linear", probability=True)
+        elif name.upper()=="RF":
+            est = RandomForestClassifier()
+        elif name.upper()=="GB":
+            est = GradientBoostingClassifier()
+        elif name.upper()=="LOGREG":
+            est = LogisticRegression(max_iter=5000)
+        else:
+            raise ValueError(f"Modelo não suportado: {name}")
+        grid = m.get("grid", {})
+        if name.upper()=="LOGREG":
+            grid.setdefault("C", [1.0])
+        out.append({"name": name, "estimator": est, "grid": grid})
     return out
