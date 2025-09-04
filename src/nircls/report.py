@@ -29,7 +29,6 @@ def generate_report(metrics_json: Path, figures_dir: Path, out_file: Path) -> No
     df = pd.DataFrame(data)
 
     # create combined columns e.g., "F1-macro" = "mean ± std"
-    cols: List[str] = []
     table_df = df[[c for c in ["file", "model"] if c in df.columns]].copy()
     for col in df.columns:
         if col.endswith("_mean"):
@@ -42,11 +41,9 @@ def generate_report(metrics_json: Path, figures_dir: Path, out_file: Path) -> No
                 )
             else:
                 table_df[base] = df[mean_col].map(lambda v: f"{v:.3f}")
-            cols.append(base)
     # Build a markdown table without requiring external dependencies
-    cols = table_df.columns.tolist()
-    header = "| " + " | ".join(cols) + " |"
-    sep = "| " + " | ".join(["---"] * len(cols)) + " |"
+    header = "| " + " | ".join(table_df.columns.tolist()) + " |"
+    sep = "| " + " | ".join(["---"] * len(table_df.columns)) + " |"
     lines = [header, sep]
     for _, row in table_df.iterrows():
         lines.append("| " + " | ".join(map(str, row.tolist())) + " |")
