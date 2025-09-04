@@ -6,6 +6,7 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from nircls.pipeline import (
     build_pipeline_from_config,
     run_multiple_eval,
+    nested_crossval_run,
     train_and_save,
 )
 from nircls.io import prepare_inputs
@@ -104,6 +105,7 @@ def test_end_to_end_cv_and_export(tmp_path):
     strat_dir = out_dir / "kfold_2"
     assert (strat_dir / "metrics_summary.csv").exists()
     assert any((strat_dir / "figures").glob("*.png"))
+    assert (strat_dir / "report.md").exists()
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
@@ -111,6 +113,7 @@ def test_end_to_end_cv_and_export(tmp_path):
     assert (train_dir / "model.joblib").exists()
     assert (train_dir / "prepared_XY.xlsx").exists()
     assert (train_dir / "model_card.md").exists()
+
 
 
 def test_prepare_inputs_with_multiple_targets(tmp_path):
@@ -125,3 +128,25 @@ def test_prepare_inputs_with_multiple_targets(tmp_path):
     ds_list = prepare_inputs(cfg)
     assert len(ds_list) == 2
     assert {d["target"] for d in ds_list} == {"t1", "t2"}
+
+def test_nested_crossval_report(tmp_path):
+    rng = np.random.RandomState(2)
+    X = rng.rand(20, 4)
+    y = np.array(["A"] * 10 + ["B"] * 10)
+    df = pd.DataFrame(X, columns=[str(i) for i in range(4)])
+    df["target"] = y
+    data_file = tmp_path / "data.csv"
+    df.to_csv(data_file, index=False)
+
+    cfg = {
+        "data": {"input_path": str(data_file), "target_col": "target"},
+        "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
+        "cv": {"outer_folds": 2, "outer_repeats": 1, "inner_folds": 2},
+    }
+
+    out_dir = tmp_path / "nested"
+    nested_crossval_run(cfg, out_dir, "run1")
+    assert (out_dir / "metrics_summary.csv").exists()
+    assert any((out_dir / "figures").glob("*.png"))
+    assert (out_dir / "report.md").exists()
+
