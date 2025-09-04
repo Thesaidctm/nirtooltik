@@ -5,7 +5,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.cross_decomposition import PLSRegression
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
 import numpy as np
 
@@ -86,4 +89,15 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
         if name.upper()=="LOGREG":
             grid.setdefault("C", [1.0])
         out.append({"name": name, "estimator": est, "grid": grid})
+
+        if name.upper()=="PLSDA": est = PLSDA()
+        elif name.upper()=="SVM_RBF": est = SVC(probability=True)
+        elif name.upper()=="SVM_LINEAR": est = SVC(kernel="linear", probability=True)
+        elif name.upper()=="RF": est = RandomForestClassifier()
+        elif name.upper()=="GB": est = GradientBoostingClassifier()
+        elif name.upper()=="MLP": est = MLPClassifier()
+        elif name.upper()=="DT": est = DecisionTreeClassifier()
+        elif name.upper()=="KNN": est = KNeighborsClassifier()
+        else: raise ValueError(f"Modelo não suportado: {name}")
+        out.append({"name": name, "estimator": est, "grid": m.get("grid", {})})
     return out
