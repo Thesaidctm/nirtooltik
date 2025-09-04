@@ -38,8 +38,6 @@ def test_logreg_default_grid_contains_C():
     assert pipe.named_steps["clf"].max_iter == 5000
 def test_mlp_accepts_hidden_layer_and_alpha():
     X = np.random.RandomState(0).randn(20, 10)
-def test_decision_tree_with_grid():
-    X = np.random.RandomState(0).randn(20, 5)
     y = (np.arange(20) % 2).astype(int)
     cfg = {
         "models": [
@@ -50,22 +48,38 @@ def test_decision_tree_with_grid():
                     "alpha": [0.0001, 0.001],
                     "max_iter": [50],
                 },
-            },
+            }
+        ]
+    }
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "MLP"
+    assert "clf__hidden_layer_sizes" in grid
+    assert "clf__alpha" in grid
+    gs = GridSearchCV(pipe, grid, cv=2)
+    gs.fit(X, y)
+    assert gs.best_params_["clf__hidden_layer_sizes"] in [(5,), (10,)]
+    assert gs.best_params_["clf__alpha"] in [0.0001, 0.001]
+
+
+def test_decision_tree_with_grid():
+    X = np.random.RandomState(0).randn(20, 5)
+    y = (np.arange(20) % 2).astype(int)
+    cfg = {
+        "models": [
             {
                 "name": "DT",
                 "grid": {"max_depth": [None, 3], "min_samples_split": [2, 4]},
-            },
+            }
         ]
     }
-    name1, pipe1, grid1 = build_pipeline_from_config(cfg)[0]
-    assert "clf__hidden_layer_sizes" in grid1
-    assert "clf__alpha" in grid1
-
-    name2, pipe2, grid2 = build_pipeline_from_config(cfg)[1]
-    assert name2 == "DT"
-    assert "clf__max_depth" in grid2
-    assert "clf__min_samples_split" in grid2
-    gs = GridSearchCV(pipe2, grid2, cv=2)
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "DT"
+    assert "clf__max_depth" in grid
+    assert "clf__min_samples_split" in grid
+    gs = GridSearchCV(pipe, grid, cv=2)
+    gs.fit(X, y)
+    assert gs.best_params_["clf__max_depth"] in [None, 3]
+    assert gs.best_params_["clf__min_samples_split"] in [2, 4]
 def test_knn_model_with_grid():
     X = np.random.RandomState(1).randn(20, 5)
     y = (np.arange(20) % 2).astype(int)
