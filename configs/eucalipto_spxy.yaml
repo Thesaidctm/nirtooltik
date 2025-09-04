@@ -4,7 +4,7 @@ data:
   x_sheet: X
   y_sheet: Y
   target_col: especie
-  spectral_range: [1000, 2500]
+  spectral_range: null
   drop_nans: true
   out_dir: results
 
