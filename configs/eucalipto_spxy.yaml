@@ -10,7 +10,10 @@ data:
 
 preprocess:
   steps: [SNV, SG, SCALE]
-  sg: {window: 15, polyorder: 2, deriv: 1}
+  sg:
+    window: [3,5,7,9,11,13,15,17,21,23,25]
+    polyorder: 2
+    deriv: 1
 
 cv:
   outer_folds: 5
