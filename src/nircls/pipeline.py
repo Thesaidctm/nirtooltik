@@ -5,7 +5,13 @@ from typing import Dict, Any, List, Tuple, Optional
 import json, numpy as np, pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import GridSearchCV, RepeatedStratifiedKFold, StratifiedKFold
+from sklearn.model_selection import (
+    GridSearchCV,
+    RepeatedStratifiedKFold,
+    StratifiedKFold,
+    LeaveOneOut,
+    train_test_split,
+)
 from sklearn.metrics import confusion_matrix, f1_score, balanced_accuracy_score, brier_score_loss
 from joblib import dump, load
 from .io import prepare_inputs, export_xy_xlsx
@@ -68,6 +74,129 @@ def build_pipeline_from_config(cfg: Dict[str, Any]):
         grid.update({f"clf__{k}": v for k,v in (m.get("grid",{}) or {}).items()})
         out.append((m["name"], pipe, grid))
     return out
+
+
+def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer) -> None:
+    data = prepare_inputs(cfg["data"])
+    rows = []
+    for ds in data:
+        X, y = ds["X"], ds["Y"]
+        le = LabelEncoder().fit(y)
+        y_enc = le.transform(y)
+        classes = le.classes_
+        inner = StratifiedKFold(n_splits=cfg.get("cv", {}).get("inner_folds", 3), shuffle=True, random_state=123)
+        for name, pipe, grid in build_pipeline_from_config(cfg):
+            scores = {"F1-macro": [], "BalancedAcc": [], "Brier": [], "ECE": []}
+            y_true_all: List[np.ndarray] = []
+            y_pred_all: List[np.ndarray] = []
+            y_proba_all: List[np.ndarray] = []
+            for tr, te in outer.split(X, y_enc):
+                Xtr, Xte = X.iloc[tr].values, X.iloc[te].values
+                ytr, yte = y_enc[tr], y_enc[te]
+                gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
+                gs.fit(Xtr, ytr)
+                yhat = gs.predict(Xte)
+                scores["F1-macro"].append(f1_score(yte, yhat, average="macro"))
+                scores["BalancedAcc"].append(balanced_accuracy_score(yte, yhat))
+                if hasattr(gs.best_estimator_, "predict_proba"):
+                    proba = gs.best_estimator_.predict_proba(Xte)
+                    y_proba_all.append(proba)
+                    brier = np.mean([brier_score_loss((yte == k).astype(int), proba[:, k]) for k in range(len(classes))])
+                    scores["Brier"].append(brier)
+                    scores["ECE"].append(expected_calibration_error(yte, proba, n_bins=15))
+                y_true_all.append(yte)
+                y_pred_all.append(yhat)
+            row = {"file": ds["file"], "model": name}
+            row.update({f"{k}_mean": float(np.mean(v)) for k, v in scores.items() if v})
+            row.update({f"{k}_std": float(np.std(v, ddof=1)) for k, v in scores.items() if len(v) > 1})
+            rows.append(row)
+            out_fig = out_dir / "figures"
+            out_fig.mkdir(parents=True, exist_ok=True)
+            y_true = np.concatenate(y_true_all)
+            y_pred = np.concatenate(y_pred_all)
+            cm = confusion_matrix(y_true, y_pred)
+            plot_confusion(cm, classes, out_fig / f"{Path(ds['file']).stem}__{name}__cm")
+            if y_proba_all:
+                y_proba = np.vstack(y_proba_all)
+                plot_roc_ovr(y_true, y_proba, classes, out_fig / f"{Path(ds['file']).stem}__{name}__roc")
+                plot_reliability(y_true, y_proba, out_fig / f"{Path(ds['file']).stem}__{name}__reliability")
+    pd.DataFrame(rows).to_csv(out_dir / "metrics_summary.csv", index=False)
+    with open(out_dir / "metrics.json", "w") as f:
+        json.dump(rows, f, indent=2)
+
+
+def _run_holdout(cfg: Dict[str, Any], out_dir: Path, test_size: float, random_state: int) -> None:
+    data = prepare_inputs(cfg["data"])
+    rows = []
+    for ds in data:
+        X, y = ds["X"], ds["Y"]
+        le = LabelEncoder().fit(y)
+        y_enc = le.transform(y)
+        classes = le.classes_
+        inner = StratifiedKFold(n_splits=cfg.get("cv", {}).get("inner_folds", 3), shuffle=True, random_state=123)
+        for name, pipe, grid in build_pipeline_from_config(cfg):
+            Xtr, Xte, ytr, yte = train_test_split(
+                X.values,
+                y_enc,
+                test_size=test_size,
+                random_state=random_state,
+                stratify=y_enc,
+            )
+            gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
+            gs.fit(Xtr, ytr)
+            yhat = gs.predict(Xte)
+            row = {
+                "file": ds["file"],
+                "model": name,
+                "F1-macro_mean": float(f1_score(yte, yhat, average="macro")),
+                "BalancedAcc_mean": float(balanced_accuracy_score(yte, yhat)),
+            }
+            if hasattr(gs.best_estimator_, "predict_proba"):
+                proba = gs.best_estimator_.predict_proba(Xte)
+                brier = np.mean([brier_score_loss((yte == k).astype(int), proba[:, k]) for k in range(len(classes))])
+                row["Brier_mean"] = float(brier)
+                row["ECE_mean"] = float(expected_calibration_error(yte, proba, n_bins=15))
+            rows.append(row)
+            out_fig = out_dir / "figures"
+            out_fig.mkdir(parents=True, exist_ok=True)
+            cm = confusion_matrix(yte, yhat)
+            plot_confusion(cm, classes, out_fig / f"{Path(ds['file']).stem}__{name}__cm")
+            if hasattr(gs.best_estimator_, "predict_proba"):
+                plot_roc_ovr(yte, proba, classes, out_fig / f"{Path(ds['file']).stem}__{name}__roc")
+                plot_reliability(yte, proba, out_fig / f"{Path(ds['file']).stem}__{name}__reliability")
+    pd.DataFrame(rows).to_csv(out_dir / "metrics_summary.csv", index=False)
+    with open(out_dir / "metrics.json", "w") as f:
+        json.dump(rows, f, indent=2)
+
+
+def run_multiple_eval(cfg: Dict[str, Any], out_dir: Path) -> None:
+    strategies = cfg.get("cv", {}).get("strategies", [])
+    random_state = cfg.get("cv", {}).get("random_state", 42)
+    for strat in strategies:
+        stype = strat.get("type", "").lower()
+        if stype == "kfold":
+            n_repeats = strat.get("n_repeats", 1)
+            for k in strat.get("n_splits", [5]):
+                if n_repeats > 1:
+                    outer = RepeatedStratifiedKFold(
+                        n_splits=int(k), n_repeats=int(n_repeats), random_state=random_state
+                    )
+                else:
+                    outer = StratifiedKFold(n_splits=int(k), shuffle=True, random_state=random_state)
+                sub = out_dir / f"kfold_{k}"
+                sub.mkdir(parents=True, exist_ok=True)
+                _run_cv(cfg, sub, outer)
+        elif stype == "loo":
+            sub = out_dir / "loo"
+            sub.mkdir(parents=True, exist_ok=True)
+            _run_cv(cfg, sub, LeaveOneOut())
+        elif stype == "holdout":
+            sub = out_dir / "holdout"
+            sub.mkdir(parents=True, exist_ok=True)
+            test_size = float(strat.get("test_size", 0.3))
+            _run_holdout(cfg, sub, test_size, random_state)
+        else:
+            raise ValueError(f"Unknown CV strategy: {stype}")
 
 def nested_crossval_run(cfg: Dict[str, Any], out_dir: Path, run_id: str):
     data = prepare_inputs(cfg["data"])

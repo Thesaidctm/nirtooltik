@@ -5,7 +5,7 @@ from sklearn.model_selection import StratifiedKFold, GridSearchCV
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from nircls.pipeline import (
     build_pipeline_from_config,
-    nested_crossval_run,
+    run_multiple_eval,
     train_and_save,
 )
 
@@ -47,25 +47,23 @@ def test_decision_tree_with_grid():
                     "hidden_layer_sizes": [(5,), (10,)],
                     "alpha": [0.0001, 0.001],
                     "max_iter": [50],
-
-                "name": "DT",
-                "grid": {
-                    "max_depth": [None, 3],
-                    "min_samples_split": [2, 4],
-
                 },
-            }
+            },
+            {
+                "name": "DT",
+                "grid": {"max_depth": [None, 3], "min_samples_split": [2, 4]},
+            },
         ]
     }
-    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    name1, pipe1, grid1 = build_pipeline_from_config(cfg)[0]
+    assert "clf__hidden_layer_sizes" in grid1
+    assert "clf__alpha" in grid1
 
-    assert "clf__hidden_layer_sizes" in grid
-    assert "clf__alpha" in grid
-
-    assert name == "DT"
-    assert "clf__max_depth" in grid
-    assert "clf__min_samples_split" in grid
-    gs = GridSearchCV(pipe, grid, cv=2)
+    name2, pipe2, grid2 = build_pipeline_from_config(cfg)[1]
+    assert name2 == "DT"
+    assert "clf__max_depth" in grid2
+    assert "clf__min_samples_split" in grid2
+    gs = GridSearchCV(pipe2, grid2, cv=2)
 def test_knn_model_with_grid():
     X = np.random.RandomState(1).randn(20, 5)
     y = (np.arange(20) % 2).astype(int)
@@ -94,13 +92,17 @@ def test_end_to_end_cv_and_export(tmp_path):
         "data": {"input_path": str(data_file), "target_col": "target"},
         "preprocess": {"steps": ["SNV"]},
         "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
-        "cv": {"outer_folds": 2, "outer_repeats": 1, "inner_folds": 2},
+        "cv": {
+            "random_state": 0,
+            "strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}],
+        },
     }
 
     out_dir = tmp_path / "cv_run"
-    nested_crossval_run(cfg, out_dir, "r1")
-    assert (out_dir / "metrics_summary.csv").exists()
-    assert any((out_dir / "figures").glob("*.png"))
+    run_multiple_eval(cfg, out_dir)
+    strat_dir = out_dir / "kfold_2"
+    assert (strat_dir / "metrics_summary.csv").exists()
+    assert any((strat_dir / "figures").glob("*.png"))
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
