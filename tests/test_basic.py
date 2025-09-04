@@ -27,6 +27,29 @@ def test_pipeline_fit_predict_with_cv_and_windows():
     gs.fit(X, y)
 
 
+def test_mlp_accepts_hidden_layer_and_alpha():
+    X = np.random.RandomState(0).randn(20, 10)
+    y = (np.arange(20) % 2).astype(int)
+    cfg = {
+        "models": [
+            {
+                "name": "MLP",
+                "grid": {
+                    "hidden_layer_sizes": [(5,), (10,)],
+                    "alpha": [0.0001, 0.001],
+                    "max_iter": [50],
+                },
+            }
+        ]
+    }
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert "clf__hidden_layer_sizes" in grid
+    assert "clf__alpha" in grid
+    cv = StratifiedKFold(n_splits=2)
+    gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy")
+    gs.fit(X, y)
+
+
 def test_end_to_end_cv_and_export(tmp_path):
     rng = np.random.RandomState(1)
     X = rng.rand(20, 6)
