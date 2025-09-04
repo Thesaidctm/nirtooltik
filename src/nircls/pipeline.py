@@ -15,29 +15,57 @@ from .metrics.calibration import expected_calibration_error
 from .utils.plots import plot_confusion, plot_roc_ovr, plot_reliability
 
 def _make_preprocess(steps_cfg, cfg):
-    steps=[]; 
+    """Create preprocessing steps and optional parameter grid.
+
+    For the Savitzky-Golay (SG) step it is possible to provide a list of
+    parameter values (e.g. window length) which will be added to the grid for
+    hyper-parameter search.  This allows testing multiple window sizes during
+    cross-validation while keeping the feature optional – supplying a single
+    value keeps the behaviour unchanged.
+    """
+
+    steps=[]; grid={}
     for name in steps_cfg or []:
         n=name.upper()
-        if n=="SNV": steps.append(("snv", SNV()))
-        elif n=="MSC": steps.append(("msc", MSC()))
-        elif n=="DETREND": steps.append(("detrend", Detrend()))
-        elif n=="SG": 
+        if n=="SNV":
+            steps.append(("snv", SNV()))
+        elif n=="MSC":
+            steps.append(("msc", MSC()))
+        elif n=="DETREND":
+            steps.append(("detrend", Detrend()))
+        elif n=="SG":
             sg=cfg.get("sg", {"window":15,"polyorder":2,"deriv":1})
-            steps.append(("sg", SavitzkyGolayTransformer(sg["window"], sg["polyorder"], sg["deriv"])))
-        elif n=="EMSC": steps.append(("emsc", EMSC()))
-        elif n=="EPO": steps.append(("epo", EPO()))
-        elif n=="SCALE": steps.append(("scaler", StandardScaler()))
-        else: raise ValueError(f"Pré-processo desconhecido: {name}")
-    return steps
+            wl=sg.get("window",15); po=sg.get("polyorder",2); dv=sg.get("deriv",1)
+            # allow lists/tuples to trigger grid search over SG parameters
+            if isinstance(wl, (list, tuple)):
+                grid["sg__window_length"]=[int(w) for w in wl]
+                wl=wl[0]
+            if isinstance(po, (list, tuple)):
+                grid["sg__polyorder"]=[int(p) for p in po]
+                po=po[0]
+            if isinstance(dv, (list, tuple)):
+                grid["sg__deriv"]=[int(d) for d in dv]
+                dv=dv[0]
+            steps.append(("sg", SavitzkyGolayTransformer(wl, po, dv)))
+        elif n=="EMSC":
+            steps.append(("emsc", EMSC()))
+        elif n=="EPO":
+            steps.append(("epo", EPO()))
+        elif n=="SCALE":
+            steps.append(("scaler", StandardScaler()))
+        else:
+            raise ValueError(f"Pré-processo desconhecido: {name}")
+    return steps, grid
 
 def build_pipeline_from_config(cfg: Dict[str, Any]):
     steps_cfg = cfg.get("preprocess",{}).get("steps", [])
-    pre_steps = _make_preprocess(steps_cfg, cfg.get("preprocess",{}))
+    pre_steps, pre_grid = _make_preprocess(steps_cfg, cfg.get("preprocess",{}))
     models = make_models_from_config(cfg["models"])
     out=[]
     for m in models:
         pipe = Pipeline(pre_steps + [("clf", m["estimator"])])
-        grid = {f"clf__{k}": v for k,v in (m.get("grid",{}) or {}).items()}
+        grid = pre_grid.copy()
+        grid.update({f"clf__{k}": v for k,v in (m.get("grid",{}) or {}).items()})
         out.append((m["name"], pipe, grid))
     return out
 
