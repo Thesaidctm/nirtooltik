@@ -5,14 +5,35 @@ from typing import Dict, List, Tuple, Optional
 import numpy as np, pandas as pd
 from glob import glob
 
-def _filter_range(df: pd.DataFrame, spectral_range):
-    if not spectral_range: return df
+def _normalize_columns_to_float(df: pd.DataFrame) -> pd.DataFrame:
+    """Return dataframe with numeric spectral columns converted to float.
+
+    Columns that cannot be converted to ``float`` are dropped. The original
+    column order is preserved for the remaining columns.
+    """
+    keep_cols = []
+    rename_map = {}
+    for c in df.columns:
+        try:
+            rename_map[c] = float(c)
+            keep_cols.append(c)
+        except (ValueError, TypeError):
+            continue
+    if not keep_cols:
+        return df.iloc[:, 0:0]
+    return df[keep_cols].rename(columns=rename_map)
+
+
+def _filter_range(
+    df: pd.DataFrame, spectral_range: Optional[Tuple[float, float]]
+) -> pd.DataFrame:
+    """Normalize spectral columns and optionally slice by range."""
+    df = _normalize_columns_to_float(df)
+    if not spectral_range:
+        return df
     lo, hi = spectral_range
-    def to_f(c):
-        try: return float(c)
-        except: return None
-    keep = [c for c in df.columns if (to_f(c) is not None and lo <= float(c) <= hi)]
-    return df[keep] if keep else df
+    keep = [c for c in df.columns if lo <= c <= hi]
+    return df.loc[:, keep]
 
 def read_xlsx_xy(path: Path, x_sheet="X", y_sheet="Y", target_col: Optional[str]=None):
     X = pd.read_excel(path, sheet_name=x_sheet)
@@ -37,6 +58,12 @@ def export_xy_xlsx(path: Path, X: pd.DataFrame, y: pd.Series, x_sheet="X", y_she
         y.to_frame(name=y.name or "target").to_excel(w, index=False, sheet_name=y_sheet)
 
 def prepare_inputs(data_cfg: Dict):
+    """Load and clean spectral datasets specified in configuration.
+
+    Column names are normalised to floats (nanometers) and filtered by the
+    provided spectral range. Infinite values are replaced by ``NaN`` and rows
+    containing missing values are dropped in a leakage-free manner.
+    """
     files = [Path(p) for p in glob(data_cfg["input_path"])]
     sp = data_cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
@@ -47,7 +74,7 @@ def prepare_inputs(data_cfg: Dict):
         else:
             X, y = read_tabular(f, data_cfg["target_col"])
         X = _filter_range(X, sp)
-        X = X.replace([np.inf,-np.inf], np.nan).dropna(axis=0)
+        X = X.replace([np.inf, -np.inf], np.nan).dropna(axis=0)
         y = y.loc[X.index]
         out.append({"file": f.as_posix(), "X": X.reset_index(drop=True), "Y": y.reset_index(drop=True)})
     return out
