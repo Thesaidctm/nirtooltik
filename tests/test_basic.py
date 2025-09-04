@@ -8,6 +8,7 @@ from nircls.pipeline import (
     run_multiple_eval,
     train_and_save,
 )
+from nircls.io import prepare_inputs
 
 
 def test_pipeline_fit_predict_with_cv_and_windows():
@@ -89,7 +90,7 @@ def test_end_to_end_cv_and_export(tmp_path):
     df.to_csv(data_file, index=False)
 
     cfg = {
-        "data": {"input_path": str(data_file), "target_col": "target"},
+        "data": {"input_path": str(data_file), "target_cols": ["target"]},
         "preprocess": {"steps": ["SNV"]},
         "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
         "cv": {
@@ -110,3 +111,17 @@ def test_end_to_end_cv_and_export(tmp_path):
     assert (train_dir / "model.joblib").exists()
     assert (train_dir / "prepared_XY.xlsx").exists()
     assert (train_dir / "model_card.md").exists()
+
+
+def test_prepare_inputs_with_multiple_targets(tmp_path):
+    rng = np.random.RandomState(0)
+    X = rng.rand(10, 4)
+    df = pd.DataFrame(X, columns=[f"f{i}" for i in range(4)])
+    df["t1"] = ["A"] * 10
+    df["t2"] = ["B"] * 10
+    data_file = tmp_path / "multi.csv"
+    df.to_csv(data_file, index=False)
+    cfg = {"input_path": str(data_file), "target_cols": "all"}
+    ds_list = prepare_inputs(cfg)
+    assert len(ds_list) == 2
+    assert {d["target"] for d in ds_list} == {"t1", "t2"}

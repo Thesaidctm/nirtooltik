@@ -106,7 +106,7 @@ def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer) -> None:
                     scores["ECE"].append(expected_calibration_error(yte, proba, n_bins=15))
                 y_true_all.append(yte)
                 y_pred_all.append(yhat)
-            row = {"file": ds["file"], "model": name}
+            row = {"file": ds["file"], "target": ds["target"], "model": name}
             row.update({f"{k}_mean": float(np.mean(v)) for k, v in scores.items() if v})
             row.update({f"{k}_std": float(np.std(v, ddof=1)) for k, v in scores.items() if len(v) > 1})
             rows.append(row)
@@ -115,11 +115,20 @@ def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer) -> None:
             y_true = np.concatenate(y_true_all)
             y_pred = np.concatenate(y_pred_all)
             cm = confusion_matrix(y_true, y_pred)
-            plot_confusion(cm, classes, out_fig / f"{Path(ds['file']).stem}__{name}__cm")
+            plot_confusion(cm, classes, out_fig / f"{Path(ds['file']).stem}__{ds['target']}__{name}__cm")
             if y_proba_all:
                 y_proba = np.vstack(y_proba_all)
-                plot_roc_ovr(y_true, y_proba, classes, out_fig / f"{Path(ds['file']).stem}__{name}__roc")
-                plot_reliability(y_true, y_proba, out_fig / f"{Path(ds['file']).stem}__{name}__reliability")
+                plot_roc_ovr(
+                    y_true,
+                    y_proba,
+                    classes,
+                    out_fig / f"{Path(ds['file']).stem}__{ds['target']}__{name}__roc",
+                )
+                plot_reliability(
+                    y_true,
+                    y_proba,
+                    out_fig / f"{Path(ds['file']).stem}__{ds['target']}__{name}__reliability",
+                )
     pd.DataFrame(rows).to_csv(out_dir / "metrics_summary.csv", index=False)
     with open(out_dir / "metrics.json", "w") as f:
         json.dump(rows, f, indent=2)
@@ -147,6 +156,7 @@ def _run_holdout(cfg: Dict[str, Any], out_dir: Path, test_size: float, random_st
             yhat = gs.predict(Xte)
             row = {
                 "file": ds["file"],
+                "target": ds["target"],
                 "model": name,
                 "F1-macro_mean": float(f1_score(yte, yhat, average="macro")),
                 "BalancedAcc_mean": float(balanced_accuracy_score(yte, yhat)),
@@ -160,10 +170,19 @@ def _run_holdout(cfg: Dict[str, Any], out_dir: Path, test_size: float, random_st
             out_fig = out_dir / "figures"
             out_fig.mkdir(parents=True, exist_ok=True)
             cm = confusion_matrix(yte, yhat)
-            plot_confusion(cm, classes, out_fig / f"{Path(ds['file']).stem}__{name}__cm")
+            plot_confusion(cm, classes, out_fig / f"{Path(ds['file']).stem}__{ds['target']}__{name}__cm")
             if hasattr(gs.best_estimator_, "predict_proba"):
-                plot_roc_ovr(yte, proba, classes, out_fig / f"{Path(ds['file']).stem}__{name}__roc")
-                plot_reliability(yte, proba, out_fig / f"{Path(ds['file']).stem}__{name}__reliability")
+                plot_roc_ovr(
+                    yte,
+                    proba,
+                    classes,
+                    out_fig / f"{Path(ds['file']).stem}__{ds['target']}__{name}__roc",
+                )
+                plot_reliability(
+                    yte,
+                    proba,
+                    out_fig / f"{Path(ds['file']).stem}__{ds['target']}__{name}__reliability",
+                )
     pd.DataFrame(rows).to_csv(out_dir / "metrics_summary.csv", index=False)
     with open(out_dir / "metrics.json", "w") as f:
         json.dump(rows, f, indent=2)
@@ -255,13 +274,21 @@ def train_and_save(cfg: Dict[str, Any], out_dir: Path):
 def evaluate_saved_model(model_path: Path, data_path: Path):
     from .io import read_xlsx_xy
     import pandas as pd
-    est = load(model_path); X, y = read_xlsx_xy(data_path); yhat = est.predict(X.values)
+    est = load(model_path)
+    X, y_list = read_xlsx_xy(data_path)
+    y = y_list[0][1]
+    yhat = est.predict(X.values)
     print(pd.crosstab(pd.Series(y, name="true"), pd.Series(yhat, name="pred")))
 
 def predict_with_model(model_path: Path, data_path: Path, out_dir: Path):
-    from .io import read_xlsx_xy; import pandas as pd
-    est = load(model_path); X, y = read_xlsx_xy(data_path); yhat = est.predict(X.values)
-    out_dir.mkdir(parents=True, exist_ok=True); pd.DataFrame({"y_true": y, "y_pred": yhat}).to_csv(out_dir/"predictions.csv", index=False)
+    from .io import read_xlsx_xy
+    import pandas as pd
+    est = load(model_path)
+    X, y_list = read_xlsx_xy(data_path)
+    y = y_list[0][1]
+    yhat = est.predict(X.values)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"y_true": y, "y_pred": yhat}).to_csv(out_dir / "predictions.csv", index=False)
 
 def explain_model(model_path: Path, data_path: Path, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True); (out_dir/"explain.txt").write_text("Explainability hook.")

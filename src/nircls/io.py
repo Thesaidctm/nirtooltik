@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Sequence
 import numpy as np, pandas as pd
 from glob import glob
 
@@ -35,21 +35,43 @@ def _filter_range(
     keep = [c for c in df.columns if lo <= c <= hi]
     return df.loc[:, keep]
 
-def read_xlsx_xy(path: Path, x_sheet="X", y_sheet="Y", target_col: Optional[str]=None):
+def read_xlsx_xy(
+    path: Path,
+    x_sheet: str = "X",
+    y_sheet: str = "Y",
+    target_cols: Optional[Sequence[str] | str] = None,
+):
     X = pd.read_excel(path, sheet_name=x_sheet)
     Ydf = pd.read_excel(path, sheet_name=y_sheet)
-    if target_col is None:
-        if Ydf.shape[1] != 1: raise ValueError("Y deve ter 1 coluna ou passe --target-col")
-        target_col = Ydf.columns[0]
-    y = Ydf[target_col].astype(str)
+    if target_cols in [None, "all"]:
+        target_cols = list(Ydf.columns)
+    elif isinstance(target_cols, str):
+        target_cols = [target_cols]
+    out: List[Tuple[str, pd.Series]] = []
+    for col in target_cols:
+        if col not in Ydf.columns:
+            raise ValueError(f"Coluna alvo {col} não encontrada em {path}")
+        out.append((col, Ydf[col].astype(str)))
     X = X.select_dtypes(include=[np.number])
-    if len(X) != len(y): raise ValueError("X e Y com n_amostras diferente")
-    return X, y
+    if any(len(X) != len(y) for _, y in out):
+        raise ValueError("X e Y com n_amostras diferente")
+    return X, out
 
-def read_tabular(path: Path, target_col: str):
-    df = pd.read_csv(path) if path.suffix.lower()==".csv" else pd.read_excel(path)
-    y = df[target_col].astype(str); X = df.drop(columns=[target_col]).select_dtypes(include=[np.number])
-    return X, y
+def read_tabular(path: Path, target_cols: Optional[Sequence[str] | str] = None):
+    df = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
+    if target_cols in [None, "all"]:
+        target_cols = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c])]
+    elif isinstance(target_cols, str):
+        target_cols = [target_cols]
+    y_list: List[Tuple[str, pd.Series]] = []
+    for col in target_cols:
+        if col not in df.columns:
+            raise ValueError(f"Coluna alvo {col} não encontrada em {path}")
+        y_list.append((col, df[col].astype(str)))
+    X = df.drop(columns=target_cols).select_dtypes(include=[np.number])
+    if any(len(X) != len(y) for _, y in y_list):
+        raise ValueError("X e Y com n_amostras diferente")
+    return X, y_list
 
 def export_xy_xlsx(path: Path, X: pd.DataFrame, y: pd.Series, x_sheet="X", y_sheet="Y"):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,14 +89,30 @@ def prepare_inputs(data_cfg: Dict):
     files = [Path(p) for p in glob(data_cfg["input_path"])]
     sp = data_cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
+    tgt = data_cfg.get("target_cols")
+    if tgt is None and "target_col" in data_cfg:
+        tgt = data_cfg["target_col"]
     out = []
     for f in files:
-        if f.suffix.lower() in [".xlsx",".xls"] and ("x_sheet" in data_cfg or "y_sheet" in data_cfg):
-            X, y = read_xlsx_xy(f, data_cfg.get("x_sheet","X"), data_cfg.get("y_sheet","Y"), data_cfg.get("target_col"))
+        if f.suffix.lower() in [".xlsx", ".xls"] and ("x_sheet" in data_cfg or "y_sheet" in data_cfg):
+            X, y_list = read_xlsx_xy(
+                f,
+                data_cfg.get("x_sheet", "X"),
+                data_cfg.get("y_sheet", "Y"),
+                tgt,
+            )
         else:
-            X, y = read_tabular(f, data_cfg["target_col"])
+            X, y_list = read_tabular(f, tgt)
         X = _filter_range(X, sp)
         X = X.replace([np.inf, -np.inf], np.nan).dropna(axis=0)
-        y = y.loc[X.index]
-        out.append({"file": f.as_posix(), "X": X.reset_index(drop=True), "Y": y.reset_index(drop=True)})
+        for name, y in y_list:
+            y = y.loc[X.index]
+            out.append(
+                {
+                    "file": f.as_posix(),
+                    "target": name,
+                    "X": X.reset_index(drop=True),
+                    "Y": y.reset_index(drop=True),
+                }
+            )
     return out

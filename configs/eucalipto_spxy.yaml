@@ -3,7 +3,7 @@ data:
   input_path: data/raw/*.xlsx
   x_sheet: X
   y_sheet: Y
-  target_col: especie
+  target_cols: all   # ou uma lista explícita de colunas
   spectral_range: null
   drop_nans: true
   out_dir: results
