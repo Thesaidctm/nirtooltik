@@ -27,6 +27,28 @@ def test_pipeline_fit_predict_with_cv_and_windows():
     gs.fit(X, y)
 
 
+def test_decision_tree_with_grid():
+    X = np.random.RandomState(0).randn(20, 5)
+    y = (np.arange(20) % 2).astype(int)
+    cfg = {
+        "models": [
+            {
+                "name": "DT",
+                "grid": {
+                    "max_depth": [None, 3],
+                    "min_samples_split": [2, 4],
+                },
+            }
+        ]
+    }
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "DT"
+    assert "clf__max_depth" in grid
+    assert "clf__min_samples_split" in grid
+    gs = GridSearchCV(pipe, grid, cv=2)
+    gs.fit(X, y)
+
+
 def test_end_to_end_cv_and_export(tmp_path):
     rng = np.random.RandomState(1)
     X = rng.rand(20, 6)
