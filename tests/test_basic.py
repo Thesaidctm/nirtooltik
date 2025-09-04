@@ -27,6 +27,20 @@ def test_pipeline_fit_predict_with_cv_and_windows():
     gs.fit(X, y)
 
 
+def test_knn_model_with_grid():
+    X = np.random.RandomState(1).randn(20, 5)
+    y = (np.arange(20) % 2).astype(int)
+    cfg = {
+        "preprocess": {"steps": []},
+        "models": [{"name": "KNN", "grid": {"n_neighbors": [3, 5]}}],
+    }
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert "clf__n_neighbors" in grid
+    cv = StratifiedKFold(n_splits=2)
+    gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy")
+    gs.fit(X, y)
+
+
 def test_end_to_end_cv_and_export(tmp_path):
     rng = np.random.RandomState(1)
     X = rng.rand(20, 6)
