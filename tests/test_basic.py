@@ -27,8 +27,11 @@ def test_pipeline_fit_predict_with_cv_and_windows():
     gs.fit(X, y)
 
 
+
 def test_mlp_accepts_hidden_layer_and_alpha():
     X = np.random.RandomState(0).randn(20, 10)
+def test_decision_tree_with_grid():
+    X = np.random.RandomState(0).randn(20, 5)
     y = (np.arange(20) % 2).astype(int)
     cfg = {
         "models": [
@@ -38,13 +41,35 @@ def test_mlp_accepts_hidden_layer_and_alpha():
                     "hidden_layer_sizes": [(5,), (10,)],
                     "alpha": [0.0001, 0.001],
                     "max_iter": [50],
+
+                "name": "DT",
+                "grid": {
+                    "max_depth": [None, 3],
+                    "min_samples_split": [2, 4],
+
                 },
             }
         ]
     }
     name, pipe, grid = build_pipeline_from_config(cfg)[0]
+
     assert "clf__hidden_layer_sizes" in grid
     assert "clf__alpha" in grid
+
+    assert name == "DT"
+    assert "clf__max_depth" in grid
+    assert "clf__min_samples_split" in grid
+    gs = GridSearchCV(pipe, grid, cv=2)
+def test_knn_model_with_grid():
+    X = np.random.RandomState(1).randn(20, 5)
+    y = (np.arange(20) % 2).astype(int)
+    cfg = {
+        "preprocess": {"steps": []},
+        "models": [{"name": "KNN", "grid": {"n_neighbors": [3, 5]}}],
+    }
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert "clf__n_neighbors" in grid
+
     cv = StratifiedKFold(n_splits=2)
     gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy")
     gs.fit(X, y)
