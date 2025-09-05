@@ -107,7 +107,7 @@ def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer, progress: Progress) -> No
             y_true_all: List[np.ndarray] = []
             y_pred_all: List[np.ndarray] = []
             y_proba_all: List[np.ndarray] = []
-            fold_task = progress.add_task("Fold", total=outer.get_n_splits())
+            fold_task = progress.add_task("Fold", total=outer.get_n_splits(X, y_enc))
             for tr, te in outer.split(X, y_enc):
                 Xtr, Xte = X.iloc[tr].values, X.iloc[te].values
                 ytr, yte = y_enc[tr], y_enc[te]
