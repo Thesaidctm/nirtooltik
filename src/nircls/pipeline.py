@@ -103,7 +103,8 @@ def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer, progress: Progress) -> No
             progress.update(model_task, description=f"Model: {name}")
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info(f"Running {name} with steps: {steps_cfg}")
-            scores = {"F1-macro": [], "BalancedAcc": [], "Brier": [], "ECE": []}
+            scores_val = {"F1-macro": [], "BalancedAcc": [], "Brier": [], "ECE": []}
+            scores_train = {"F1-macro": [], "BalancedAcc": [], "Brier": [], "ECE": []}
             y_true_all: List[np.ndarray] = []
             y_pred_all: List[np.ndarray] = []
             y_proba_all: List[np.ndarray] = []
@@ -113,22 +114,40 @@ def _run_cv(cfg: Dict[str, Any], out_dir: Path, outer, progress: Progress) -> No
                 ytr, yte = y_enc[tr], y_enc[te]
                 gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
                 gs.fit(Xtr, ytr)
+
+                # validation metrics
                 yhat = gs.predict(Xte)
-                scores["F1-macro"].append(f1_score(yte, yhat, average="macro"))
-                scores["BalancedAcc"].append(balanced_accuracy_score(yte, yhat))
+                scores_val["F1-macro"].append(f1_score(yte, yhat, average="macro"))
+                scores_val["BalancedAcc"].append(balanced_accuracy_score(yte, yhat))
                 proba_fn = getattr(gs.best_estimator_, "predict_proba", None)
                 if proba_fn is not None:
                     proba = proba_fn(Xte)
                     y_proba_all.append(proba)
-                    brier = np.mean([brier_score_loss((yte == k).astype(int), proba[:, k]) for k in range(len(classes))])
-                    scores["Brier"].append(brier)
-                    scores["ECE"].append(expected_calibration_error(yte, proba, n_bins=15))
+                    brier = np.mean(
+                        [brier_score_loss((yte == k).astype(int), proba[:, k]) for k in range(len(classes))]
+                    )
+                    scores_val["Brier"].append(brier)
+                    scores_val["ECE"].append(expected_calibration_error(yte, proba, n_bins=15))
+
+                # training metrics
+                yhat_tr = gs.predict(Xtr)
+                scores_train["F1-macro"].append(f1_score(ytr, yhat_tr, average="macro"))
+                scores_train["BalancedAcc"].append(balanced_accuracy_score(ytr, yhat_tr))
+                if proba_fn is not None:
+                    proba_tr = proba_fn(Xtr)
+                    brier_tr = np.mean(
+                        [brier_score_loss((ytr == k).astype(int), proba_tr[:, k]) for k in range(len(classes))]
+                    )
+                    scores_train["Brier"].append(brier_tr)
+                    scores_train["ECE"].append(expected_calibration_error(ytr, proba_tr, n_bins=15))
                 y_true_all.append(yte)
                 y_pred_all.append(yhat)
                 progress.advance(fold_task)
             row = {"file": ds["file"], "target": ds["target"], "model": name}
-            row.update({f"{k}_mean": float(np.mean(v)) for k, v in scores.items() if v})
-            row.update({f"{k}_std": float(np.std(v, ddof=1)) for k, v in scores.items() if len(v) > 1})
+            row.update({f"{k}_mean": float(np.mean(v)) for k, v in scores_val.items() if v})
+            row.update({f"{k}_std": float(np.std(v, ddof=1)) for k, v in scores_val.items() if len(v) > 1})
+            row.update({f"train_{k}_mean": float(np.mean(v)) for k, v in scores_train.items() if v})
+            row.update({f"train_{k}_std": float(np.std(v, ddof=1)) for k, v in scores_train.items() if len(v) > 1})
             rows.append(row)
             out_fig = out_dir / "figures"
             out_fig.mkdir(parents=True, exist_ok=True)
@@ -178,19 +197,34 @@ def _run_holdout(cfg: Dict[str, Any], out_dir: Path, test_size: float, random_st
             gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
             gs.fit(Xtr, ytr)
             yhat = gs.predict(Xte)
+            yhat_tr = gs.predict(Xtr)
             row = {
                 "file": ds["file"],
                 "target": ds["target"],
                 "model": name,
                 "F1-macro_mean": float(f1_score(yte, yhat, average="macro")),
                 "BalancedAcc_mean": float(balanced_accuracy_score(yte, yhat)),
+                "train_F1-macro_mean": float(f1_score(ytr, yhat_tr, average="macro")),
+                "train_BalancedAcc_mean": float(
+                    balanced_accuracy_score(ytr, yhat_tr)
+                ),
             }
             proba_fn = getattr(gs.best_estimator_, "predict_proba", None)
             if proba_fn is not None:
                 proba = proba_fn(Xte)
-                brier = np.mean([brier_score_loss((yte == k).astype(int), proba[:, k]) for k in range(len(classes))])
+                brier = np.mean(
+                    [brier_score_loss((yte == k).astype(int), proba[:, k]) for k in range(len(classes))]
+                )
                 row["Brier_mean"] = float(brier)
                 row["ECE_mean"] = float(expected_calibration_error(yte, proba, n_bins=15))
+                proba_tr = proba_fn(Xtr)
+                brier_tr = np.mean(
+                    [brier_score_loss((ytr == k).astype(int), proba_tr[:, k]) for k in range(len(classes))]
+                )
+                row["train_Brier_mean"] = float(brier_tr)
+                row["train_ECE_mean"] = float(
+                    expected_calibration_error(ytr, proba_tr, n_bins=15)
+                )
             rows.append(row)
             out_fig = out_dir / "figures"
             out_fig.mkdir(parents=True, exist_ok=True)
