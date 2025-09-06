@@ -1,6 +1,8 @@
 # nircls — NIR Species Classification Toolkit
 Autor: Thalles Loiola Dias, Discente da UFLA
 
+## Introdução
+
 Toolkit em Python para classificação de espécies a partir de espectroscopia no
 infravermelho próximo (NIR). O pacote oferece uma interface de linha de comando
 e utilidades para criação de pipelines de pré‑processamento, seleção de modelos
@@ -8,22 +10,38 @@ e geração de relatórios completos de avaliação.
 
 ## Sumário
 
-1. [Instalação e requisitos](#instalacao-e-requisitos)
-2. [Configuração via YAML](#configuracao-via-yaml)
-3. [Interface de linha de comando](#interface-de-linha-de-comando)
-4. [Dashboard interativo](#dashboard-interativo)
-5. [Resultados gerados](#resultados-gerados)
-6. [Métricas de calibração e validação](#metricas-de-calibracao-e-validacao)
-7. [Pré-processadores e modelos suportados](#pre-processadores-e-modelos-suportados)
-8. [Treinar modelo final e predições](#treinar-modelo-final-e-predicoes)
-9. [Erros comuns e soluções](#erros-comuns-e-solucoes)
-10. [Extensões e contribuições](#extensoes-e-contribuicoes)
-11. [Testes](#testes)
+1. [Introdução](#introducao)
+2. [Requisitos](#requisitos)
+3. [Instalação](#instalacao)
+4. [Configuração via YAML](#configuracao-via-yaml)
+5. [Chaves suportadas](#chaves-suportadas)
+6. [Interface de linha de comando](#interface-de-linha-de-comando)
+7. [Dashboard interativo](#dashboard-interativo)
+8. [Reprodutibilidade](#reprodutibilidade)
+9. [Resultados gerados](#resultados-gerados)
+10. [Métricas de calibração e validação](#metricas-de-calibracao-e-validacao)
+11. [Pré-processadores e modelos suportados](#pre-processadores-e-modelos-suportados)
+12. [Treinar modelo final e predições](#treinar-modelo-final-e-predicoes)
+13. [Erros comuns e soluções](#erros-comuns-e-solucoes)
+14. [Extensões e contribuições](#extensoes-e-contribuicoes)
+15. [Testes](#testes)
+16. [Créditos/Autoria](#creditosautoria)
 
-## Instalação e requisitos
+## Requisitos
 
-Requer Python 3.9 ou superior. Para utilizar o toolkit em modo de desenvolvimento
-instale no ambiente atual:
+Requer Python 3.9 ou superior. Principais dependências: `numpy`, `pandas`,
+`scikit-learn`, `scipy`, `matplotlib`, `seaborn`, `pyyaml`, `rich`, `joblib`,
+`openpyxl` e `tqdm`. Pacotes opcionais incluem `xgboost`, `lightgbm`,
+`catboost`, `torch` e `questionary`.
+
+Para exportar relatórios em PDF é necessário instalar dependências extras:
+
+* `markdown` e `weasyprint` (recomendado), ou
+* `markdown` e `pdfkit`, juntamente com o executável `wkhtmltopdf`.
+
+## Instalação
+
+Para utilizar o toolkit em modo de desenvolvimento instale no ambiente atual:
 
 ```bash
 pip install -e .
@@ -34,14 +52,6 @@ Para uma instalação reprodutível, utilize:
 ```bash
 pip install -r requirements-lock.txt
 ```
-
-Principais dependências: `numpy`, `pandas`, `scikit-learn`, `scipy`, `matplotlib`,
-`seaborn`, `pyyaml`, `rich`, `joblib`, `openpyxl` e `tqdm`.
-
-Para exportar relatórios em PDF é necessário instalar dependências extras:
-
-* `markdown` e `weasyprint` (recomendado), ou
-* `markdown` e `pdfkit`, juntamente com o executável `wkhtmltopdf`.
 
 ## Configuração via YAML
 
@@ -95,6 +105,44 @@ cv:
     - type: kfold
       n_splits: [5]
 ```
+
+### Chaves suportadas
+
+#### data
+- **input_path** (`str`): caminho ou padrão glob para arquivos de entrada.
+- **x_sheet** (`str`, padrão `"X"`): nome da planilha com os espectros.
+- **y_sheet** (`str`, padrão `"Y"`): nome da planilha com as classes.
+- **target_cols** (`list[str]` | `str`): colunas alvo ou `"all"`. A chave
+  **target_col** é um atalho para uma única coluna.
+- **group_col** (`str`): nome da coluna que define grupos para validação
+  cruzada agrupada.
+- **spectral_range** (`[float, float]`): limites inferior e superior de
+  comprimento de onda.
+- **drop_nans** (`bool`, padrão `true`): remove linhas com valores ausentes.
+- **out_dir** (`str`, padrão `"results"`): diretório base de saída.
+
+#### preprocess
+- **steps** (`list[str]`): lista de pré-processadores, por exemplo
+  `SNV`, `MSC`, `DETREND`, `SG`, `EMSC`, `EPO`, `SCALE`.
+- **sg.window**, **sg.polyorder**, **sg.deriv** (`int` ou `list[int]`): parâmetros
+  do filtro Savitzky‑Golay. Listas ativam busca em grade.
+
+#### cv
+- **random_state** (`int`, padrão `42`): semente aleatória global.
+- **inner_folds** (`int`): número de folds internos para validação aninhada.
+- **cv_method** (`str`): `stratified`, `spxy` ou `group`.
+- **strategies** (`list`): uma ou mais estratégias de avaliação:
+  - `type: kfold` com chaves **n_splits** e opcional **n_repeats**;
+  - `type: loo` (sem chaves adicionais);
+  - `type: holdout` com **test_size**.
+
+#### models
+Cada item da lista define um estimador:
+- **name** (`str`): identificador do modelo.
+- **params** (`dict`): parâmetros fixos passados ao modelo.
+- **grid** (`dict`): hiperparâmetros para busca em grade.
+- **calibration.method** (`"sigmoid"` ou `"isotonic"`) e
+  **calibration.cv** (`int`): opções para calibração de probabilidades.
 
 ## Interface de linha de comando
 
@@ -170,6 +218,27 @@ O dashboard permite executar todas as etapas do fluxo sem recorrer à CLI.
 
 Com essas etapas é possível conduzir um experimento completo apenas pela
 interface web.
+
+## Reprodutibilidade
+
+Para permitir que outros reproduzam seus resultados:
+
+* Defina a semente aleatória com o argumento global `--seed` ou pelo campo
+  `cv.random_state` no arquivo de configuração.
+* Registre a versão do software executando `nircls --version` ou consultando
+  `nircls.__version__` em Python.
+* Instale dependências a partir de `requirements-lock.txt` para garantir o
+  mesmo ambiente:
+
+  ```bash
+  pip install -r requirements-lock.txt
+  ```
+
+* Cite o projeto em publicações, por exemplo:
+
+  > Dias, T. L. (2024). *nircls: NIR Species Classification Toolkit* (versão
+  > 0.1.0) [software de computador]. Disponível no repositório GitHub do
+  > projeto.
 
 ## Resultados gerados
 
