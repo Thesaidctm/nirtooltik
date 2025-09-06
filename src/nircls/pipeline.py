@@ -13,6 +13,7 @@ from sklearn.model_selection import (
     GridSearchCV,
     RepeatedStratifiedKFold,
     StratifiedKFold,
+    GroupKFold,
     LeaveOneOut,
     train_test_split,
 )
@@ -256,6 +257,7 @@ def _run_cv(
     for ds in data:
         progress.update(tgt_task, description=f"Target: {ds['target']}")
         X, y = ds["X"], ds["Y"]
+        groups = ds.get("groups")
         le = LabelEncoder().fit(y)
         y_enc = le.transform(y)
         classes = le.classes_
@@ -288,14 +290,24 @@ def _run_cv(
                 outer_splits = spxy_split(
                     X.values, y_enc, outer.get_n_splits(X, y_enc)
                 )
+            elif cv_method == "group":
+                if groups is None:
+                    raise DataError(
+                        "group_col deve ser informado para cv_method 'group'"
+                    )
+                outer_splits = list(outer.split(X, y_enc, groups))
             else:
                 outer_splits = list(outer.split(X, y_enc))
             fold_task = progress.add_task("Fold", total=len(outer_splits))
             for tr, te in outer_splits:
                 Xtr, Xte = X.iloc[tr].values, X.iloc[te].values
                 ytr, yte = y_enc[tr], y_enc[te]
+                fit_kwargs = {}
                 if cv_method == "spxy":
                     inner = spxy_split(Xtr, ytr, inner_folds)
+                elif cv_method == "group":
+                    inner = GroupKFold(n_splits=inner_folds)
+                    fit_kwargs["groups"] = groups.iloc[tr]
                 else:
                     inner = StratifiedKFold(
                         n_splits=inner_folds,
@@ -305,7 +317,7 @@ def _run_cv(
                 gs = GridSearchCV(
                     pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1
                 )
-                gs.fit(Xtr, ytr)
+                gs.fit(Xtr, ytr, **fit_kwargs)
 
                 # validation metrics
                 yhat = gs.predict(Xte)
@@ -583,6 +595,7 @@ def run_multiple_eval(
     _validate_cfg(cfg, need_data=True, need_cv=True, need_models=True)
     strategies = cfg.get("cv", {}).get("strategies", [])
     random_state = cfg.get("cv", {}).get("random_state", random_state)
+    cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
     outputs: List[Tuple[Path, Path]] = []
     with Progress() as progress:
         strat_task = progress.add_task(
@@ -596,18 +609,25 @@ def run_multiple_eval(
             if stype == "kfold":
                 n_repeats = strat.get("n_repeats", 1)
                 for k in strat.get("n_splits", [5]):
-                    if n_repeats > 1:
-                        outer = RepeatedStratifiedKFold(
-                            n_splits=int(k),
-                            n_repeats=int(n_repeats),
-                            random_state=random_state,
-                        )
+                    if cv_method == "group":
+                        if n_repeats > 1:
+                            raise ModelError(
+                                "cv_method 'group' não suporta repetições"
+                            )
+                        outer = GroupKFold(n_splits=int(k))
                     else:
-                        outer = StratifiedKFold(
-                            n_splits=int(k),
-                            shuffle=True,
-                            random_state=random_state,
-                        )
+                        if n_repeats > 1:
+                            outer = RepeatedStratifiedKFold(
+                                n_splits=int(k),
+                                n_repeats=int(n_repeats),
+                                random_state=random_state,
+                            )
+                        else:
+                            outer = StratifiedKFold(
+                                n_splits=int(k),
+                                shuffle=True,
+                                random_state=random_state,
+                            )
                     sub = out_dir / f"kfold_{k}"
                     sub.mkdir(parents=True, exist_ok=True)
                     _run_cv(cfg, sub, outer, progress, interactive=interactive)
@@ -616,6 +636,10 @@ def run_multiple_eval(
                     generate_report(metrics, figs, sub / "report.md")
                     outputs.append((metrics, figs))
             elif stype == "loo":
+                if cv_method == "group":
+                    raise ModelError(
+                        "cv_method 'group' não suportado com estratégia LOO"
+                    )
                 sub = out_dir / "loo"
                 sub.mkdir(parents=True, exist_ok=True)
                 _run_cv(cfg, sub, LeaveOneOut(), progress, interactive=interactive)
@@ -624,6 +648,10 @@ def run_multiple_eval(
                 generate_report(metrics, figs, sub / "report.md")
                 outputs.append((metrics, figs))
             elif stype == "holdout":
+                if cv_method == "group":
+                    raise ModelError(
+                        "cv_method 'group' não suportado com estratégia holdout"
+                    )
                 sub = out_dir / "holdout"
                 sub.mkdir(parents=True, exist_ok=True)
                 test_size = float(strat.get("test_size", 0.3))
@@ -654,6 +682,7 @@ def train_and_save(
         _validate_cfg(cfg, need_data=True, need_models=True)
         ds = prepare_inputs(cfg["data"])[0]
         X, y = ds["X"], ds["Y"]
+        groups = ds.get("groups")
         le = LabelEncoder().fit(y)
         y_enc = le.transform(y)
         # persist class labels for later use in predictions
@@ -667,8 +696,14 @@ def train_and_save(
         logger.info("Running %s with steps: %s", name, steps_cfg)
         cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
         train_task = progress.add_task("Treinando", total=None)
+        fit_kwargs = {}
         if cv_method == "spxy":
             cv = spxy_split(X.values, y_enc, 5)
+        elif cv_method == "group":
+            if groups is None:
+                raise DataError("group_col deve ser informado para cv_method 'group'")
+            cv = GroupKFold(n_splits=5)
+            fit_kwargs["groups"] = groups
         else:
             cv = RepeatedStratifiedKFold(
                 n_splits=5, n_repeats=1, random_state=random_state
@@ -680,7 +715,7 @@ def train_and_save(
             cv=cv,
             n_jobs=-1,
         )
-        gs.fit(X.values, y_enc)
+        gs.fit(X.values, y_enc, **fit_kwargs)
         progress.update(train_task, completed=1)
 
         save_task = progress.add_task("Salvando", total=None)
@@ -738,7 +773,7 @@ def evaluate_saved_model(model_path: Path, data_path: Path) -> None:
     except FileNotFoundError as e:
         raise ModelError("Modelo não encontrado. Verifique o caminho informado.") from e
     try:
-        X, y_list = read_xlsx_xy(data_path)
+        X, y_list, _ = read_xlsx_xy(data_path)
     except DataError as e:
         raise DataError(f"Erro ao ler os dados: {e}") from e
     y = y_list[0][1]
@@ -756,11 +791,11 @@ def predict_with_model(model_path: Path, data_path: Path, out_dir: Path) -> None
         try:
             if data_path.suffix.lower() in [".xlsx", ".xls"]:
                 try:
-                    X, y_list = read_xlsx_xy(data_path)
+                    X, y_list, _ = read_xlsx_xy(data_path)
                 except DataError:
-                    X, y_list = read_tabular(data_path)
+                    X, y_list, _ = read_tabular(data_path)
             else:
-                X, y_list = read_tabular(data_path)
+                X, y_list, _ = read_tabular(data_path)
         except DataError as e:
             raise DataError(f"Erro ao processar dados: {e}") from e
         if y_list:
