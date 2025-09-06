@@ -80,6 +80,7 @@ CVStrategy = Union[KFoldStrategy, LooStrategy, HoldoutStrategy]
 class CVConfig(BaseModel):
     random_state: Optional[int] = 42
     inner_folds: Optional[int] = None
+    cv_method: Optional[Literal["stratified", "spxy"]] = "stratified"
     strategies: List[CVStrategy] = Field(default_factory=list)
 
     class Config:

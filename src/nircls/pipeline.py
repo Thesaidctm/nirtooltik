@@ -45,6 +45,7 @@ from .utils.plots import (
 from .report import generate_report
 from .utils.logging import logger
 from .utils.errors import DataError, ModelError
+from .utils.split import spxy_split
 
 warnings.filterwarnings(
     "ignore",
@@ -258,11 +259,8 @@ def _run_cv(
         le = LabelEncoder().fit(y)
         y_enc = le.transform(y)
         classes = le.classes_
-        inner = StratifiedKFold(
-            n_splits=cfg.get("cv", {}).get("inner_folds", 3),
-            shuffle=True,
-            random_state=123,
-        )
+        cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
+        inner_folds = cfg.get("cv", {}).get("inner_folds", 3)
         models = build_pipeline_from_config(cfg)
         model_task = progress.add_task("Model", total=len(models))
         for name, pipe, grid in models:
@@ -286,12 +284,24 @@ def _run_cv(
             y_true_all: List[np.ndarray] = []
             y_pred_all: List[np.ndarray] = []
             y_proba_all: List[np.ndarray] = []
-            fold_task = progress.add_task(
-                "Fold", total=outer.get_n_splits(X, y_enc)
-            )
-            for tr, te in outer.split(X, y_enc):
+            if cv_method == "spxy":
+                outer_splits = spxy_split(
+                    X.values, y_enc, outer.get_n_splits(X, y_enc)
+                )
+            else:
+                outer_splits = list(outer.split(X, y_enc))
+            fold_task = progress.add_task("Fold", total=len(outer_splits))
+            for tr, te in outer_splits:
                 Xtr, Xte = X.iloc[tr].values, X.iloc[te].values
                 ytr, yte = y_enc[tr], y_enc[te]
+                if cv_method == "spxy":
+                    inner = spxy_split(Xtr, ytr, inner_folds)
+                else:
+                    inner = StratifiedKFold(
+                        n_splits=inner_folds,
+                        shuffle=True,
+                        random_state=123,
+                    )
                 gs = GridSearchCV(
                     pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1
                 )
@@ -454,11 +464,8 @@ def _run_holdout(
         le = LabelEncoder().fit(y)
         y_enc = le.transform(y)
         classes = le.classes_
-        inner = StratifiedKFold(
-            n_splits=cfg.get("cv", {}).get("inner_folds", 3),
-            shuffle=True,
-            random_state=123,
-        )
+        cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
+        inner_folds = cfg.get("cv", {}).get("inner_folds", 3)
         for name, pipe, grid in build_pipeline_from_config(cfg):
             Xtr, Xte, ytr, yte = train_test_split(
                 X.values,
@@ -469,6 +476,12 @@ def _run_holdout(
             )
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
+            if cv_method == "spxy":
+                inner = spxy_split(Xtr, ytr, inner_folds)
+            else:
+                inner = StratifiedKFold(
+                    n_splits=inner_folds, shuffle=True, random_state=123
+                )
             gs = GridSearchCV(
                 pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1
             )
@@ -652,14 +665,19 @@ def train_and_save(
         name, pipe, grid = build_pipeline_from_config(cfg)[0]
         steps_cfg = cfg.get("preprocess", {}).get("steps", [])
         logger.info("Running %s with steps: %s", name, steps_cfg)
+        cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
         train_task = progress.add_task("Treinando", total=None)
+        if cv_method == "spxy":
+            cv = spxy_split(X.values, y_enc, 5)
+        else:
+            cv = RepeatedStratifiedKFold(
+                n_splits=5, n_repeats=1, random_state=random_state
+            )
         gs = GridSearchCV(
             pipe,
             grid,
             scoring="f1_macro",
-            cv=RepeatedStratifiedKFold(
-                n_splits=5, n_repeats=1, random_state=random_state
-            ),
+            cv=cv,
             n_jobs=-1,
         )
         gs.fit(X.values, y_enc)
