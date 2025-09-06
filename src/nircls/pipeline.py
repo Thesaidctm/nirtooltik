@@ -181,7 +181,12 @@ def _save_plots(
     out_fig.mkdir(parents=True, exist_ok=True)
     stem = Path(file_path).stem
     cm = confusion_matrix(y_true, y_pred)
-    plot_confusion(cm, classes, out_fig / f"{stem}__{target}__{model}__cm")
+    plot_confusion(
+        cm,
+        classes,
+        out_fig / f"{stem}__{target}__{model}__cm",
+        normalize=False,
+    )
     if y_proba is not None:
         plot_roc_ovr(
             y_true,
