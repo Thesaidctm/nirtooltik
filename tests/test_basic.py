@@ -82,6 +82,28 @@ def test_decision_tree_with_grid():
     gs.fit(X, y)
     assert gs.best_params_["clf__max_depth"] in [None, 3]
     assert gs.best_params_["clf__min_samples_split"] in [2, 4]
+
+def test_extratrees_model_with_grid():
+    X = np.random.RandomState(0).randn(20, 5)
+    y = (np.arange(20) % 2).astype(int)
+    cfg = {
+        "models": [
+            {
+                "name": "ET",
+                "grid": {"n_estimators": [10, 20], "max_depth": [None, 5]},
+            }
+        ]
+    }
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "ET"
+    assert "clf__n_estimators" in grid
+    assert "clf__max_depth" in grid
+    cv = StratifiedKFold(n_splits=2)
+    gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy")
+    gs.fit(X, y)
+    assert gs.best_params_["clf__n_estimators"] in [10, 20]
+    assert gs.best_params_["clf__max_depth"] in [None, 5]
+
 def test_knn_model_with_grid():
     X = np.random.RandomState(1).randn(20, 5)
     y = (np.arange(20) % 2).astype(int)

@@ -4,7 +4,11 @@ from typing import List, Dict, Any
 from sklearn.linear_model import LogisticRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import (
+    RandomForestClassifier,
+    GradientBoostingClassifier,
+    ExtraTreesClassifier,
+)
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.cross_decomposition import PLSRegression
@@ -82,6 +86,8 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             est = RandomForestClassifier()
         elif upper == "GB":
             est = GradientBoostingClassifier()
+        elif upper in ("ET", "EXTRATREES"):
+            est = ExtraTreesClassifier()
         elif upper == "LOGREG":
             est = LogisticRegression(max_iter=5000)
         elif upper == "MLP":
