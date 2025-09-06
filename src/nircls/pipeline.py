@@ -35,6 +35,7 @@ from .preprocessors.spectro import (
     EPO,
 )
 from .models.factory import make_models_from_config
+from .config_schema import ConfigModel, ValidationError
 from .metrics.calibration import expected_calibration_error
 from .utils.plots import plot_confusion, plot_roc_ovr, plot_reliability
 from .report import generate_report
@@ -46,6 +47,26 @@ warnings.filterwarnings(
     category=FutureWarning,
 )
 
+def _validate_cfg(
+    cfg: Dict[str, Any],
+    *,
+    need_data: bool = False,
+    need_cv: bool = False,
+    need_models: bool = True,
+) -> ConfigModel:
+    """Validate configuration dictionary using :class:`ConfigModel`."""
+
+    try:
+        model = ConfigModel(**cfg)
+    except ValidationError as exc:
+        raise ValueError(f"Configuração inválida: {exc}") from exc
+    if need_data and model.data is None:
+        raise ValueError("Seção 'data' é obrigatória")
+    if need_models and (not model.models):
+        raise ValueError("Seção 'models' é obrigatória")
+    if need_cv and (model.cv is None or not model.cv.strategies):
+        raise ValueError("Seção 'cv' é obrigatória")
+    return model
 def _make_preprocess(steps_cfg, cfg):
     """Create preprocessing steps and optional parameter grid.
 
@@ -93,6 +114,7 @@ def _make_preprocess(steps_cfg, cfg):
     return steps, grid
 
 def build_pipeline_from_config(cfg: Dict[str, Any]):
+    _validate_cfg(cfg, need_models=True)
     steps_cfg = cfg.get("preprocess", {}).get("steps", [])
     pre_steps, pre_grid = _make_preprocess(
         steps_cfg, cfg.get("preprocess", {})
@@ -488,6 +510,7 @@ def run_multiple_eval(cfg: Dict[str, Any], out_dir: Path) -> None:
         Directory that receives a subfolder for each strategy.
     """
 
+    _validate_cfg(cfg, need_data=True, need_cv=True, need_models=True)
     strategies = cfg.get("cv", {}).get("strategies", [])
     random_state = cfg.get("cv", {}).get("random_state", 42)
     with Progress() as progress:
@@ -557,6 +580,7 @@ def train_and_save(cfg: Dict[str, Any], out_dir: Path):
         Destination for the trained model and related files.
     """
 
+    _validate_cfg(cfg, need_data=True, need_models=True)
     ds = prepare_inputs(cfg["data"])[0]
     X, y = ds["X"], ds["Y"]
     le = LabelEncoder().fit(y)
