@@ -1,12 +1,15 @@
 
 import sys, pathlib, numpy as np, pandas as pd
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
+from sklearn.linear_model import LogisticRegression
+from joblib import dump
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from nircls.pipeline import (
     build_pipeline_from_config,
     run_multiple_eval,
     train_and_save,
+    predict_with_model,
 )
 from nircls.io import prepare_inputs
 
@@ -169,4 +172,46 @@ def test_nested_crossval_report(tmp_path):
     assert (strat_dir / "metrics_summary.csv").exists()
     assert any((strat_dir / "figures").glob("*.png"))
     assert (strat_dir / "report.md").exists()
+
+
+def test_predict_with_model_outputs_y_pred_only_when_y_missing(tmp_path):
+    rng = np.random.RandomState(0)
+    X = rng.rand(10, 4)
+    y = (np.arange(10) % 2)
+    model = LogisticRegression(max_iter=50).fit(X, y)
+    model_path = tmp_path / "model.joblib"
+    dump(model, model_path)
+
+    df = pd.DataFrame(X, columns=[str(i) for i in range(4)])
+    data_file = tmp_path / "x_only.xlsx"
+    with pd.ExcelWriter(data_file) as writer:
+        df.to_excel(writer, sheet_name="X", index=False)
+
+    out_dir = tmp_path / "pred"
+    predict_with_model(model_path, data_file, out_dir)
+    preds = pd.read_csv(out_dir / "predictions.csv")
+    assert "y_pred" in preds.columns and "y_true" not in preds.columns
+    assert len(preds) == len(X)
+
+
+def test_predict_with_model_includes_y_true_when_available(tmp_path):
+    rng = np.random.RandomState(1)
+    X = rng.rand(8, 3)
+    y = (np.arange(8) % 2).astype(str)
+    model = LogisticRegression(max_iter=50).fit(X, (np.arange(8) % 2))
+    model_path = tmp_path / "model.joblib"
+    dump(model, model_path)
+
+    Xdf = pd.DataFrame(X, columns=[str(i) for i in range(3)])
+    Ydf = pd.DataFrame({"target": y})
+    data_file = tmp_path / "xy.xlsx"
+    with pd.ExcelWriter(data_file) as writer:
+        Xdf.to_excel(writer, sheet_name="X", index=False)
+        Ydf.to_excel(writer, sheet_name="Y", index=False)
+
+    out_dir = tmp_path / "pred_xy"
+    predict_with_model(model_path, data_file, out_dir)
+    preds = pd.read_csv(out_dir / "predictions.csv")
+    assert list(preds.columns) == ["y_true", "y_pred"]
+    assert len(preds) == len(X)
 
