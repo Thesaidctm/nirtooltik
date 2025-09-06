@@ -168,6 +168,16 @@ def test_run_multiple_eval_requires_cv(tmp_path):
         run_multiple_eval(cfg, tmp_path)
 
 
+def test_run_multiple_eval_file_not_found(tmp_path):
+    cfg = {
+        "data": {"input_path": str(tmp_path / "missing.csv"), "target_cols": ["t"]},
+        "models": [{"name": "PLSDA"}],
+        "cv": {"strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}]},
+    }
+    with pytest.raises(FileNotFoundError, match="Arquivo de dados não encontrado"):
+        run_multiple_eval(cfg, tmp_path)
+
+
 def test_compute_vip_identifies_relevant_feature():
     rng = np.random.RandomState(0)
     X = rng.randn(40, 5)

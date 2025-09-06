@@ -242,7 +242,12 @@ def _run_cv(
         Progress bar instance for user feedback.
     """
 
-    data = prepare_inputs(cfg["data"])
+    try:
+        data = prepare_inputs(cfg["data"])
+    except FileNotFoundError as e:
+        raise FileNotFoundError(
+            "Arquivo de dados não encontrado. Verifique o caminho informado."
+        ) from e
     rows: List[Dict[str, Any]] = []
     tgt_task = progress.add_task("Target", total=len(data))
     for ds in data:
@@ -435,7 +440,12 @@ def _run_holdout(
         If ``True``, also generate interactive Plotly HTML figures.
     """
 
-    data = prepare_inputs(cfg["data"])
+    try:
+        data = prepare_inputs(cfg["data"])
+    except FileNotFoundError as e:
+        raise FileNotFoundError(
+            "Arquivo de dados não encontrado. Verifique o caminho informado."
+        ) from e
     rows: List[Dict[str, Any]] = []
     for ds in data:
         X, y = ds["X"], ds["Y"]

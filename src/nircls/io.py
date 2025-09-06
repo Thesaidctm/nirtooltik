@@ -87,6 +87,10 @@ def prepare_inputs(data_cfg: Dict):
     containing missing values are dropped in a leakage-free manner.
     """
     files = [Path(p) for p in glob(data_cfg["input_path"])]
+    if not files:
+        raise FileNotFoundError(
+            "Nenhum arquivo encontrado para o padrão informado"
+        )
     sp = data_cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
     tgt = data_cfg.get("target_cols")
