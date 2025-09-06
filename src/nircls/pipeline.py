@@ -37,7 +37,13 @@ from .preprocessors.spectro import (
 from .models.factory import make_models_from_config
 from .config_schema import ConfigModel, ValidationError
 from .metrics.calibration import expected_calibration_error
-from .utils.plots import plot_confusion, plot_roc_ovr, plot_reliability
+from .utils.plots import (
+    plot_confusion,
+    plot_confusion_interactive,
+    plot_roc_interactive,
+    plot_roc_ovr,
+    plot_reliability,
+)
 from .report import generate_report
 from .utils.logging import logger
 
@@ -174,8 +180,14 @@ def _save_plots(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     y_proba: Optional[np.ndarray] = None,
+    *,
+    interactive: bool = False,
 ) -> None:
-    """Save confusion matrix and optional ROC/reliability plots."""
+    """Save confusion matrix and optional ROC/reliability plots.
+
+    When ``interactive`` is ``True`` additional HTML versions of the confusion
+    matrix and ROC curve are generated using Plotly.
+    """
 
     out_fig = out_dir / "figures"
     out_fig.mkdir(parents=True, exist_ok=True)
@@ -187,6 +199,13 @@ def _save_plots(
         out_fig / f"{stem}__{target}__{model}__cm",
         normalize=False,
     )
+    if interactive:
+        plot_confusion_interactive(
+            cm,
+            classes,
+            out_fig / f"{stem}__{target}__{model}__cm",
+            normalize=False,
+        )
     if y_proba is not None:
         plot_roc_ovr(
             y_true,
@@ -199,6 +218,13 @@ def _save_plots(
             y_proba,
             out_fig / f"{stem}__{target}__{model}__reliability",
         )
+        if interactive:
+            plot_roc_interactive(
+                y_true,
+                y_proba,
+                classes,
+                out_fig / f"{stem}__{target}__{model}__roc",
+            )
 
 
 def _run_cv(
@@ -206,6 +232,8 @@ def _run_cv(
     out_dir: Path,
     outer,
     progress: Progress,
+    *,
+    interactive: bool = False,
 ) -> None:
     """Run cross-validation for configured datasets and models.
 
@@ -383,6 +411,7 @@ def _run_cv(
                 y_true,
                 y_pred,
                 y_proba,
+                interactive=interactive,
             )
             progress.advance(model_task)
         progress.advance(tgt_task)
@@ -394,6 +423,8 @@ def _run_holdout(
     out_dir: Path,
     test_size: float,
     random_state: int,
+    *,
+    interactive: bool = False,
 ) -> None:
     """Evaluate models using a single train/test split.
 
@@ -407,6 +438,8 @@ def _run_holdout(
         Proportion of the dataset used for testing.
     random_state:
         Seed applied to the train/test split.
+    interactive:
+        If ``True``, also generate interactive Plotly HTML figures.
     """
 
     data = prepare_inputs(cfg["data"])
@@ -500,6 +533,7 @@ def _run_holdout(
                 yte,
                 yhat,
                 proba,
+                interactive=interactive,
             )
     _save_metrics(rows, out_dir)
 
@@ -508,6 +542,7 @@ def run_multiple_eval(
     cfg: Dict[str, Any],
     out_dir: Path,
     *,
+    interactive: bool = False,
     ai_summary: bool = False,
     openai_key: str | None = None,
 ) -> None:
@@ -519,6 +554,8 @@ def run_multiple_eval(
         Experiment configuration.
     out_dir:
         Directory that receives a subfolder for each strategy.
+    interactive:
+        If ``True``, also generate interactive Plotly HTML figures.
     """
 
     _validate_cfg(cfg, need_data=True, need_cv=True, need_models=True)
@@ -550,7 +587,7 @@ def run_multiple_eval(
                         )
                     sub = out_dir / f"kfold_{k}"
                     sub.mkdir(parents=True, exist_ok=True)
-                    _run_cv(cfg, sub, outer, progress)
+                    _run_cv(cfg, sub, outer, progress, interactive=interactive)
                     generate_report(
                         sub / "metrics.json",
                         sub / "figures",
@@ -561,7 +598,7 @@ def run_multiple_eval(
             elif stype == "loo":
                 sub = out_dir / "loo"
                 sub.mkdir(parents=True, exist_ok=True)
-                _run_cv(cfg, sub, LeaveOneOut(), progress)
+                _run_cv(cfg, sub, LeaveOneOut(), progress, interactive=interactive)
                 generate_report(
                     sub / "metrics.json",
                     sub / "figures",
@@ -573,7 +610,7 @@ def run_multiple_eval(
                 sub = out_dir / "holdout"
                 sub.mkdir(parents=True, exist_ok=True)
                 test_size = float(strat.get("test_size", 0.3))
-                _run_holdout(cfg, sub, test_size, random_state)
+                _run_holdout(cfg, sub, test_size, random_state, interactive=interactive)
                 generate_report(
                     sub / "metrics.json",
                     sub / "figures",
@@ -590,6 +627,7 @@ def train_and_save(
     cfg: Dict[str, Any],
     out_dir: Path,
     *,
+    interactive: bool = False,
     ai_summary: bool = False,
     openai_key: str | None = None,
 ):
@@ -601,6 +639,8 @@ def train_and_save(
         Experiment configuration.
     out_dir:
         Destination for the trained model and related files.
+    interactive:
+        If ``True``, also generate interactive Plotly HTML figures.
     ai_summary:
         If ``True``, include AI-generated summary in the report.
     openai_key:
@@ -662,6 +702,7 @@ def train_and_save(
         y_enc,
         yhat,
         proba,
+        interactive=interactive,
     )
     generate_report(
         out_dir / "metrics.json",
