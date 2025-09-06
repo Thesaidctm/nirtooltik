@@ -716,13 +716,20 @@ def train_and_save(
         return None, out_dir / "metrics.json", out_dir / "figures"
     except FileNotFoundError:
         return "Arquivo de dados não encontrado", None, None
-    except ValueError:
-        return "Modelo incompatível", None, None
-        return "Arquivo de dados não encontrado. Verifique o caminho informado."
     except ValueError as e:
+        msg = str(e).lower()
+        error_map = {
+            "dados inexistentes": "Dados inexistentes",
+            "modelo incompatível": "Modelo incompatível",
+        }
+        for key, friendly in error_map.items():
+            if key in msg:
+                return f"{friendly}: {e}", None, None
         return (
             f"Erro ao preparar dados ou modelo: {e}. "
-            "Verifique se a coluna alvo existe na planilha e se os parâmetros do modelo estão corretos."
+            "Verifique se a coluna alvo existe na planilha e se os parâmetros do modelo estão corretos.",
+            None,
+            None,
         )
 def evaluate_saved_model(model_path: Path, data_path: Path):
     try:
