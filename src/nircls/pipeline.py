@@ -643,6 +643,10 @@ def train_and_save(
         X, y = ds["X"], ds["Y"]
         le = LabelEncoder().fit(y)
         y_enc = le.transform(y)
+        # persist class labels for later use in predictions
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(out_dir / "classes.json", "w") as f:
+            json.dump(le.classes_.tolist(), f)
         progress.update(load_task, completed=1)
 
         name, pipe, grid = build_pipeline_from_config(cfg)[0]
@@ -746,7 +750,14 @@ def predict_with_model(model_path: Path, data_path: Path, out_dir: Path) -> None
         progress.update(load_data_task, completed=1)
 
         pred_task = progress.add_task("Prevendo", total=None)
+        classes = None
+        classes_path = model_path.with_name("classes.json")
+        if classes_path.exists():
+            with open(classes_path) as f:
+                classes = np.array(json.load(f))
         yhat = est.predict(X.values)
+        if classes is not None:
+            yhat = classes[yhat]
         progress.update(pred_task, completed=1)
 
         save_task = progress.add_task("Salvando", total=None)
