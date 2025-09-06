@@ -11,12 +11,13 @@ e geração de relatórios completos de avaliação.
 1. [Instalação e requisitos](#instalacao-e-requisitos)
 2. [Configuração via YAML](#configuracao-via-yaml)
 3. [Interface de linha de comando](#interface-de-linha-de-comando)
-4. [Resultados gerados](#resultados-gerados)
-5. [Métricas de calibração e validação](#metricas-de-calibracao-e-validacao)
-6. [Pré-processadores e modelos suportados](#pre-processadores-e-modelos-suportados)
-7. [Treinar modelo final e predições](#treinar-modelo-final-e-predicoes)
-8. [Extensões e contribuições](#extensoes-e-contribuicoes)
-9. [Testes](#testes)
+4. [Dashboard interativo](#dashboard-interativo)
+5. [Resultados gerados](#resultados-gerados)
+6. [Métricas de calibração e validação](#metricas-de-calibracao-e-validacao)
+7. [Pré-processadores e modelos suportados](#pre-processadores-e-modelos-suportados)
+8. [Treinar modelo final e predições](#treinar-modelo-final-e-predicoes)
+9. [Extensões e contribuições](#extensoes-e-contribuicoes)
+10. [Testes](#testes)
 
 ## Instalação e requisitos
 
@@ -88,17 +89,40 @@ nircls train --config experimento.yml
 # Predições usando um modelo salvo
 nircls predict --model caminho/model.joblib --data novos.xlsx --output preds
 
-# Dashboard interativo de resultados
+# Dashboard interativo
 nircls dashboard --results results
 ```
 
-Para visualizar métricas, gráficos e o relatório final em uma interface web,
-utilize o subcomando `dashboard` apontando para a pasta onde os resultados foram
-salvos:
+Consulte a seção [Dashboard interativo](#dashboard-interativo) para executar
+experimentos completos pela interface web.
 
-```bash
-nircls dashboard --results <pasta>
-```
+## Dashboard interativo
+
+O dashboard permite executar todas as etapas do fluxo sem recorrer à CLI.
+
+1. Inicie a aplicação:
+
+   ```bash
+   nircls dashboard --results results
+   ```
+
+   A pasta indicada armazenará os artefatos gerados.
+
+2. Na aba **Preparar Dados**, envie o arquivo CSV/XLSX, escolha a coluna alvo e
+   opcionalmente informe o intervalo espectral. Ao enviar o formulário a função
+   `prepare_inputs` processa os dados.
+
+3. Em **Treinar**, selecione o modelo desejado e forneça um grid de parâmetros
+   em JSON. O botão *Treinar* chama `train_and_save` e grava o modelo treinado na
+   pasta de resultados.
+
+4. Em **Avaliar**, configure o número de folds, modelo e parâmetros. O formulário
+   executa `run_multiple_eval` gerando métricas e relatórios. A seção também
+   permite enviar um modelo salvo e um novo arquivo de dados para que
+   `predict_with_model` produza o arquivo `predictions.csv`.
+
+Com essas etapas é possível conduzir um experimento completo apenas pela
+interface web.
 
 ## Resultados gerados
 
