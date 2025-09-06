@@ -117,9 +117,12 @@ def build_pipeline_from_config(cfg: Dict[str, Any]):
 def _save_metrics(rows: List[Dict[str, Any]], out_dir: Path) -> None:
     """Persist metrics to CSV and JSON files."""
 
-    pd.DataFrame(rows).to_csv(out_dir / "metrics_summary.csv", index=False)
+    df = pd.DataFrame(rows)
+    df.to_csv(out_dir / "metrics_summary.csv", index=False, na_rep="NaN")
+    # Convert NaN values back to ``None`` for JSON export
+    json_rows = df.where(pd.notnull(df), None).to_dict(orient="records")
     with open(out_dir / "metrics.json", "w") as f:
-        json.dump(rows, f, indent=2)
+        json.dump(json_rows, f, indent=2)
 
 
 def _save_plots(
@@ -184,14 +187,14 @@ def _run_cv(
             scores_val = {
                 "F1-macro": [],
                 "BalancedAcc": [],
-                "Brier": [],
-                "ECE": [],
+                "Brier": None,
+                "ECE": None,
             }
             scores_train = {
                 "F1-macro": [],
                 "BalancedAcc": [],
-                "Brier": [],
-                "ECE": [],
+                "Brier": None,
+                "ECE": None,
             }
             y_true_all: List[np.ndarray] = []
             y_pred_all: List[np.ndarray] = []
@@ -217,6 +220,11 @@ def _run_cv(
                 )
                 proba_fn = getattr(gs, "predict_proba", None)
                 if proba_fn is not None:
+                    if scores_val["Brier"] is None:
+                        scores_val["Brier"] = []
+                        scores_val["ECE"] = []
+                        scores_train["Brier"] = []
+                        scores_train["ECE"] = []
                     proba = proba_fn(Xte)
                     y_proba_all.append(proba)
                     brier = np.mean(
@@ -275,7 +283,7 @@ def _run_cv(
                 {
                     f"{k}_std": float(np.std(v, ddof=1))
                     for k, v in scores_val.items()
-                    if len(v) > 1
+                    if v and len(v) > 1
                 }
             )
             row.update(
@@ -289,9 +297,14 @@ def _run_cv(
                 {
                     f"train_{k}_std": float(np.std(v, ddof=1))
                     for k, v in scores_train.items()
-                    if len(v) > 1
+                    if v and len(v) > 1
                 }
             )
+            for m in ["Brier", "ECE"]:
+                row.setdefault(f"{m}_mean", None)
+                row.setdefault(f"{m}_std", None)
+                row.setdefault(f"train_{m}_mean", None)
+                row.setdefault(f"train_{m}_std", None)
             rows.append(row)
             y_true = np.concatenate(y_true_all)
             y_pred = np.concatenate(y_pred_all)
@@ -391,6 +404,9 @@ def _run_holdout(
                 row["train_ECE_mean"] = float(
                     expected_calibration_error(ytr, proba_tr, n_bins=15)
                 )
+            for m in ["Brier", "ECE"]:
+                row.setdefault(f"{m}_mean", None)
+                row.setdefault(f"train_{m}_mean", None)
             rows.append(row)
             _save_plots(
                 ds["file"],
