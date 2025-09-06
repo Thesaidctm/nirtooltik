@@ -1,4 +1,5 @@
 # nircls — NIR Species Classification Toolkit
+Autor: Thalles Loiola Dias, Discente da UFLA
 
 Toolkit em Python para classificação de espécies a partir de espectroscopia no
 infravermelho próximo (NIR). O pacote oferece uma interface de linha de comando
@@ -166,4 +167,8 @@ requests.
 Os resultados serão salvos em `results/<run_id>/<estratégia>/`. Cada pasta de
 estratégia contém as métricas (`metrics.json`, `metrics_summary.xlsx`), as figuras
 geradas e um relatório final em Markdown (`report.md`).
+
+## Créditos/Autoria
+
+Desenvolvido por Thalles Loiola Dias, Discente da UFLA.
 
