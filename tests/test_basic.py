@@ -156,7 +156,10 @@ def test_end_to_end_cv_and_export(tmp_path):
     out_dir = tmp_path / "cv_run"
     run_multiple_eval(cfg, out_dir)
     strat_dir = out_dir / "kfold_2"
-    assert (strat_dir / "metrics_summary.csv").exists()
+    metrics_path = strat_dir / "metrics_summary.xlsx"
+    assert metrics_path.exists()
+    xls = pd.ExcelFile(metrics_path)
+    assert set(xls.sheet_names) == {"validation", "calibration"}
     assert any((strat_dir / "figures").glob("*.png"))
     assert (strat_dir / "report.md").exists()
 
@@ -206,7 +209,10 @@ def test_nested_crossval_report(tmp_path):
     out_dir = tmp_path / "nested"
     run_multiple_eval(cfg, out_dir)
     strat_dir = out_dir / "kfold_2"
-    assert (strat_dir / "metrics_summary.csv").exists()
+    metrics_path = strat_dir / "metrics_summary.xlsx"
+    assert metrics_path.exists()
+    xls = pd.ExcelFile(metrics_path)
+    assert set(xls.sheet_names) == {"validation", "calibration"}
     assert any((strat_dir / "figures").glob("*.png"))
     assert (strat_dir / "report.md").exists()
 
