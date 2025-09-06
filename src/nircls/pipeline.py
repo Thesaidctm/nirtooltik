@@ -23,7 +23,7 @@ from sklearn.metrics import (
     brier_score_loss,
 )
 from joblib import dump, load
-from .io import prepare_inputs, export_xy_xlsx, read_xlsx_xy
+from .io import prepare_inputs, export_xy_xlsx, read_xlsx_xy, read_tabular
 from .preprocessors.spectro import (
     SNV,
     MSC,
@@ -492,13 +492,22 @@ def evaluate_saved_model(model_path: Path, data_path: Path):
 
 def predict_with_model(model_path: Path, data_path: Path, out_dir: Path):
     est = load(model_path)
-    X, y_list = read_xlsx_xy(data_path)
-    y = y_list[0][1]
+    y = None
+    if data_path.suffix.lower() in [".xlsx", ".xls"]:
+        try:
+            X, y_list = read_xlsx_xy(data_path)
+        except ValueError:
+            X, y_list = read_tabular(data_path)
+    else:
+        X, y_list = read_tabular(data_path)
+    if y_list:
+        y = y_list[0][1]
     yhat = est.predict(X.values)
     out_dir.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame({"y_true": y, "y_pred": yhat}).to_csv(
-        out_dir / "predictions.csv", index=False
-    )
+    df = pd.DataFrame({"y_pred": yhat})
+    if y is not None:
+        df.insert(0, "y_true", y)
+    df.to_csv(out_dir / "predictions.csv", index=False)
 
 def explain_model(model_path: Path, data_path: Path, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
