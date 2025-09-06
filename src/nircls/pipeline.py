@@ -543,8 +543,6 @@ def run_multiple_eval(
     out_dir: Path,
     *,
     interactive: bool = False,
-    ai_summary: bool = False,
-    openai_key: str | None = None,
 ) -> None:
     """Run evaluation for multiple cross-validation strategies.
 
@@ -592,8 +590,6 @@ def run_multiple_eval(
                         sub / "metrics.json",
                         sub / "figures",
                         sub / "report.md",
-                        use_chatgpt=ai_summary,
-                        api_key=openai_key,
                     )
             elif stype == "loo":
                 sub = out_dir / "loo"
@@ -603,8 +599,6 @@ def run_multiple_eval(
                     sub / "metrics.json",
                     sub / "figures",
                     sub / "report.md",
-                    use_chatgpt=ai_summary,
-                    api_key=openai_key,
                 )
             elif stype == "holdout":
                 sub = out_dir / "holdout"
@@ -615,8 +609,6 @@ def run_multiple_eval(
                     sub / "metrics.json",
                     sub / "figures",
                     sub / "report.md",
-                    use_chatgpt=ai_summary,
-                    api_key=openai_key,
                 )
             else:
                 raise ValueError(f"Unknown CV strategy: {stype}")
@@ -628,8 +620,6 @@ def train_and_save(
     out_dir: Path,
     *,
     interactive: bool = False,
-    ai_summary: bool = False,
-    openai_key: str | None = None,
 ):
     """Train final model and persist artefacts.
 
@@ -641,10 +631,6 @@ def train_and_save(
         Destination for the trained model and related files.
     interactive:
         If ``True``, also generate interactive Plotly HTML figures.
-    ai_summary:
-        If ``True``, include AI-generated summary in the report.
-    openai_key:
-        Optional OpenAI API key. Falls back to ``OPENAI_API_KEY``.
     """
 
     _validate_cfg(cfg, need_data=True, need_models=True)
@@ -708,8 +694,6 @@ def train_and_save(
         out_dir / "metrics.json",
         out_dir / "figures",
         out_dir / "report.md",
-        use_chatgpt=ai_summary,
-        api_key=openai_key,
     )
 
 def evaluate_saved_model(model_path: Path, data_path: Path):
