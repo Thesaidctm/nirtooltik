@@ -17,6 +17,9 @@ class DataConfig(BaseModel):
     target_col: Optional[str] = Field(
         None, description="Alias for single target column"
     )
+    group_col: Optional[str] = Field(
+        None, description="Column name with group labels for grouped CV"
+    )
     spectral_range: Optional[Union[List[float], tuple[float, float]]] = Field(
         None, description="Lower and upper wavelength limits"
     )
@@ -80,7 +83,7 @@ CVStrategy = Union[KFoldStrategy, LooStrategy, HoldoutStrategy]
 class CVConfig(BaseModel):
     random_state: Optional[int] = 42
     inner_folds: Optional[int] = None
-    cv_method: Optional[Literal["stratified", "spxy"]] = "stratified"
+    cv_method: Optional[Literal["stratified", "spxy", "group"]] = "stratified"
     strategies: List[CVStrategy] = Field(default_factory=list)
 
     class Config:

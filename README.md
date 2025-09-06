@@ -73,6 +73,23 @@ cv:
 * `cv.strategies` especifica a estratégia de avaliação: `kfold`, `loo` ou
   `holdout`. É possível combinar múltiplas estratégias.
 
+Para realizar validação cruzada respeitando grupos (por exemplo, diferentes
+lotes ou indivíduos), informe a coluna de grupos em `data.group_col` e defina
+`cv.cv_method: group`:
+
+```yaml
+data:
+  input_path: dados/espectros.csv
+  target_col: especie
+  group_col: lote
+
+cv:
+  cv_method: group
+  strategies:
+    - type: kfold
+      n_splits: [5]
+```
+
 ## Interface de linha de comando
 
 O comando principal é `nircls` e suporta várias sub‑rotinas:
