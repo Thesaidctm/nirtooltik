@@ -633,69 +633,82 @@ def train_and_save(
         If ``True``, also generate interactive Plotly HTML figures.
     """
 
-    _validate_cfg(cfg, need_data=True, need_models=True)
-    ds = prepare_inputs(cfg["data"])[0]
-    X, y = ds["X"], ds["Y"]
-    le = LabelEncoder().fit(y)
-    y_enc = le.transform(y)
-    name, pipe, grid = build_pipeline_from_config(cfg)[0]
-    steps_cfg = cfg.get("preprocess", {}).get("steps", [])
-    logger.info("Running %s with steps: %s", name, steps_cfg)
-    gs = GridSearchCV(
-        pipe,
-        grid,
-        scoring="f1_macro",
-        cv=RepeatedStratifiedKFold(n_splits=5, n_repeats=1, random_state=42),
-        n_jobs=-1,
-    )
-    gs.fit(X.values, y_enc)
-    dump(gs.best_estimator_, out_dir / "model.joblib")
-    export_xy_xlsx(out_dir / "prepared_XY.xlsx", X, y)
-    (out_dir / "model_card.md").write_text(
-        f"# Model Card\nBest model: {name}\nBest params: {gs.best_params_}\n"
-    )
+    try:
+        with Progress() as progress:
+            load_task = progress.add_task("Carregando dados", total=None)
+            _validate_cfg(cfg, need_data=True, need_models=True)
+            ds = prepare_inputs(cfg["data"])[0]
+            X, y = ds["X"], ds["Y"]
+            le = LabelEncoder().fit(y)
+            y_enc = le.transform(y)
+            progress.update(load_task, completed=1)
 
-    yhat = gs.predict(X.values)
-    row = {
-        "file": ds["file"],
-        "target": ds["target"],
-        "model": name,
-        "F1-macro_mean": float(f1_score(y_enc, yhat, average="macro")),
-        "BalancedAcc_mean": float(balanced_accuracy_score(y_enc, yhat)),
-        "Accuracy_mean": float(accuracy_score(y_enc, yhat)),
-    }
-    proba_fn = getattr(gs, "predict_proba", None)
-    proba = None
-    if proba_fn is not None:
-        proba = proba_fn(X.values)
-        brier = np.mean(
-            [
-                brier_score_loss((y_enc == k).astype(int), proba[:, k])
-                for k in range(len(le.classes_))
-            ]
-        )
-        row["Brier_mean"] = float(brier)
-        row["ECE_mean"] = float(
-            expected_calibration_error(y_enc, proba, n_bins=15)
-        )
-    _save_metrics([row], out_dir)
-    _save_plots(
-        ds["file"],
-        ds["target"],
-        name,
-        le.classes_,
-        out_dir,
-        y_enc,
-        yhat,
-        proba,
-        interactive=interactive,
-    )
-    generate_report(
-        out_dir / "metrics.json",
-        out_dir / "figures",
-        out_dir / "report.md",
-    )
+            name, pipe, grid = build_pipeline_from_config(cfg)[0]
+            steps_cfg = cfg.get("preprocess", {}).get("steps", [])
+            logger.info("Running %s with steps: %s", name, steps_cfg)
+            train_task = progress.add_task("Treinando", total=None)
+            gs = GridSearchCV(
+                pipe,
+                grid,
+                scoring="f1_macro",
+                cv=RepeatedStratifiedKFold(n_splits=5, n_repeats=1, random_state=42),
+                n_jobs=-1,
+            )
+            gs.fit(X.values, y_enc)
+            progress.update(train_task, completed=1)
 
+            save_task = progress.add_task("Salvando", total=None)
+            dump(gs.best_estimator_, out_dir / "model.joblib")
+            export_xy_xlsx(out_dir / "prepared_XY.xlsx", X, y)
+            (out_dir / "model_card.md").write_text(
+                f"# Model Card\nBest model: {name}\nBest params: {gs.best_params_}\n",
+            )
+
+            yhat = gs.predict(X.values)
+            row = {
+                "file": ds["file"],
+                "target": ds["target"],
+                "model": name,
+                "F1-macro_mean": float(f1_score(y_enc, yhat, average="macro")),
+                "BalancedAcc_mean": float(balanced_accuracy_score(y_enc, yhat)),
+                "Accuracy_mean": float(accuracy_score(y_enc, yhat)),
+            }
+            proba_fn = getattr(gs, "predict_proba", None)
+            proba = None
+            if proba_fn is not None:
+                proba = proba_fn(X.values)
+                brier = np.mean(
+                    [
+                        brier_score_loss((y_enc == k).astype(int), proba[:, k])
+                        for k in range(len(le.classes_))
+                    ]
+                )
+                row["Brier_mean"] = float(brier)
+                row["ECE_mean"] = float(
+                    expected_calibration_error(y_enc, proba, n_bins=15)
+                )
+            _save_metrics([row], out_dir)
+            _save_plots(
+                ds["file"],
+                ds["target"],
+                name,
+                le.classes_,
+                out_dir,
+                y_enc,
+                yhat,
+                proba,
+                interactive=interactive,
+            )
+            generate_report(
+                out_dir / "metrics.json",
+                out_dir / "figures",
+                out_dir / "report.md",
+            )
+            progress.update(save_task, completed=1)
+    except FileNotFoundError:
+        return "Arquivo de dados não encontrado"
+    except ValueError:
+        return "Modelo incompatível"
 def evaluate_saved_model(model_path: Path, data_path: Path):
     est = load(model_path)
     X, y_list = read_xlsx_xy(data_path)
@@ -704,24 +717,40 @@ def evaluate_saved_model(model_path: Path, data_path: Path):
     print(pd.crosstab(pd.Series(y, name="true"), pd.Series(yhat, name="pred")))
 
 def predict_with_model(model_path: Path, data_path: Path, out_dir: Path):
-    est = load(model_path)
-    y = None
-    if data_path.suffix.lower() in [".xlsx", ".xls"]:
-        try:
-            X, y_list = read_xlsx_xy(data_path)
-        except ValueError:
-            X, y_list = read_tabular(data_path)
-    else:
-        X, y_list = read_tabular(data_path)
-    if y_list:
-        y = y_list[0][1]
-    yhat = est.predict(X.values)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame({"y_pred": yhat})
-    if y is not None:
-        df.insert(0, "y_true", y)
-    df.to_csv(out_dir / "predictions.csv", index=False)
+    try:
+        with Progress() as progress:
+            load_model_task = progress.add_task("Carregando modelo", total=None)
+            est = load(model_path)
+            progress.update(load_model_task, completed=1)
 
+            load_data_task = progress.add_task("Carregando dados", total=None)
+            y = None
+            if data_path.suffix.lower() in [".xlsx", ".xls"]:
+                try:
+                    X, y_list = read_xlsx_xy(data_path)
+                except ValueError:
+                    X, y_list = read_tabular(data_path)
+            else:
+                X, y_list = read_tabular(data_path)
+            if y_list:
+                y = y_list[0][1]
+            progress.update(load_data_task, completed=1)
+
+            pred_task = progress.add_task("Prevendo", total=None)
+            yhat = est.predict(X.values)
+            progress.update(pred_task, completed=1)
+
+            save_task = progress.add_task("Salvando", total=None)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            df = pd.DataFrame({"y_pred": yhat})
+            if y is not None:
+                df.insert(0, "y_true", y)
+            df.to_csv(out_dir / "predictions.csv", index=False)
+            progress.update(save_task, completed=1)
+    except FileNotFoundError:
+        return "Arquivo de dados não encontrado"
+    except ValueError:
+        return "Modelo incompatível"
 def explain_model(model_path: Path, data_path: Path, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "explain.txt").write_text("Explainability hook.")
