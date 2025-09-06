@@ -504,7 +504,13 @@ def _run_holdout(
     _save_metrics(rows, out_dir)
 
 
-def run_multiple_eval(cfg: Dict[str, Any], out_dir: Path) -> None:
+def run_multiple_eval(
+    cfg: Dict[str, Any],
+    out_dir: Path,
+    *,
+    ai_summary: bool = False,
+    openai_key: str | None = None,
+) -> None:
     """Run evaluation for multiple cross-validation strategies.
 
     Parameters
@@ -549,6 +555,8 @@ def run_multiple_eval(cfg: Dict[str, Any], out_dir: Path) -> None:
                         sub / "metrics.json",
                         sub / "figures",
                         sub / "report.md",
+                        use_chatgpt=ai_summary,
+                        api_key=openai_key,
                     )
             elif stype == "loo":
                 sub = out_dir / "loo"
@@ -558,6 +566,8 @@ def run_multiple_eval(cfg: Dict[str, Any], out_dir: Path) -> None:
                     sub / "metrics.json",
                     sub / "figures",
                     sub / "report.md",
+                    use_chatgpt=ai_summary,
+                    api_key=openai_key,
                 )
             elif stype == "holdout":
                 sub = out_dir / "holdout"
@@ -568,13 +578,21 @@ def run_multiple_eval(cfg: Dict[str, Any], out_dir: Path) -> None:
                     sub / "metrics.json",
                     sub / "figures",
                     sub / "report.md",
+                    use_chatgpt=ai_summary,
+                    api_key=openai_key,
                 )
             else:
                 raise ValueError(f"Unknown CV strategy: {stype}")
             progress.advance(strat_task)
 
 
-def train_and_save(cfg: Dict[str, Any], out_dir: Path):
+def train_and_save(
+    cfg: Dict[str, Any],
+    out_dir: Path,
+    *,
+    ai_summary: bool = False,
+    openai_key: str | None = None,
+):
     """Train final model and persist artefacts.
 
     Parameters
@@ -583,6 +601,10 @@ def train_and_save(cfg: Dict[str, Any], out_dir: Path):
         Experiment configuration.
     out_dir:
         Destination for the trained model and related files.
+    ai_summary:
+        If ``True``, include AI-generated summary in the report.
+    openai_key:
+        Optional OpenAI API key. Falls back to ``OPENAI_API_KEY``.
     """
 
     _validate_cfg(cfg, need_data=True, need_models=True)
@@ -605,6 +627,48 @@ def train_and_save(cfg: Dict[str, Any], out_dir: Path):
     export_xy_xlsx(out_dir / "prepared_XY.xlsx", X, y)
     (out_dir / "model_card.md").write_text(
         f"# Model Card\nBest model: {name}\nBest params: {gs.best_params_}\n"
+    )
+
+    yhat = gs.predict(X.values)
+    row = {
+        "file": ds["file"],
+        "target": ds["target"],
+        "model": name,
+        "F1-macro_mean": float(f1_score(y_enc, yhat, average="macro")),
+        "BalancedAcc_mean": float(balanced_accuracy_score(y_enc, yhat)),
+        "Accuracy_mean": float(accuracy_score(y_enc, yhat)),
+    }
+    proba_fn = getattr(gs, "predict_proba", None)
+    proba = None
+    if proba_fn is not None:
+        proba = proba_fn(X.values)
+        brier = np.mean(
+            [
+                brier_score_loss((y_enc == k).astype(int), proba[:, k])
+                for k in range(len(le.classes_))
+            ]
+        )
+        row["Brier_mean"] = float(brier)
+        row["ECE_mean"] = float(
+            expected_calibration_error(y_enc, proba, n_bins=15)
+        )
+    _save_metrics([row], out_dir)
+    _save_plots(
+        ds["file"],
+        ds["target"],
+        name,
+        le.classes_,
+        out_dir,
+        y_enc,
+        yhat,
+        proba,
+    )
+    generate_report(
+        out_dir / "metrics.json",
+        out_dir / "figures",
+        out_dir / "report.md",
+        use_chatgpt=ai_summary,
+        api_key=openai_key,
     )
 
 def evaluate_saved_model(model_path: Path, data_path: Path):

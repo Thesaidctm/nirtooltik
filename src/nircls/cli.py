@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import os
 import yaml
 from pathlib import Path
 
@@ -44,6 +45,15 @@ def main(argv=None):
         default="all",
         help="Rodar somente uma ou todas as análises",
     )
+    parser.add_argument(
+        "--ai-summary",
+        action="store_true",
+        help="Gerar resumo via ChatGPT no relatório",
+    )
+    parser.add_argument(
+        "--openai-key",
+        help="Chave da API OpenAI (ou usar OPENAI_API_KEY)",
+    )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
     p_prep.add_argument("--config", required=True)
@@ -65,6 +75,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     setup_logging()
     log_versions()
+    openai_key = args.openai_key or os.getenv("OPENAI_API_KEY")
     if args.cmd in {"prepare-data", "train", "crossval"}:
         with open(args.config) as f:
             raw = yaml.safe_load(f)
@@ -103,7 +114,12 @@ def main(argv=None):
         run_id = make_run_id("train")
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
-        train_and_save(cfg.dict(), out_dir)
+        train_and_save(
+            cfg.dict(),
+            out_dir,
+            ai_summary=args.ai_summary,
+            openai_key=openai_key,
+        )
     elif args.cmd == "crossval":
         if cfg.data is None or not cfg.models or cfg.cv is None:
             print(
@@ -118,7 +134,12 @@ def main(argv=None):
         run_id = make_run_id("cv")
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
-        run_multiple_eval(cfg.dict(), out_dir)
+        run_multiple_eval(
+            cfg.dict(),
+            out_dir,
+            ai_summary=args.ai_summary,
+            openai_key=openai_key,
+        )
     elif args.cmd == "evaluate":
         evaluate_saved_model(Path(args.model), Path(args.data))
     elif args.cmd == "predict":
