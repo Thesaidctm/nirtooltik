@@ -17,6 +17,22 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
 import numpy as np
 
+# Optional third-party estimators
+try:  # pragma: no cover - optional dependency
+    from xgboost import XGBClassifier
+except Exception:  # pragma: no cover - handle any import error
+    XGBClassifier = None
+
+try:  # pragma: no cover
+    from lightgbm import LGBMClassifier
+except Exception:  # pragma: no cover
+    LGBMClassifier = None
+
+try:  # pragma: no cover
+    from catboost import CatBoostClassifier
+except Exception:  # pragma: no cover
+    CatBoostClassifier = None
+
 
 class PLSDA(BaseEstimator, ClassifierMixin):
     """Partial Least Squares Discriminant Analysis estimator.
@@ -93,6 +109,24 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             est = AdaBoostClassifier()
         elif upper == "LOGREG":
             est = LogisticRegression(max_iter=5000)
+        elif upper == "XGBOOST":
+            if XGBClassifier is None:
+                raise ImportError(
+                    "xgboost is not installed. Install with `pip install xgboost` to use XGBOOST."
+                )
+            est = XGBClassifier(use_label_encoder=False, eval_metric="logloss")
+        elif upper == "LGBM":
+            if LGBMClassifier is None:
+                raise ImportError(
+                    "lightgbm is not installed. Install with `pip install lightgbm` to use LGBM."
+                )
+            est = LGBMClassifier()
+        elif upper == "CATBOOST":
+            if CatBoostClassifier is None:
+                raise ImportError(
+                    "catboost is not installed. Install with `pip install catboost` to use CATBOOST."
+                )
+            est = CatBoostClassifier(verbose=False)
         elif upper == "MLP":
             est = MLPClassifier()
         elif upper == "DT":
@@ -107,5 +141,17 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
         elif upper == "ADABOOST":
             grid.setdefault("n_estimators", [50])
             grid.setdefault("learning_rate", [1.0])
+        elif upper == "XGBOOST":
+            grid.setdefault("n_estimators", [100])
+            grid.setdefault("max_depth", [3])
+            grid.setdefault("learning_rate", [0.1])
+        elif upper == "LGBM":
+            grid.setdefault("n_estimators", [100])
+            grid.setdefault("num_leaves", [31])
+            grid.setdefault("learning_rate", [0.1])
+        elif upper == "CATBOOST":
+            grid.setdefault("iterations", [100])
+            grid.setdefault("depth", [6])
+            grid.setdefault("learning_rate", [0.1])
         out.append({"name": name, "estimator": est, "grid": grid})
     return out
