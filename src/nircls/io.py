@@ -5,6 +5,8 @@ from typing import Dict, List, Tuple, Optional, Sequence
 import numpy as np, pandas as pd
 from glob import glob
 
+from .utils.errors import DataError
+
 def _normalize_columns_to_float(df: pd.DataFrame) -> pd.DataFrame:
     """Return dataframe with numeric spectral columns converted to float.
 
@@ -41,8 +43,11 @@ def read_xlsx_xy(
     y_sheet: str = "Y",
     target_cols: Optional[Sequence[str] | str] = None,
 ):
-    X = pd.read_excel(path, sheet_name=x_sheet)
-    Ydf = pd.read_excel(path, sheet_name=y_sheet)
+    try:
+        X = pd.read_excel(path, sheet_name=x_sheet)
+        Ydf = pd.read_excel(path, sheet_name=y_sheet)
+    except ValueError as e:
+        raise DataError(str(e)) from e
     if target_cols in [None, "all"]:
         target_cols = list(Ydf.columns)
     elif isinstance(target_cols, str):
@@ -50,11 +55,11 @@ def read_xlsx_xy(
     out: List[Tuple[str, pd.Series]] = []
     for col in target_cols:
         if col not in Ydf.columns:
-            raise ValueError(f"Coluna alvo {col} não encontrada em {path}")
+            raise DataError(f"Coluna alvo {col} não encontrada em {path}")
         out.append((col, Ydf[col].astype(str)))
     X = X.select_dtypes(include=[np.number])
     if any(len(X) != len(y) for _, y in out):
-        raise ValueError("X e Y com n_amostras diferente")
+        raise DataError("X e Y com n_amostras diferente")
     return X, out
 
 def read_tabular(path: Path, target_cols: Optional[Sequence[str] | str] = None):
@@ -66,11 +71,11 @@ def read_tabular(path: Path, target_cols: Optional[Sequence[str] | str] = None):
     y_list: List[Tuple[str, pd.Series]] = []
     for col in target_cols:
         if col not in df.columns:
-            raise ValueError(f"Coluna alvo {col} não encontrada em {path}")
+            raise DataError(f"Coluna alvo {col} não encontrada em {path}")
         y_list.append((col, df[col].astype(str)))
     X = df.drop(columns=target_cols).select_dtypes(include=[np.number])
     if any(len(X) != len(y) for _, y in y_list):
-        raise ValueError("X e Y com n_amostras diferente")
+        raise DataError("X e Y com n_amostras diferente")
     return X, y_list
 
 def export_xy_xlsx(path: Path, X: pd.DataFrame, y: pd.Series, x_sheet="X", y_sheet="Y"):
@@ -88,9 +93,7 @@ def prepare_inputs(data_cfg: Dict):
     """
     files = [Path(p) for p in glob(data_cfg["input_path"])]
     if not files:
-        raise FileNotFoundError(
-            "Nenhum arquivo encontrado para o padrão informado"
-        )
+        raise DataError("Nenhum arquivo encontrado para o padrão informado")
     sp = data_cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
     tgt = data_cfg.get("target_cols")
