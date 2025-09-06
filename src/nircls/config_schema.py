@@ -90,11 +90,19 @@ class CVConfig(BaseModel):
         extra = "forbid"
 
 
+class CalibConfig(BaseModel):
+    method: Literal["sigmoid", "isotonic"] = "sigmoid"
+    cv: int = 5
+
+    class Config:
+        extra = "forbid"
+
+
 class ModelConfig(BaseModel):
     name: str
     params: Optional[Dict[str, Any]] = None
     grid: Optional[Dict[str, Any]] = None
-    calibration: Optional[Dict[str, Any]] = None
+    calibration: Optional[CalibConfig] = None
 
     class Config:
         extra = "forbid"
@@ -114,6 +122,7 @@ __all__ = [
     "DataConfig",
     "PreprocessConfig",
     "CVConfig",
+    "CalibConfig",
     "ModelConfig",
     "ConfigModel",
     "ValidationError",

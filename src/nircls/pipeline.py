@@ -141,12 +141,11 @@ def build_pipeline_from_config(cfg: Dict[str, Any]):
         grid = pre_grid.copy()
         model_grid = m.get("grid", {}) or {}
         if not hasattr(est, "predict_proba"):
-            calib_cfg = (m.get("calibration") or {})
+            calib_cfg = m.get("calibration") or {}
             method = calib_cfg.get("method", "sigmoid")
-            est = CalibratedClassifierCV(estimator=est, method=method)
-            grid.update(
-                {f'clf__estimator__{k}': v for k, v in model_grid.items()}
-            )
+            cv = calib_cfg.get("cv", 5)
+            est = CalibratedClassifierCV(estimator=est, method=method, cv=cv)
+            grid.update({f"clf__estimator__{k}": v for k, v in model_grid.items()})
         else:
             grid.update({f"clf__{k}": v for k, v in model_grid.items()})
         pipe = Pipeline(pre_steps + [("clf", est)])
@@ -163,7 +162,7 @@ def _save_metrics(rows: List[Dict[str, Any]], out_dir: Path) -> None:
     val_df = df.loc[:, ~df.columns.str.startswith("train_")]
 
     # Calibration metrics: keep identifier columns and rename training columns
-    id_cols = ["file", "target", "model"]
+    id_cols = ["file", "target", "model", "calibrated"]
     train_cols = [c for c in df.columns if c.startswith("train_")]
     calib_df = df[id_cols + train_cols].copy()
     calib_df.rename(
@@ -264,8 +263,9 @@ def _run_cv(
         cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
         inner_folds = cfg.get("cv", {}).get("inner_folds", 3)
         models = build_pipeline_from_config(cfg)
+        model_cfgs = cfg.get("models", [])
         model_task = progress.add_task("Model", total=len(models))
-        for name, pipe, grid in models:
+        for (m_cfg, (name, pipe, grid)) in zip(model_cfgs, models):
             progress.update(model_task, description=f"Model: {name}")
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
@@ -319,8 +319,18 @@ def _run_cv(
                 )
                 gs.fit(Xtr, ytr, **fit_kwargs)
 
+                best = gs.best_estimator_
+                calib_cfg = m_cfg.get("calibration")
+                if calib_cfg:
+                    best = CalibratedClassifierCV(
+                        estimator=best,
+                        method=calib_cfg.get("method", "sigmoid"),
+                        cv=calib_cfg.get("cv", 5),
+                    )
+                    best.fit(Xtr, ytr)
+
                 # validation metrics
-                yhat = gs.predict(Xte)
+                yhat = best.predict(Xte)
                 scores_val["F1-macro"].append(
                     f1_score(yte, yhat, average="macro")
                 )
@@ -330,7 +340,7 @@ def _run_cv(
                 scores_val["Accuracy"].append(
                     accuracy_score(yte, yhat)
                 )
-                proba_fn = getattr(gs, "predict_proba", None)
+                proba_fn = getattr(best, "predict_proba", None)
                 if proba_fn is not None:
                     if scores_val["Brier"] is None:
                         scores_val["Brier"] = []
@@ -353,7 +363,7 @@ def _run_cv(
                     )
 
                 # training metrics
-                yhat_tr = gs.predict(Xtr)
+                yhat_tr = best.predict(Xtr)
                 scores_train["F1-macro"].append(
                     f1_score(ytr, yhat_tr, average="macro")
                 )
@@ -386,6 +396,7 @@ def _run_cv(
                 "file": ds["file"],
                 "target": ds["target"],
                 "model": name,
+                "calibrated": bool(m_cfg.get("calibration")),
             }
             row.update(
                 {
@@ -478,7 +489,8 @@ def _run_holdout(
         classes = le.classes_
         cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
         inner_folds = cfg.get("cv", {}).get("inner_folds", 3)
-        for name, pipe, grid in build_pipeline_from_config(cfg):
+        model_cfgs = cfg.get("models", [])
+        for m_cfg, (name, pipe, grid) in zip(model_cfgs, build_pipeline_from_config(cfg)):
             Xtr, Xte, ytr, yte = train_test_split(
                 X.values,
                 y_enc,
@@ -498,12 +510,22 @@ def _run_holdout(
                 pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1
             )
             gs.fit(Xtr, ytr)
-            yhat = gs.predict(Xte)
-            yhat_tr = gs.predict(Xtr)
+            best = gs.best_estimator_
+            calib_cfg = m_cfg.get("calibration")
+            if calib_cfg:
+                best = CalibratedClassifierCV(
+                    estimator=best,
+                    method=calib_cfg.get("method", "sigmoid"),
+                    cv=calib_cfg.get("cv", 5),
+                )
+                best.fit(Xtr, ytr)
+            yhat = best.predict(Xte)
+            yhat_tr = best.predict(Xtr)
             row = {
                 "file": ds["file"],
                 "target": ds["target"],
                 "model": name,
+                "calibrated": bool(calib_cfg),
                 "F1-macro_mean": float(
                     f1_score(yte, yhat, average="macro")
                 ),
@@ -523,7 +545,7 @@ def _run_holdout(
                     accuracy_score(ytr, yhat_tr)
                 ),
             }
-            proba_fn = getattr(gs, "predict_proba", None)
+            proba_fn = getattr(best, "predict_proba", None)
             proba = None
             if proba_fn is not None:
                 proba = proba_fn(Xte)
@@ -692,6 +714,7 @@ def train_and_save(
         progress.update(load_task, completed=1)
 
         name, pipe, grid = build_pipeline_from_config(cfg)[0]
+        model_cfg = cfg.get("models", [])[0] if cfg.get("models") else {}
         steps_cfg = cfg.get("preprocess", {}).get("steps", [])
         logger.info("Running %s with steps: %s", name, steps_cfg)
         cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
@@ -718,23 +741,34 @@ def train_and_save(
         gs.fit(X.values, y_enc, **fit_kwargs)
         progress.update(train_task, completed=1)
 
+        best = gs.best_estimator_
+        calib_cfg = model_cfg.get("calibration") if model_cfg else None
+        if calib_cfg:
+            best = CalibratedClassifierCV(
+                estimator=best,
+                method=calib_cfg.get("method", "sigmoid"),
+                cv=calib_cfg.get("cv", 5),
+            )
+            best.fit(X.values, y_enc)
+
         save_task = progress.add_task("Salvando", total=None)
-        dump(gs.best_estimator_, out_dir / "model.joblib")
+        dump(best, out_dir / "model.joblib")
         export_xy_xlsx(out_dir / "prepared_XY.xlsx", X, y)
         (out_dir / "model_card.md").write_text(
             f"# Model Card\nBest model: {name}\nBest params: {gs.best_params_}\n",
         )
 
-        yhat = gs.predict(X.values)
+        yhat = best.predict(X.values)
         row = {
             "file": ds["file"],
             "target": ds["target"],
             "model": name,
+            "calibrated": bool(calib_cfg),
             "F1-macro_mean": float(f1_score(y_enc, yhat, average="macro")),
             "BalancedAcc_mean": float(balanced_accuracy_score(y_enc, yhat)),
             "Accuracy_mean": float(accuracy_score(y_enc, yhat)),
         }
-        proba_fn = getattr(gs, "predict_proba", None)
+        proba_fn = getattr(best, "predict_proba", None)
         proba = None
         if proba_fn is not None:
             proba = proba_fn(X.values)
