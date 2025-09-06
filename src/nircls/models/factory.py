@@ -2,7 +2,10 @@
 from __future__ import annotations
 from typing import List, Dict, Any
 from sklearn.linear_model import LogisticRegression
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.discriminant_analysis import (
+    LinearDiscriminantAnalysis,
+    QuadraticDiscriminantAnalysis,
+)
 from sklearn.svm import SVC
 from sklearn.ensemble import (
     RandomForestClassifier,
@@ -109,6 +112,8 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             est = AdaBoostClassifier()
         elif upper == "LOGREG":
             est = LogisticRegression(max_iter=5000)
+        elif upper == "QDA":
+            est = QuadraticDiscriminantAnalysis()
         elif upper == "XGBOOST":
             if XGBClassifier is None:
                 raise ImportError(
@@ -135,6 +140,9 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             est = KNeighborsClassifier()
         else:
             raise ValueError(f"Modelo não suportado: {name}")
+        params = m.get("params", {})
+        if params:
+            est.set_params(**params)
         grid = m.get("grid", {})
         if upper == "LOGREG":
             grid.setdefault("C", [1.0])
@@ -153,5 +161,7 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             grid.setdefault("iterations", [100])
             grid.setdefault("depth", [6])
             grid.setdefault("learning_rate", [0.1])
+        elif upper == "QDA":
+            grid.setdefault("reg_param", [0.0])
         out.append({"name": name, "estimator": est, "grid": grid})
     return out
