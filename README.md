@@ -116,14 +116,22 @@ Pré-processadores disponíveis:
 
 Modelos implementados:
 
-* `PLSDA`
-* `SVM_RBF` e `SVM_LINEAR`
-* `RF` (Random Forest)
-* `GB` (Gradient Boosting)
-* `LOGREG` (Regressão Logística)
-* `MLP` (rede neural Multi‑Layer Perceptron)
-* `DT` (Árvore de decisão)
-* `KNN`
+* `PLSDA` – usa regressão de mínimos quadrados parciais para discriminação,
+  adequada a dados de alta dimensionalidade com colinearidade
+* `SVM_RBF` e `SVM_LINEAR` – máquinas de vetores de suporte; kernel RBF modela
+  fronteiras não lineares enquanto o kernel linear serve para separações simples
+* `RF` (Random Forest) – conjunto de árvores de decisão construídas por bootstrap
+  que reduz o overfitting
+* `GB` (Gradient Boosting) – adiciona modelos fracos sequencialmente para
+  corrigir erros residuais e capturar padrões complexos
+* `LOGREG` (Regressão Logística) – modelo linear probabilístico para
+  classificação binária ou multiclasse
+* `MLP` (rede neural Multi‑Layer Perceptron) – camadas densas capazes de
+  aprender relações não lineares
+* `DT` (Árvore de decisão) – estrutura hierárquica que particiona os dados por
+  atributos, fácil de interpretar mas sensível a ruído
+* `KNN` – atribui o rótulo mais comum entre os vizinhos mais próximos,
+  dispensando fase de treinamento explícita
 * `ExtraTrees` (Extremely Randomized Trees) – florestas com divisões totalmente aleatórias,
   indicadas para reduzir variância em dados ruidosos
 * `AdaBoost`, `XGBoost`, `LightGBM`, `CatBoost` – métodos de boosting robusto que capturam
