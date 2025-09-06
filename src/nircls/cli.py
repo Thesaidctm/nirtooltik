@@ -119,10 +119,12 @@ def main(argv=None):
         run_id = make_run_id("train")
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
-        train_and_save(
+        msg = train_and_save(
             cfg.dict(),
             out_dir,
         )
+        if msg:
+            print(msg, file=sys.stderr)
     elif args.cmd == "crossval":
         if cfg.data is None or not cfg.models or cfg.cv is None:
             print(
@@ -170,8 +172,11 @@ def main(argv=None):
             print(f"Dados preparados em: {prep_file}")
         train_dir = base_dir / "train"
         ensure_dirs(train_dir)
-        train_and_save(cfg.dict(), train_dir)
-        print(f"Modelo treinado em: {train_dir}")
+        msg = train_and_save(cfg.dict(), train_dir)
+        if msg:
+            print(msg, file=sys.stderr)
+        else:
+            print(f"Modelo treinado em: {train_dir}")
         cv_dir = base_dir / "cv"
         ensure_dirs(cv_dir)
         run_multiple_eval(cfg.dict(), cv_dir)
@@ -218,16 +223,21 @@ def main(argv=None):
             ensure_dirs(base_dir)
             train_dir = base_dir / "train"
             ensure_dirs(train_dir)
-            train_and_save(cfg_obj.dict(), train_dir)
-            cv_dir = base_dir / "cv"
-            ensure_dirs(cv_dir)
-            run_multiple_eval(cfg_obj.dict(), cv_dir)
-            print(f"Treino em: {train_dir}")
-            print(f"Avaliação em: {cv_dir}")
+            msg = train_and_save(cfg_obj.dict(), train_dir)
+            if msg:
+                print(msg, file=sys.stderr)
+            else:
+                print(f"Treino em: {train_dir}")
+                cv_dir = base_dir / "cv"
+                ensure_dirs(cv_dir)
+                run_multiple_eval(cfg_obj.dict(), cv_dir)
+                print(f"Avaliação em: {cv_dir}")
     elif args.cmd == "evaluate":
         evaluate_saved_model(Path(args.model), Path(args.data))
     elif args.cmd == "predict":
-        predict_with_model(Path(args.model), Path(args.data), Path(args.output))
+        msg = predict_with_model(Path(args.model), Path(args.data), Path(args.output))
+        if msg:
+            print(msg, file=sys.stderr)
     elif args.cmd == "explain":
         explain_model(Path(args.model), Path(args.data), Path(args.output))
     elif args.cmd == "dashboard":
