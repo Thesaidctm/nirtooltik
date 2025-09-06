@@ -21,6 +21,7 @@ from .pipeline import (
     predict_with_model,
     explain_model,
 )
+from .dashboard import run_dashboard
 from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id
 from .config_schema import ConfigModel, ValidationError
@@ -72,6 +73,8 @@ def main(argv=None):
     p_ex.add_argument("--model", required=True)
     p_ex.add_argument("--data", required=True)
     p_ex.add_argument("--output", default="results")
+    p_db = sp.add_parser("dashboard")
+    p_db.add_argument("--results", required=True, help="Pasta com resultados")
     args = parser.parse_args(argv)
     setup_logging()
     log_versions()
@@ -146,6 +149,8 @@ def main(argv=None):
         predict_with_model(Path(args.model), Path(args.data), Path(args.output))
     elif args.cmd == "explain":
         explain_model(Path(args.model), Path(args.data), Path(args.output))
+    elif args.cmd == "dashboard":
+        run_dashboard(Path(args.results))
 
 if __name__ == "__main__":
     main()

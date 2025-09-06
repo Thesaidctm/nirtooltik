@@ -94,6 +94,17 @@ nircls crossval --config experimento.yml --ai-summary --openai-key SUA_CHAVE
 # Ou definindo a chave por variável de ambiente
 export OPENAI_API_KEY=SUA_CHAVE
 nircls train --config experimento.yml --ai-summary
+
+# Dashboard interativo de resultados
+nircls dashboard --results results
+```
+
+Para visualizar métricas, gráficos e o relatório final em uma interface web,
+utilize o subcomando `dashboard` apontando para a pasta onde os resultados foram
+salvos:
+
+```bash
+nircls dashboard --results <pasta>
 ```
 
 ## Resultados gerados
