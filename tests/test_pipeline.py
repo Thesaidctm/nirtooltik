@@ -177,3 +177,50 @@ def test_compute_vip_identifies_relevant_feature():
     assert vip.shape == (5,)
     assert vip[0] == pytest.approx(vip.max())
     assert np.all(vip > 0)
+
+
+def _dummy_cfg():
+    return {
+        "data": {"input_path": "dummy", "target_cols": ["t"]},
+        "models": [{"name": "PLSDA"}],
+    }
+
+
+def test_train_and_save_file_not_found(monkeypatch, tmp_path):
+    cfg = _dummy_cfg()
+
+    def raise_file_not_found(_):
+        raise FileNotFoundError()
+
+    monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_file_not_found)
+    msg, metrics, figs = train_and_save(cfg, tmp_path)
+    assert msg == "Arquivo de dados não encontrado"
+    assert metrics is None and figs is None
+
+
+def test_train_and_save_missing_data_error(monkeypatch, tmp_path):
+    cfg = _dummy_cfg()
+
+    def raise_value_error(_):
+        raise ValueError("dados inexistentes na planilha")
+
+    monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_value_error)
+    msg, metrics, figs = train_and_save(cfg, tmp_path)
+    assert msg.startswith("Dados inexistentes:")
+    assert metrics is None and figs is None
+
+
+def test_train_and_save_model_incompatible(monkeypatch, tmp_path):
+    cfg = _dummy_cfg()
+
+    def dummy_prepare(_):
+        return [{"X": pd.DataFrame([[0]]), "Y": pd.Series([0]), "file": "f", "target": "t"}]
+
+    def raise_model_error(_):
+        raise ValueError("modelo incompatível")
+
+    monkeypatch.setattr("nircls.pipeline.prepare_inputs", dummy_prepare)
+    monkeypatch.setattr("nircls.pipeline.build_pipeline_from_config", raise_model_error)
+    msg, metrics, figs = train_and_save(cfg, tmp_path)
+    assert msg.startswith("Modelo incompatível:")
+    assert metrics is None and figs is None
