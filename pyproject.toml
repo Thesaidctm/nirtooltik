@@ -20,3 +20,7 @@ torch = ["torch"]
 
 [project.scripts]
 nircls = "nircls.cli:main"
+nircls-dashboard = "nircls.dashboard:main"
+
+[tool.setuptools.package-data]
+nircls = ["run_dashboard.sh", "run_dashboard.bat"]
