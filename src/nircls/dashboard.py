@@ -8,9 +8,11 @@ import json
 import tempfile
 from datetime import datetime
 import copy
+import re
 
 import pandas as pd
 import yaml
+import plotly.graph_objects as go
 
 from .io import prepare_inputs
 from .pipeline import train_and_save, run_multiple_eval, predict_with_model
@@ -18,6 +20,41 @@ from .report import generate_report
 from .models.factory import MODEL_BUILDERS, DEFAULT_GRIDS
 from . import DEFAULT_RESULTS_DIR
 
+
+def _load_plotly_html(path: Path) -> go.Figure | None:
+    """Return a Plotly figure reconstructed from an HTML file.
+
+    Parameters
+    ----------
+    path:
+        Path to the HTML file produced by ``fig.write_html``.
+    """
+
+    try:
+        html = path.read_text(encoding="utf-8")
+        match = re.search(
+            r"Plotly.newPlot\(\"[^\"]+\",\s*(\[.*?\]),\s*(\{.*?\})",
+            html,
+            re.S,
+        )
+        if not match:
+            return None
+        data = json.loads(match.group(1))
+        layout = json.loads(match.group(2))
+        return go.Figure(data=data, layout=layout)
+    except Exception:
+        return None
+
+
+def _figure_caption(stem: str) -> str:
+    """Map figure filename stems to human-friendly captions."""
+
+    suffix = stem.split("__")[-1]
+    return {
+        "cm": "Matriz de Confusão",
+        "roc": "Curva ROC",
+        "reliability": "Diagrama de Confiabilidade",
+    }.get(suffix, stem)
 
 def run_dashboard(results_dir: str | Path) -> int:
     """Launch the Streamlit dashboard.
@@ -58,6 +95,31 @@ def _render_dashboard(results_dir: Path) -> None:
     tab_prep, tab_train, tab_eval, tab_cfg = st.tabs(
         ["Preparar Dados", "Treinar", "Avaliar", "Gerar Configuração"]
     )
+
+    def _display_figures(fig_dir: Path) -> None:
+        bases = {
+            p.with_suffix("")
+            for p in fig_dir.glob("*")
+            if p.suffix in {".png", ".html"}
+        }
+        for base in sorted(bases):
+            html_file = base.with_suffix(".html")
+            png_file = base.with_suffix(".png")
+            caption = _figure_caption(base.name)
+            fig = _load_plotly_html(html_file) if html_file.exists() else None
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption(caption)
+            elif png_file.exists():
+                st.image(str(png_file), caption=caption)
+            if png_file.exists():
+                with png_file.open("rb") as f:
+                    st.download_button(
+                        f"Download {png_file.name}",
+                        f,
+                        file_name=png_file.name,
+                        mime="image/png",
+                    )
 
     # ------------------------------------------------------------------
     # Preparar Dados
@@ -142,11 +204,24 @@ def _render_dashboard(results_dir: Path) -> None:
                 status = st.empty()
                 status.write("Treinando...")
                 progress.progress(10)
-                train_and_save(cfg, out_dir)
+                train_and_save(cfg, out_dir, interactive=True)
                 progress.progress(100)
                 status.write("Concluído!")
                 st.success(f"Modelo salvo em {out_dir}")
                 st.session_state["model_dir"] = out_dir
+
+                metrics_path = out_dir / "metrics.json"
+                if metrics_path.exists():
+                    try:
+                        with metrics_path.open() as f:
+                            metrics = json.load(f)
+                        if metrics:
+                            st.dataframe(pd.DataFrame(metrics))
+                    except Exception as exc:
+                        st.error(f"Erro ao carregar métricas: {exc}")
+                fig_dir = out_dir / "figures"
+                if fig_dir.exists():
+                    _display_figures(fig_dir)
 
     # ------------------------------------------------------------------
     # Avaliar
@@ -195,7 +270,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 status = st.empty()
                 status.write("Executando avaliação...")
                 progress.progress(10)
-                run_multiple_eval(cfg, out_dir)
+                run_multiple_eval(cfg, out_dir, interactive=True)
                 progress.progress(100)
                 status.write("Concluído!")
                 st.success(f"Resultados salvos em {out_dir}")
@@ -214,12 +289,7 @@ def _render_dashboard(results_dir: Path) -> None:
                         st.error(f"Erro ao carregar métricas: {exc}")
                     fig_dir = strat_dir / "figures"
                     if fig_dir.exists():
-                        cm_figs = sorted(fig_dir.glob("*__cm.png"))
-                        for fig in cm_figs:
-                            st.image(str(fig), caption="Matriz de Confusão")
-                        roc_figs = sorted(fig_dir.glob("*__roc.png"))
-                        for fig in roc_figs:
-                            st.image(str(fig), caption="Curva ROC")
+                        _display_figures(fig_dir)
 
                     pdf_key = f"pdf_{strat_dir.name}"
                     if st.button("Gerar relatório PDF", key=pdf_key):
