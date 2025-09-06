@@ -39,8 +39,6 @@ from .config_schema import ConfigModel, ValidationError
 from .metrics.calibration import expected_calibration_error
 from .utils.plots import (
     plot_confusion,
-    plot_confusion_interactive,
-    plot_roc_interactive,
     plot_roc_ovr,
     plot_reliability,
 )
@@ -198,33 +196,22 @@ def _save_plots(
         classes,
         out_fig / f"{stem}__{target}__{model}__cm",
         normalize=False,
+        interactive=interactive,
     )
-    if interactive:
-        plot_confusion_interactive(
-            cm,
-            classes,
-            out_fig / f"{stem}__{target}__{model}__cm",
-            normalize=False,
-        )
     if y_proba is not None:
         plot_roc_ovr(
             y_true,
             y_proba,
             classes,
             out_fig / f"{stem}__{target}__{model}__roc",
+            interactive=interactive,
         )
         plot_reliability(
             y_true,
             y_proba,
             out_fig / f"{stem}__{target}__{model}__reliability",
+            interactive=interactive,
         )
-        if interactive:
-            plot_roc_interactive(
-                y_true,
-                y_proba,
-                classes,
-                out_fig / f"{stem}__{target}__{model}__roc",
-            )
 
 
 def _run_cv(
