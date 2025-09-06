@@ -22,6 +22,7 @@ from sklearn.metrics import (
     balanced_accuracy_score,
     brier_score_loss,
 )
+from sklearn.calibration import CalibratedClassifierCV
 from joblib import dump, load
 from .io import prepare_inputs, export_xy_xlsx, read_xlsx_xy, read_tabular
 from .preprocessors.spectro import (
@@ -98,11 +99,17 @@ def build_pipeline_from_config(cfg: Dict[str, Any]):
     models = make_models_from_config(cfg["models"])
     out = []
     for m in models:
-        pipe = Pipeline(pre_steps + [("clf", m["estimator"])])
+        est = m["estimator"]
         grid = pre_grid.copy()
-        grid.update(
-            {f"clf__{k}": v for k, v in (m.get("grid", {}) or {}).items()}
-        )
+        model_grid = m.get("grid", {}) or {}
+        if not hasattr(est, "predict_proba"):
+            calib_cfg = (m.get("calibration") or {})
+            method = calib_cfg.get("method", "sigmoid")
+            est = CalibratedClassifierCV(estimator=est, method=method)
+            grid.update({f"clf__estimator__{k}": v for k, v in model_grid.items()})
+        else:
+            grid.update({f"clf__{k}": v for k, v in model_grid.items()})
+        pipe = Pipeline(pre_steps + [("clf", est)])
         out.append((m["name"], pipe, grid))
     return out
 
@@ -208,7 +215,7 @@ def _run_cv(
                 scores_val["BalancedAcc"].append(
                     balanced_accuracy_score(yte, yhat)
                 )
-                proba_fn = getattr(gs.best_estimator_, "predict_proba", None)
+                proba_fn = getattr(gs, "predict_proba", None)
                 if proba_fn is not None:
                     proba = proba_fn(Xte)
                     y_proba_all.append(proba)
@@ -357,7 +364,7 @@ def _run_holdout(
                     balanced_accuracy_score(ytr, yhat_tr)
                 ),
             }
-            proba_fn = getattr(gs.best_estimator_, "predict_proba", None)
+            proba_fn = getattr(gs, "predict_proba", None)
             proba = None
             if proba_fn is not None:
                 proba = proba_fn(Xte)

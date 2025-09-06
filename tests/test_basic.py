@@ -97,6 +97,43 @@ def test_knn_model_with_grid():
     gs.fit(X, y)
 
 
+def test_estimator_without_proba_is_calibrated(monkeypatch):
+    from sklearn.base import BaseEstimator, ClassifierMixin
+    from sklearn.calibration import CalibratedClassifierCV
+
+    class DummyClf(BaseEstimator, ClassifierMixin):
+        def __init__(self, constant=0):
+            self.constant = constant
+
+        def fit(self, X, y):
+            return self
+
+        def predict(self, X):
+            return np.zeros(len(X), dtype=int)
+
+        def get_params(self, deep=True):
+            return {"constant": self.constant}
+
+        def set_params(self, **params):
+            self.constant = params.get("constant", self.constant)
+            return self
+
+    def fake_factory(models_cfg):
+        return [
+            {
+                "name": "DUMMY",
+                "estimator": DummyClf(),
+                "grid": {"constant": [0, 1]},
+            }
+        ]
+
+    monkeypatch.setattr("nircls.pipeline.make_models_from_config", fake_factory)
+    cfg = {"models": [{"name": "DUMMY"}]}
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert isinstance(pipe.named_steps["clf"], CalibratedClassifierCV)
+    assert "clf__estimator__constant" in grid
+
+
 def test_end_to_end_cv_and_export(tmp_path):
     rng = np.random.RandomState(1)
     X = rng.rand(20, 6)
