@@ -16,6 +16,7 @@ e geração de relatórios completos de avaliação.
 6. [Pré-processadores e modelos suportados](#pre-processadores-e-modelos-suportados)
 7. [Treinar modelo final e predições](#treinar-modelo-final-e-predicoes)
 8. [Extensões e contribuições](#extensoes-e-contribuicoes)
+9. [Testes](#testes)
 
 ## Instalação e requisitos
 
@@ -175,6 +176,15 @@ requests.
 Os resultados serão salvos em `results/<run_id>/<estratégia>/`. Cada pasta de
 estratégia contém as métricas (`metrics.json`, `metrics_summary.xlsx`), as figuras
 geradas e um relatório final em Markdown (`report.md`).
+
+## Testes
+
+Para rodar a suíte de testes utilize o [pytest](https://pytest.org):
+
+```bash
+pytest
+```
+
 
 ## Créditos/Autoria
 

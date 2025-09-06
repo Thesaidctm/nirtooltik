@@ -20,4 +20,3 @@ def test_epo_preserves_shape_and_removes_z_component():
 
     assert Xt.shape == X.shape
     assert np.allclose(Xt @ Z, 0, atol=1e-10)
-
