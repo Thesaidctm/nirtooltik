@@ -13,14 +13,17 @@ from sklearn.metrics import roc_curve
 from sklearn.preprocessing import label_binarize
 
 
-def plot_confusion(cm, classes, out_base: Path):
-    cmn = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-12)
+def plot_confusion(cm, classes, out_base: Path, normalize: bool = False):
+    if normalize:
+        cmn = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-12)
+    else:
+        cmn = cm
 
     fig, ax = plt.subplots(figsize=(6, 6))
     sns.heatmap(
         cmn,
         annot=True,
-        fmt=".2f",
+        fmt=" .2f" if normalize else "d",
         cmap="viridis",
         ax=ax,
         xticklabels=classes,
@@ -28,14 +31,18 @@ def plot_confusion(cm, classes, out_base: Path):
         annot_kws={"size": 12},
         linewidths=0.5,
         linecolor="gray",
-        cbar_kws={"label": "Taxa de acerto normalizada"},
+        cbar_kws={"label": "Taxa de acerto normalizada" if normalize else "Número de indivíduos"},
     )
 
     ax.set_xlabel("Pred", fontweight="bold")
     ax.set_ylabel("True", fontweight="bold")
     ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right", fontweight="bold")
     ax.set_yticklabels(ax.get_yticklabels(), fontweight="bold")
-    ax.set_title("Confusion Matrix (normalized)", fontsize=16, fontweight="bold")
+    ax.set_title(
+        "Confusion Matrix (normalized)" if normalize else "Confusion Matrix",
+        fontsize=16,
+        fontweight="bold",
+    )
 
     for text in ax.texts:
         text.set_fontsize(12)
