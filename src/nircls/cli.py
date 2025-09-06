@@ -13,6 +13,8 @@ import yaml
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from .io import prepare_inputs, export_xy_xlsx
 from .pipeline import (
     run_multiple_eval,
@@ -26,6 +28,33 @@ from .dashboard import run_dashboard
 from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id
 from .config_schema import ConfigModel, ValidationError
+
+
+def _print_metrics_table(metrics_json: Path) -> None:
+    """Print a compact table with mean ± std metrics."""
+
+    if not metrics_json or not metrics_json.exists():
+        return
+    try:
+        df = pd.read_json(metrics_json)
+    except ValueError:
+        return
+    if df.empty:
+        return
+
+    id_cols = [c for c in ["target", "model"] if c in df.columns]
+    metrics_cols = [c for c in df.columns if c.endswith("_mean")]
+    for col in metrics_cols:
+        base = col[:-5]
+        std_col = f"{base}_std"
+        if std_col in df.columns:
+            df[base] = df.apply(
+                lambda r: f"{r[col]:.3f} ± {r[std_col]:.3f}", axis=1
+            )
+        else:
+            df[base] = df[col].map(lambda x: f"{x:.3f}")
+    display_cols = id_cols + [c[:-5] for c in metrics_cols]
+    print(df[display_cols].to_string(index=False))
 
 
 def _parse_params(s: str) -> dict[str, Any]:
@@ -162,8 +191,12 @@ def main(argv=None):
         )
         if msg:
             print(msg, file=sys.stderr)
-        if args.report_pdf and metrics_path and figs_dir:
-            generate_report(metrics_path, figs_dir, Path(args.report_pdf))
+        else:
+            if metrics_path:
+                _print_metrics_table(metrics_path)
+            if args.report_pdf and metrics_path and figs_dir:
+                generate_report(metrics_path, figs_dir, Path(args.report_pdf))
+            print(f"Resultados em: {out_dir}")
     elif args.cmd == "crossval":
         if cfg.data is None or not cfg.models or cfg.cv is None:
             print(
@@ -191,22 +224,8 @@ def main(argv=None):
         run_id = make_run_id("cv")
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
-        outputs = run_multiple_eval(
-            cfg.dict(),
-            out_dir,
-            interactive=args.interactive,
-        )
-        if args.report_pdf:
-            pdf_path = Path(args.report_pdf)
-            multi = len(outputs) > 1
-            for metrics_path, figs_dir in outputs:
-                out_pdf = pdf_path
-                if pdf_path.suffix.lower() != ".pdf" or multi:
-                    base_dir = pdf_path if pdf_path.suffix.lower() != ".pdf" else pdf_path.parent
-                    out_pdf = base_dir / f"{metrics_path.parent.name}.pdf"
-                generate_report(metrics_path, figs_dir, out_pdf)
         try:
-            run_multiple_eval(
+            outputs = run_multiple_eval(
                 cfg.dict(),
                 out_dir,
                 interactive=args.interactive,
@@ -223,6 +242,21 @@ def main(argv=None):
                 file=sys.stderr,
             )
             return 1
+        if args.report_pdf:
+            pdf_path = Path(args.report_pdf)
+            multi = len(outputs) > 1
+            for metrics_path, figs_dir in outputs:
+                out_pdf = pdf_path
+                if pdf_path.suffix.lower() != ".pdf" or multi:
+                    base_dir = (
+                        pdf_path if pdf_path.suffix.lower() != ".pdf" else pdf_path.parent
+                    )
+                    out_pdf = base_dir / f"{metrics_path.parent.name}.pdf"
+                generate_report(metrics_path, figs_dir, out_pdf)
+        for metrics_path, _ in outputs:
+            print(f"== {metrics_path.parent.name} ==")
+            _print_metrics_table(metrics_path)
+        print(f"Resultados em: {out_dir}")
     elif args.cmd == "demo":
         demo_cfg = Path(__file__).resolve().parents[2] / "configs" / "demo.yaml"
         with open(demo_cfg) as f:
@@ -252,14 +286,18 @@ def main(argv=None):
             print(f"Dados preparados em: {prep_file}")
         train_dir = base_dir / "train"
         ensure_dirs(train_dir)
-        msg, _, _ = train_and_save(cfg.dict(), train_dir)
+        msg, metrics_path, _ = train_and_save(cfg.dict(), train_dir)
         if msg:
             print(msg, file=sys.stderr)
         else:
+            if metrics_path:
+                _print_metrics_table(metrics_path)
             print(f"Modelo treinado em: {train_dir}")
         cv_dir = base_dir / "cv"
         ensure_dirs(cv_dir)
-        run_multiple_eval(cfg.dict(), cv_dir)
+        outputs = run_multiple_eval(cfg.dict(), cv_dir)
+        for metrics_path, _ in outputs:
+            _print_metrics_table(metrics_path)
         print(f"Resultados de cross-val em: {cv_dir}")
     elif args.cmd == "wizard":
         input_path = input("Caminho dos dados: ").strip()
@@ -303,14 +341,18 @@ def main(argv=None):
             ensure_dirs(base_dir)
             train_dir = base_dir / "train"
             ensure_dirs(train_dir)
-            msg, _, _ = train_and_save(cfg_obj.dict(), train_dir)
+            msg, metrics_path, _ = train_and_save(cfg_obj.dict(), train_dir)
             if msg:
                 print(msg, file=sys.stderr)
             else:
+                if metrics_path:
+                    _print_metrics_table(metrics_path)
                 print(f"Treino em: {train_dir}")
                 cv_dir = base_dir / "cv"
                 ensure_dirs(cv_dir)
-                run_multiple_eval(cfg_obj.dict(), cv_dir)
+                outputs = run_multiple_eval(cfg_obj.dict(), cv_dir)
+                for metrics_path, _ in outputs:
+                    _print_metrics_table(metrics_path)
                 print(f"Avaliação em: {cv_dir}")
     elif args.cmd == "evaluate":
         msg = evaluate_saved_model(Path(args.model), Path(args.data))
