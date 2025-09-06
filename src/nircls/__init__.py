@@ -18,5 +18,7 @@ except PackageNotFoundError:  # pragma: no cover - development fallback
 
 from .pipeline import build_pipeline_from_config, train_and_save
 
-__all__ = ["build_pipeline_from_config", "train_and_save"]
+DEFAULT_RESULTS_DIR = Path.home() / "nircls_results"
+
+__all__ = ["build_pipeline_from_config", "train_and_save", "DEFAULT_RESULTS_DIR"]
 

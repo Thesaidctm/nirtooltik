@@ -13,6 +13,7 @@ import pandas as pd
 from .io import prepare_inputs
 from .pipeline import train_and_save, run_multiple_eval, predict_with_model
 from .models.factory import MODEL_BUILDERS
+from . import DEFAULT_RESULTS_DIR
 
 
 def run_dashboard(results_dir: str | Path) -> int:
@@ -35,6 +36,11 @@ def run_dashboard(results_dir: str | Path) -> int:
         str(results_dir),
     ]
     return subprocess.run(cmd, check=False).returncode
+
+
+def main() -> int:
+    """Entry point used by the ``nircls-dashboard`` console script."""
+    return run_dashboard(DEFAULT_RESULTS_DIR)
 
 
 def _render_dashboard(results_dir: Path) -> None:
