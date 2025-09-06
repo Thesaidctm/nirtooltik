@@ -20,6 +20,7 @@ from sklearn.metrics import (
     confusion_matrix,
     f1_score,
     balanced_accuracy_score,
+    accuracy_score,
     brier_score_loss,
 )
 from sklearn.calibration import CalibratedClassifierCV
@@ -201,12 +202,14 @@ def _run_cv(
             scores_val = {
                 "F1-macro": [],
                 "BalancedAcc": [],
+                "Accuracy": [],
                 "Brier": None,
                 "ECE": None,
             }
             scores_train = {
                 "F1-macro": [],
                 "BalancedAcc": [],
+                "Accuracy": [],
                 "Brier": None,
                 "ECE": None,
             }
@@ -231,6 +234,9 @@ def _run_cv(
                 )
                 scores_val["BalancedAcc"].append(
                     balanced_accuracy_score(yte, yhat)
+                )
+                scores_val["Accuracy"].append(
+                    accuracy_score(yte, yhat)
                 )
                 proba_fn = getattr(gs, "predict_proba", None)
                 if proba_fn is not None:
@@ -261,6 +267,9 @@ def _run_cv(
                 )
                 scores_train["BalancedAcc"].append(
                     balanced_accuracy_score(ytr, yhat_tr)
+                )
+                scores_train["Accuracy"].append(
+                    accuracy_score(ytr, yhat_tr)
                 )
                 if proba_fn is not None:
                     proba_tr = proba_fn(Xtr)
@@ -396,11 +405,17 @@ def _run_holdout(
                 "BalancedAcc_mean": float(
                     balanced_accuracy_score(yte, yhat)
                 ),
+                "Accuracy_mean": float(
+                    accuracy_score(yte, yhat)
+                ),
                 "train_F1-macro_mean": float(
                     f1_score(ytr, yhat_tr, average="macro")
                 ),
                 "train_BalancedAcc_mean": float(
                     balanced_accuracy_score(ytr, yhat_tr)
+                ),
+                "train_Accuracy_mean": float(
+                    accuracy_score(ytr, yhat_tr)
                 ),
             }
             proba_fn = getattr(gs, "predict_proba", None)
