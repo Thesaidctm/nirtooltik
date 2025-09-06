@@ -123,6 +123,16 @@ Modelos implementados:
 * `MLP` (rede neural Multi‑Layer Perceptron)
 * `DT` (Árvore de decisão)
 * `KNN`
+* `ExtraTrees` (Extremely Randomized Trees) – florestas com divisões totalmente aleatórias,
+  indicadas para reduzir variância em dados ruidosos
+* `AdaBoost`, `XGBoost`, `LightGBM`, `CatBoost` – métodos de boosting robusto que capturam
+  relações complexas e lidam bem com grandes conjuntos de dados
+* `QDA` (Quadratic Discriminant Analysis) – adequado quando cada classe tem matrizes de
+  covariância distintas
+* `Naive Bayes` – assume independência condicional entre atributos, servindo como baseline
+  rápido em alta dimensionalidade
+* `CNN 1D` e `LSTM 1D` – redes neurais para séries 1D; convoluções extraem padrões locais
+  enquanto LSTMs modelam dependências de longo prazo
 
 ## Treinar modelo final e predições
 
