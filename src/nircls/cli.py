@@ -28,6 +28,7 @@ from .dashboard import run_dashboard
 from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id, set_seed
 from .config_schema import ConfigModel, ValidationError
+from .utils.errors import DataError, ModelError
 
 # Human-friendly names for interactive wizard choices
 MODEL_DESCRIPTIONS = {
@@ -193,17 +194,8 @@ def main(argv=None):
         ensure_dirs(out_dir)
         try:
             ds_list = prepare_inputs(cfg.data.dict())
-        except FileNotFoundError:
-            print(
-                "Arquivo de dados não encontrado. Verifique o caminho indicado em 'data.input_path'.",
-                file=sys.stderr,
-            )
-            return 1
-        except ValueError as e:
-            print(
-                f"Erro nos dados: {e}. Verifique se a coluna alvo existe na planilha.",
-                file=sys.stderr,
-            )
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
             return 1
         if args.run == "one":
             ds_list = ds_list[:1]
@@ -226,20 +218,24 @@ def main(argv=None):
         run_id = make_run_id("train")
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
-        msg, metrics_path, figs_dir = train_and_save(
-            cfg.dict(),
-            out_dir,
-            interactive=args.interactive,
-            random_state=args.seed,
-        )
-        if msg:
-            print(msg, file=sys.stderr)
-        else:
-            if metrics_path:
-                _print_metrics_table(metrics_path)
-            if args.report_pdf and metrics_path and figs_dir:
-                generate_report(metrics_path, figs_dir, Path(args.report_pdf))
-            print(f"Resultados em: {out_dir}")
+        try:
+            metrics_path, figs_dir = train_and_save(
+                cfg.dict(),
+                out_dir,
+                interactive=args.interactive,
+                random_state=args.seed,
+            )
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
+            return 1
+        except ModelError as e:
+            print(f"Modelo inválido: {e}", file=sys.stderr)
+            return 1
+        if metrics_path:
+            _print_metrics_table(metrics_path)
+        if args.report_pdf and metrics_path and figs_dir:
+            generate_report(metrics_path, figs_dir, Path(args.report_pdf))
+        print(f"Resultados em: {out_dir}")
     elif args.cmd == "crossval":
         if cfg.data is None or not cfg.models or cfg.cv is None:
             print(
@@ -250,17 +246,8 @@ def main(argv=None):
         if args.run == "one":
             try:
                 first = prepare_inputs(cfg.data.dict())
-            except FileNotFoundError:
-                print(
-                    "Arquivo de dados não encontrado. Verifique o caminho indicado em 'data.input_path'.",
-                    file=sys.stderr,
-                )
-                return 1
-            except ValueError as e:
-                print(
-                    f"Erro nos dados: {e}. Verifique se a coluna alvo existe na planilha.",
-                    file=sys.stderr,
-                )
+            except DataError as e:
+                print(f"Dados inválidos: {e}", file=sys.stderr)
                 return 1
             if first:
                 cfg.data.target_cols = first[0]["target"]
@@ -274,17 +261,11 @@ def main(argv=None):
                 interactive=args.interactive,
                 random_state=args.seed,
             )
-        except FileNotFoundError:
-            print(
-                "Arquivo de dados não encontrado. Verifique o caminho indicado em 'data.input_path'.",
-                file=sys.stderr,
-            )
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
             return 1
-        except ValueError as e:
-            print(
-                f"Erro na configuração ou dados: {e}. Revise as seções e a coluna alvo.",
-                file=sys.stderr,
-            )
+        except ModelError as e:
+            print(f"Modelo inválido: {e}", file=sys.stderr)
             return 1
         if args.report_pdf:
             pdf_path = Path(args.report_pdf)
@@ -316,7 +297,11 @@ def main(argv=None):
         run_id = make_run_id("demo")
         base_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(base_dir)
-        ds_list = prepare_inputs(cfg.data.dict())
+        ds_list = []
+        try:
+            ds_list = prepare_inputs(cfg.data.dict())
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
         if ds_list:
             first = ds_list[0]
             prep_file = base_dir / f"prepared_{first['target']}.xlsx"
@@ -330,21 +315,28 @@ def main(argv=None):
             print(f"Dados preparados em: {prep_file}")
         train_dir = base_dir / "train"
         ensure_dirs(train_dir)
-        msg, metrics_path, _ = train_and_save(
-            cfg.dict(), train_dir, random_state=args.seed
-        )
-        if msg:
-            print(msg, file=sys.stderr)
-        else:
+        try:
+            metrics_path, _ = train_and_save(
+                cfg.dict(), train_dir, random_state=args.seed
+            )
             if metrics_path:
                 _print_metrics_table(metrics_path)
             print(f"Modelo treinado em: {train_dir}")
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
+        except ModelError as e:
+            print(f"Modelo inválido: {e}", file=sys.stderr)
         cv_dir = base_dir / "cv"
         ensure_dirs(cv_dir)
-        outputs = run_multiple_eval(cfg.dict(), cv_dir, random_state=args.seed)
-        for metrics_path, _ in outputs:
-            _print_metrics_table(metrics_path)
-        print(f"Resultados de cross-val em: {cv_dir}")
+        try:
+            outputs = run_multiple_eval(cfg.dict(), cv_dir, random_state=args.seed)
+            for metrics_path, _ in outputs:
+                _print_metrics_table(metrics_path)
+            print(f"Resultados de cross-val em: {cv_dir}")
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
+        except ModelError as e:
+            print(f"Modelo inválido: {e}", file=sys.stderr)
     elif args.cmd == "wizard":
         try:  # pragma: no cover - interactive session
             import questionary
@@ -428,12 +420,10 @@ def main(argv=None):
             ensure_dirs(base_dir)
             train_dir = base_dir / "train"
             ensure_dirs(train_dir)
-            msg, metrics_path, _ = train_and_save(
-                cfg_obj.dict(), train_dir, random_state=args.seed
-            )
-            if msg:
-                print(msg, file=sys.stderr)
-            else:
+            try:
+                metrics_path, _ = train_and_save(
+                    cfg_obj.dict(), train_dir, random_state=args.seed
+                )
                 if metrics_path:
                     _print_metrics_table(metrics_path)
                 print(f"Treino em: {train_dir}")
@@ -445,14 +435,24 @@ def main(argv=None):
                 for metrics_path, _ in outputs:
                     _print_metrics_table(metrics_path)
                 print(f"Avaliação em: {cv_dir}")
+            except DataError as e:
+                print(f"Dados inválidos: {e}", file=sys.stderr)
+            except ModelError as e:
+                print(f"Modelo inválido: {e}", file=sys.stderr)
     elif args.cmd == "evaluate":
-        msg = evaluate_saved_model(Path(args.model), Path(args.data))
-        if msg:
-            print(msg, file=sys.stderr)
+        try:
+            evaluate_saved_model(Path(args.model), Path(args.data))
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
+        except ModelError as e:
+            print(f"Modelo inválido: {e}", file=sys.stderr)
     elif args.cmd == "predict":
-        msg = predict_with_model(Path(args.model), Path(args.data), Path(args.output))
-        if msg:
-            print(msg, file=sys.stderr)
+        try:
+            predict_with_model(Path(args.model), Path(args.data), Path(args.output))
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
+        except ModelError as e:
+            print(f"Modelo inválido: {e}", file=sys.stderr)
     elif args.cmd == "explain":
         explain_model(Path(args.model), Path(args.data), Path(args.output))
     elif args.cmd == "dashboard":

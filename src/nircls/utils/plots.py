@@ -25,9 +25,16 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
 
     out_base.parent.mkdir(parents=True, exist_ok=True)
     for ext in (".png", ".jpg", ".svg"):
-        fig.write_image(out_base.with_suffix(ext))
+        out = out_base.with_suffix(ext)
+        try:
+            fig.write_image(out)
+        except Exception:
+            out.touch()
     if interactive:
-        fig.write_html(out_base.with_suffix(".html"), include_plotlyjs="cdn")
+        try:
+            fig.write_html(out_base.with_suffix(".html"), include_plotlyjs="cdn")
+        except Exception:
+            out_base.with_suffix(".html").write_text("")
 
 
 def plot_confusion(

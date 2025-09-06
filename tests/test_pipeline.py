@@ -17,6 +17,7 @@ from nircls.pipeline import (
 )
 from nircls.io import prepare_inputs
 from nircls.feature_selection.vip import compute_vip
+from nircls.utils.errors import DataError, ModelError
 
 
 def test_pipeline_fit_predict_with_cv_and_windows():
@@ -164,7 +165,7 @@ def test_run_multiple_eval_requires_cv(tmp_path):
         "data": {"input_path": str(tmp_path / "data.csv"), "target_cols": ["t"]},
         "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
     }
-    with pytest.raises(ValueError):
+    with pytest.raises(ModelError):
         run_multiple_eval(cfg, tmp_path)
 
 
@@ -174,7 +175,7 @@ def test_run_multiple_eval_file_not_found(tmp_path):
         "models": [{"name": "PLSDA"}],
         "cv": {"strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}]},
     }
-    with pytest.raises(FileNotFoundError, match="Arquivo de dados não encontrado"):
+    with pytest.raises(DataError, match="Arquivo de dados não encontrado"):
         run_multiple_eval(cfg, tmp_path)
 
 
@@ -199,25 +200,23 @@ def _dummy_cfg():
 def test_train_and_save_file_not_found(monkeypatch, tmp_path):
     cfg = _dummy_cfg()
 
-    def raise_file_not_found(_):
-        raise FileNotFoundError()
+    def raise_data_error(_):
+        raise DataError("Arquivo de dados não encontrado")
 
-    monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_file_not_found)
-    msg, metrics, figs = train_and_save(cfg, tmp_path)
-    assert msg == "Arquivo de dados não encontrado"
-    assert metrics is None and figs is None
+    monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_data_error)
+    with pytest.raises(DataError, match="Arquivo de dados não encontrado"):
+        train_and_save(cfg, tmp_path)
 
 
 def test_train_and_save_missing_data_error(monkeypatch, tmp_path):
     cfg = _dummy_cfg()
 
-    def raise_value_error(_):
-        raise ValueError("dados inexistentes na planilha")
+    def raise_data_error(_):
+        raise DataError("dados inexistentes na planilha")
 
-    monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_value_error)
-    msg, metrics, figs = train_and_save(cfg, tmp_path)
-    assert msg.startswith("Dados inexistentes:")
-    assert metrics is None and figs is None
+    monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_data_error)
+    with pytest.raises(DataError, match="dados inexistentes"):
+        train_and_save(cfg, tmp_path)
 
 
 def test_train_and_save_model_incompatible(monkeypatch, tmp_path):
@@ -227,10 +226,9 @@ def test_train_and_save_model_incompatible(monkeypatch, tmp_path):
         return [{"X": pd.DataFrame([[0]]), "Y": pd.Series([0]), "file": "f", "target": "t"}]
 
     def raise_model_error(_):
-        raise ValueError("modelo incompatível")
+        raise ModelError("modelo incompatível")
 
     monkeypatch.setattr("nircls.pipeline.prepare_inputs", dummy_prepare)
     monkeypatch.setattr("nircls.pipeline.build_pipeline_from_config", raise_model_error)
-    msg, metrics, figs = train_and_save(cfg, tmp_path)
-    assert msg.startswith("Modelo incompatível:")
-    assert metrics is None and figs is None
+    with pytest.raises(ModelError, match="modelo incompatível"):
+        train_and_save(cfg, tmp_path)
