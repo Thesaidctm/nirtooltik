@@ -117,10 +117,25 @@ def build_pipeline_from_config(cfg: Dict[str, Any]):
 
 
 def _save_metrics(rows: List[Dict[str, Any]], out_dir: Path) -> None:
-    """Persist metrics to CSV and JSON files."""
+    """Persist metrics to Excel and JSON files."""
 
     df = pd.DataFrame(rows)
-    df.to_csv(out_dir / "metrics_summary.csv", index=False, na_rep="NaN")
+
+    # Validation metrics: drop training columns
+    val_df = df.loc[:, ~df.columns.str.startswith("train_")]
+
+    # Calibration metrics: keep identifier columns and rename training columns
+    id_cols = ["file", "target", "model"]
+    train_cols = [c for c in df.columns if c.startswith("train_")]
+    calib_df = df[id_cols + train_cols].copy()
+    calib_df.rename(
+        columns={c: c.removeprefix("train_") for c in train_cols}, inplace=True
+    )
+
+    with pd.ExcelWriter(out_dir / "metrics_summary.xlsx") as writer:
+        val_df.to_excel(writer, sheet_name="validation", index=False)
+        calib_df.to_excel(writer, sheet_name="calibration", index=False)
+
     # Convert NaN values back to ``None`` for JSON export
     json_rows = df.where(pd.notnull(df), None).to_dict(orient="records")
     with open(out_dir / "metrics.json", "w") as f:
