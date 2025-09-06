@@ -8,6 +8,7 @@ from sklearn.ensemble import (
     RandomForestClassifier,
     GradientBoostingClassifier,
     ExtraTreesClassifier,
+    AdaBoostClassifier,
 )
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
@@ -88,6 +89,8 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             est = GradientBoostingClassifier()
         elif upper in ("ET", "EXTRATREES"):
             est = ExtraTreesClassifier()
+        elif upper == "ADABOOST":
+            est = AdaBoostClassifier()
         elif upper == "LOGREG":
             est = LogisticRegression(max_iter=5000)
         elif upper == "MLP":
@@ -101,5 +104,8 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
         grid = m.get("grid", {})
         if upper == "LOGREG":
             grid.setdefault("C", [1.0])
+        elif upper == "ADABOOST":
+            grid.setdefault("n_estimators", [50])
+            grid.setdefault("learning_rate", [1.0])
         out.append({"name": name, "estimator": est, "grid": grid})
     return out
