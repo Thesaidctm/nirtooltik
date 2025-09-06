@@ -14,6 +14,7 @@ import yaml
 
 from .io import prepare_inputs
 from .pipeline import train_and_save, run_multiple_eval, predict_with_model
+from .report import generate_report
 from .models.factory import MODEL_BUILDERS, DEFAULT_GRIDS
 from . import DEFAULT_RESULTS_DIR
 
@@ -200,6 +201,44 @@ def _render_dashboard(results_dir: Path) -> None:
                 st.success(f"Resultados salvos em {out_dir}")
                 st.session_state["eval_dir"] = out_dir
 
+                # Exibir métricas e figuras geradas
+                for metrics_path in out_dir.rglob("metrics.json"):
+                    strat_dir = metrics_path.parent
+                    st.subheader(f"Métricas - {strat_dir.name}")
+                    try:
+                        with metrics_path.open() as f:
+                            metrics = json.load(f)
+                        if metrics:
+                            st.dataframe(pd.DataFrame(metrics))
+                    except Exception as exc:  # pragma: no cover - display error
+                        st.error(f"Erro ao carregar métricas: {exc}")
+                    fig_dir = strat_dir / "figures"
+                    if fig_dir.exists():
+                        cm_figs = sorted(fig_dir.glob("*__cm.png"))
+                        for fig in cm_figs:
+                            st.image(str(fig), caption="Matriz de Confusão")
+                        roc_figs = sorted(fig_dir.glob("*__roc.png"))
+                        for fig in roc_figs:
+                            st.image(str(fig), caption="Curva ROC")
+
+                    pdf_key = f"pdf_{strat_dir.name}"
+                    if st.button("Gerar relatório PDF", key=pdf_key):
+                        pdf_path = strat_dir / "report.pdf"
+                        try:
+                            generate_report(
+                                metrics_path, fig_dir, pdf_path
+                            )
+                            with pdf_path.open("rb") as f:
+                                st.download_button(
+                                    "Download relatório PDF",
+                                    f,
+                                    file_name=pdf_path.name,
+                                    mime="application/pdf",
+                                    key=f"dl_{pdf_key}",
+                                )
+                        except Exception as exc:  # pragma: no cover
+                            st.error(f"Erro ao gerar PDF: {exc}")
+
         st.subheader("Predições com modelo salvo")
         with st.form("pred_form"):
             model_file = st.file_uploader(
@@ -224,7 +263,16 @@ def _render_dashboard(results_dir: Path) -> None:
             predict_with_model(model_path, data_path, out_dir)
             progress.progress(100)
             status.write("Concluído!")
+            pred_file = out_dir / "predictions.csv"
             st.success(f"Arquivo predictions.csv em {out_dir}")
+            if pred_file.exists():
+                with pred_file.open("rb") as f:
+                    st.download_button(
+                        "Download predictions.csv",
+                        f,
+                        file_name="predictions.csv",
+                        mime="text/csv",
+                    )
 
 
     # ------------------------------------------------------------------
