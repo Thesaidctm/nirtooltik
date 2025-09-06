@@ -63,9 +63,19 @@ def main(argv=None):
     p_tr = sp.add_parser("train")
     p_tr.add_argument("--config", required=True)
     p_tr.add_argument("--report-pdf")
+    p_tr.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Gerar arquivos HTML com gráficos Plotly interativos",
+    )
     p_cv = sp.add_parser("crossval")
     p_cv.add_argument("--config", required=True)
     p_cv.add_argument("--report-pdf")
+    p_cv.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Gerar arquivos HTML com gráficos Plotly interativos",
+    )
     p_demo = sp.add_parser("demo")
     p_wz = sp.add_parser("wizard")
     p_ev = sp.add_parser("evaluate")
@@ -148,6 +158,7 @@ def main(argv=None):
         msg, metrics_path, figs_dir = train_and_save(
             cfg.dict(),
             out_dir,
+            interactive=args.interactive,
         )
         if msg:
             print(msg, file=sys.stderr)
@@ -183,6 +194,7 @@ def main(argv=None):
         outputs = run_multiple_eval(
             cfg.dict(),
             out_dir,
+            interactive=args.interactive,
         )
         if args.report_pdf:
             pdf_path = Path(args.report_pdf)
@@ -197,6 +209,7 @@ def main(argv=None):
             run_multiple_eval(
                 cfg.dict(),
                 out_dir,
+                interactive=args.interactive,
             )
         except FileNotFoundError:
             print(
