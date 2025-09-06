@@ -7,6 +7,7 @@ from sklearn.model_selection import StratifiedKFold, GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.cross_decomposition import PLSRegression
 from joblib import dump
+import json
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from nircls.pipeline import (
@@ -71,6 +72,7 @@ def test_end_to_end_cv_and_export(tmp_path):
     assert (train_dir / "model.joblib").exists()
     assert (train_dir / "prepared_XY.xlsx").exists()
     assert (train_dir / "model_card.md").exists()
+    assert (train_dir / "classes.json").exists()
 
 
 def test_prepare_inputs_with_multiple_targets(tmp_path):
@@ -141,13 +143,15 @@ def test_predict_with_model_outputs_y_pred_only_when_y_missing(tmp_path):
 def test_predict_with_model_includes_y_true_when_available(tmp_path):
     rng = np.random.RandomState(1)
     X = rng.rand(8, 3)
-    y = (np.arange(8) % 2).astype(str)
+    y_labels = np.array(["A", "B", "A", "B", "A", "B", "A", "B"])
     model = LogisticRegression(max_iter=50).fit(X, (np.arange(8) % 2))
     model_path = tmp_path / "model.joblib"
     dump(model, model_path)
+    with open(model_path.with_name("classes.json"), "w") as f:
+        json.dump(["A", "B"], f)
 
     Xdf = pd.DataFrame(X, columns=[str(i) for i in range(3)])
-    Ydf = pd.DataFrame({"target": y})
+    Ydf = pd.DataFrame({"target": y_labels})
     data_file = tmp_path / "xy.xlsx"
     with pd.ExcelWriter(data_file) as writer:
         Xdf.to_excel(writer, sheet_name="X", index=False)
@@ -157,6 +161,7 @@ def test_predict_with_model_includes_y_true_when_available(tmp_path):
     predict_with_model(model_path, data_file, out_dir)
     preds = pd.read_csv(out_dir / "predictions.csv")
     assert list(preds.columns) == ["y_true", "y_pred"]
+    assert set(preds["y_pred"].unique()) <= {"A", "B"}
     assert len(preds) == len(X)
 
 
