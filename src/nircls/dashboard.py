@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 import subprocess
 import sys
 import argparse
@@ -9,6 +10,7 @@ import tempfile
 from datetime import datetime
 import copy
 import re
+import webbrowser
 
 import pandas as pd
 import yaml
@@ -75,7 +77,13 @@ def run_dashboard(results_dir: str | Path) -> int:
         "--results",
         str(results_dir),
     ]
-    return subprocess.run(cmd, check=False).returncode
+    proc = subprocess.Popen(cmd)
+    try:
+        port = os.environ.get("STREAMLIT_SERVER_PORT", "8501")
+        webbrowser.open(f"http://localhost:{port}")
+    except Exception:
+        pass
+    return proc.wait()
 
 
 def main() -> int:
