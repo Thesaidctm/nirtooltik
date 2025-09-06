@@ -26,7 +26,7 @@ from .pipeline import (
 from .report import generate_report
 from .dashboard import run_dashboard
 from .utils.logging import setup_logging, log_versions
-from .utils.misc import ensure_dirs, make_run_id
+from .utils.misc import ensure_dirs, make_run_id, set_seed
 from .config_schema import ConfigModel, ValidationError
 
 # Human-friendly names for interactive wizard choices
@@ -121,6 +121,12 @@ def main(argv=None):
         default="all",
         help="Rodar somente uma ou todas as análises",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Semente para reprodutibilidade",
+    )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
     p_prep.add_argument("--config", required=True)
@@ -156,6 +162,7 @@ def main(argv=None):
     p_db = sp.add_parser("dashboard")
     p_db.add_argument("--results", required=True, help="Pasta com resultados")
     args = parser.parse_args(argv)
+    set_seed(args.seed)
     setup_logging()
     log_versions()
     if args.cmd in {"prepare-data", "train", "crossval"}:
@@ -223,6 +230,7 @@ def main(argv=None):
             cfg.dict(),
             out_dir,
             interactive=args.interactive,
+            random_state=args.seed,
         )
         if msg:
             print(msg, file=sys.stderr)
@@ -264,6 +272,7 @@ def main(argv=None):
                 cfg.dict(),
                 out_dir,
                 interactive=args.interactive,
+                random_state=args.seed,
             )
         except FileNotFoundError:
             print(
@@ -321,7 +330,9 @@ def main(argv=None):
             print(f"Dados preparados em: {prep_file}")
         train_dir = base_dir / "train"
         ensure_dirs(train_dir)
-        msg, metrics_path, _ = train_and_save(cfg.dict(), train_dir)
+        msg, metrics_path, _ = train_and_save(
+            cfg.dict(), train_dir, random_state=args.seed
+        )
         if msg:
             print(msg, file=sys.stderr)
         else:
@@ -330,7 +341,7 @@ def main(argv=None):
             print(f"Modelo treinado em: {train_dir}")
         cv_dir = base_dir / "cv"
         ensure_dirs(cv_dir)
-        outputs = run_multiple_eval(cfg.dict(), cv_dir)
+        outputs = run_multiple_eval(cfg.dict(), cv_dir, random_state=args.seed)
         for metrics_path, _ in outputs:
             _print_metrics_table(metrics_path)
         print(f"Resultados de cross-val em: {cv_dir}")
@@ -417,7 +428,9 @@ def main(argv=None):
             ensure_dirs(base_dir)
             train_dir = base_dir / "train"
             ensure_dirs(train_dir)
-            msg, metrics_path, _ = train_and_save(cfg_obj.dict(), train_dir)
+            msg, metrics_path, _ = train_and_save(
+                cfg_obj.dict(), train_dir, random_state=args.seed
+            )
             if msg:
                 print(msg, file=sys.stderr)
             else:
@@ -426,7 +439,9 @@ def main(argv=None):
                 print(f"Treino em: {train_dir}")
                 cv_dir = base_dir / "cv"
                 ensure_dirs(cv_dir)
-                outputs = run_multiple_eval(cfg_obj.dict(), cv_dir)
+                outputs = run_multiple_eval(
+                    cfg_obj.dict(), cv_dir, random_state=args.seed
+                )
                 for metrics_path, _ in outputs:
                     _print_metrics_table(metrics_path)
                 print(f"Avaliação em: {cv_dir}")

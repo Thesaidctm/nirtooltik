@@ -100,6 +100,15 @@ nircls predict --model caminho/model.joblib --data novos.xlsx --output preds
 nircls dashboard --results results
 ```
 
+A maioria dos subcomandos aceita o argumento global `--seed` para definir a
+semente das operações aleatórias (como divisão de dados ou embaralhamento),
+permitindo reproduzir resultados. Por padrão utiliza-se o valor `42`.
+
+```bash
+# Exemplo com semente fixa
+nircls train --config experimento.yml --seed 123
+```
+
 O subcomando `wizard` abre um assistente que solicita os caminhos dos dados,
 coluna alvo, modelos e parâmetros básicos, gerando automaticamente um
 `config.yaml`. Ao final é possível iniciar imediatamente o treinamento e a
