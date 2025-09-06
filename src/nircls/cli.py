@@ -85,12 +85,22 @@ def main(argv=None):
     setup_logging()
     log_versions()
     if args.cmd in {"prepare-data", "train", "crossval"}:
-        with open(args.config) as f:
-            raw = yaml.safe_load(f)
+        try:
+            with open(args.config) as f:
+                raw = yaml.safe_load(f)
+        except FileNotFoundError:
+            print(
+                "Arquivo de configuração não encontrado. Verifique o caminho informado.",
+                file=sys.stderr,
+            )
+            return 1
         try:
             cfg = ConfigModel(**raw)
         except ValidationError as e:  # pragma: no cover - user feedback
-            print(f"Configuração inválida: {e}", file=sys.stderr)
+            print(
+                f"Configuração inválida: {e}. Revise os campos obrigatórios.",
+                file=sys.stderr,
+            )
             return 1
 
     if args.cmd == "prepare-data":
@@ -100,7 +110,20 @@ def main(argv=None):
         run_id = make_run_id("prepare")
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
-        ds_list = prepare_inputs(cfg.data.dict())
+        try:
+            ds_list = prepare_inputs(cfg.data.dict())
+        except FileNotFoundError:
+            print(
+                "Arquivo de dados não encontrado. Verifique o caminho indicado em 'data.input_path'.",
+                file=sys.stderr,
+            )
+            return 1
+        except ValueError as e:
+            print(
+                f"Erro nos dados: {e}. Verifique se a coluna alvo existe na planilha.",
+                file=sys.stderr,
+            )
+            return 1
         if args.run == "one":
             ds_list = ds_list[:1]
         for ds in ds_list:
@@ -138,7 +161,20 @@ def main(argv=None):
             )
             return 1
         if args.run == "one":
-            first = prepare_inputs(cfg.data.dict())
+            try:
+                first = prepare_inputs(cfg.data.dict())
+            except FileNotFoundError:
+                print(
+                    "Arquivo de dados não encontrado. Verifique o caminho indicado em 'data.input_path'.",
+                    file=sys.stderr,
+                )
+                return 1
+            except ValueError as e:
+                print(
+                    f"Erro nos dados: {e}. Verifique se a coluna alvo existe na planilha.",
+                    file=sys.stderr,
+                )
+                return 1
             if first:
                 cfg.data.target_cols = first[0]["target"]
         run_id = make_run_id("cv")
@@ -157,6 +193,23 @@ def main(argv=None):
                     base_dir = pdf_path if pdf_path.suffix.lower() != ".pdf" else pdf_path.parent
                     out_pdf = base_dir / f"{metrics_path.parent.name}.pdf"
                 generate_report(metrics_path, figs_dir, out_pdf)
+        try:
+            run_multiple_eval(
+                cfg.dict(),
+                out_dir,
+            )
+        except FileNotFoundError:
+            print(
+                "Arquivo de dados não encontrado. Verifique o caminho indicado em 'data.input_path'.",
+                file=sys.stderr,
+            )
+            return 1
+        except ValueError as e:
+            print(
+                f"Erro na configuração ou dados: {e}. Revise as seções e a coluna alvo.",
+                file=sys.stderr,
+            )
+            return 1
     elif args.cmd == "demo":
         demo_cfg = Path(__file__).resolve().parents[2] / "configs" / "demo.yaml"
         with open(demo_cfg) as f:
@@ -247,7 +300,9 @@ def main(argv=None):
                 run_multiple_eval(cfg_obj.dict(), cv_dir)
                 print(f"Avaliação em: {cv_dir}")
     elif args.cmd == "evaluate":
-        evaluate_saved_model(Path(args.model), Path(args.data))
+        msg = evaluate_saved_model(Path(args.model), Path(args.data))
+        if msg:
+            print(msg, file=sys.stderr)
     elif args.cmd == "predict":
         msg = predict_with_model(Path(args.model), Path(args.data), Path(args.output))
         if msg:

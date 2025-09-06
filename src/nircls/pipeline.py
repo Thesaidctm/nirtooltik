@@ -65,13 +65,17 @@ def _validate_cfg(
     try:
         model = ConfigModel(**cfg)
     except ValidationError as exc:
-        raise ValueError(f"Configuração inválida: {exc}") from exc
+        raise ValueError(
+            f"Configuração inválida: {exc}. Revise os campos informados."
+        ) from exc
     if need_data and model.data is None:
-        raise ValueError("Seção 'data' é obrigatória")
+        raise ValueError("Seção 'data' é obrigatória. Informe o caminho dos dados.")
     if need_models and (not model.models):
-        raise ValueError("Seção 'models' é obrigatória")
+        raise ValueError("Seção 'models' é obrigatória. Adicione pelo menos um modelo.")
     if need_cv and (model.cv is None or not model.cv.strategies):
-        raise ValueError("Seção 'cv' é obrigatória")
+        raise ValueError(
+            "Seção 'cv' é obrigatória. Defina ao menos uma estratégia de validação."
+        )
     return model
 def _make_preprocess(steps_cfg, cfg):
     """Create preprocessing steps and optional parameter grid.
@@ -116,7 +120,9 @@ def _make_preprocess(steps_cfg, cfg):
         elif n == "SCALE":
             steps.append(("scaler", StandardScaler()))
         else:
-            raise ValueError(f"Pré-processo desconhecido: {name}")
+            raise ValueError(
+                f"Pré-processo desconhecido: {name}. Verifique a lista de etapas suportadas."
+            )
     return steps, grid
 
 def build_pipeline_from_config(cfg: Dict[str, Any]):
@@ -614,7 +620,9 @@ def run_multiple_eval(
                 generate_report(metrics, figs, sub / "report.md")
                 outputs.append((metrics, figs))
             else:
-                raise ValueError(f"Unknown CV strategy: {stype}")
+                raise ValueError(
+                    f"Estratégia de validação desconhecida: {stype}. Use 'kfold', 'loo' ou 'holdout'."
+                )
             progress.advance(strat_task)
     return outputs
 
@@ -719,12 +727,25 @@ def train_and_save(
         return "Arquivo de dados não encontrado", None, None
     except ValueError:
         return "Modelo incompatível", None, None
+        return "Arquivo de dados não encontrado. Verifique o caminho informado."
+    except ValueError as e:
+        return (
+            f"Erro ao preparar dados ou modelo: {e}. "
+            "Verifique se a coluna alvo existe na planilha e se os parâmetros do modelo estão corretos."
+        )
 def evaluate_saved_model(model_path: Path, data_path: Path):
-    est = load(model_path)
-    X, y_list = read_xlsx_xy(data_path)
-    y = y_list[0][1]
-    yhat = est.predict(X.values)
-    print(pd.crosstab(pd.Series(y, name="true"), pd.Series(yhat, name="pred")))
+    try:
+        est = load(model_path)
+        X, y_list = read_xlsx_xy(data_path)
+        y = y_list[0][1]
+        yhat = est.predict(X.values)
+        print(pd.crosstab(pd.Series(y, name="true"), pd.Series(yhat, name="pred")))
+    except FileNotFoundError:
+        return "Modelo ou arquivo de dados não encontrado. Verifique os caminhos."
+    except ValueError as e:
+        return (
+            f"Erro ao ler os dados: {e}. Verifique se a coluna alvo existe na planilha."
+        )
 
 def predict_with_model(model_path: Path, data_path: Path, out_dir: Path):
     try:
@@ -758,9 +779,12 @@ def predict_with_model(model_path: Path, data_path: Path, out_dir: Path):
             df.to_csv(out_dir / "predictions.csv", index=False)
             progress.update(save_task, completed=1)
     except FileNotFoundError:
-        return "Arquivo de dados não encontrado"
-    except ValueError:
-        return "Modelo incompatível"
+        return "Arquivo de dados não encontrado. Verifique o caminho informado."
+    except ValueError as e:
+        return (
+            f"Erro ao processar dados ou modelo: {e}. "
+            "Verifique se a coluna alvo existe na planilha e se o modelo é compatível."
+        )
 def explain_model(model_path: Path, data_path: Path, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "explain.txt").write_text("Explainability hook.")

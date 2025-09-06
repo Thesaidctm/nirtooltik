@@ -16,8 +16,9 @@ e geração de relatórios completos de avaliação.
 6. [Métricas de calibração e validação](#metricas-de-calibracao-e-validacao)
 7. [Pré-processadores e modelos suportados](#pre-processadores-e-modelos-suportados)
 8. [Treinar modelo final e predições](#treinar-modelo-final-e-predicoes)
-9. [Extensões e contribuições](#extensoes-e-contribuicoes)
-10. [Testes](#testes)
+9. [Erros comuns e soluções](#erros-comuns-e-solucoes)
+10. [Extensões e contribuições](#extensoes-e-contribuicoes)
+11. [Testes](#testes)
 
 ## Instalação e requisitos
 
@@ -219,6 +220,13 @@ nircls predict --model results/<run_id>/model.joblib \
 
 O arquivo `predictions.csv` incluirá `y_pred` e, se disponível nos dados, a
 coluna `y_true`.
+
+## Erros comuns e soluções
+
+* **Arquivo de configuração não encontrado** – verifique o caminho informado na opção `--config`.
+* **Coluna alvo ausente** – confirme se a planilha contém a coluna especificada em `data.target_cols`.
+* **Arquivo de dados não encontrado** – confira o valor de `data.input_path` no YAML.
+* **Modelo incompatível** – utilize um nome de modelo suportado e revise os parâmetros.
 
 ## Extensões e contribuições
 
