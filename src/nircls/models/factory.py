@@ -92,103 +92,108 @@ class PLSDA(BaseEstimator, ClassifierMixin):
             self.clf.set_params(C=self.C)
         return self
 
+
+def _xgb_builder():
+    if XGBClassifier is None:
+        raise ImportError(
+            "xgboost is not installed. Install with `pip install xgboost` to use XGBOOST."
+        )
+    return XGBClassifier(use_label_encoder=False, eval_metric="logloss")
+
+
+def _lgbm_builder():
+    if LGBMClassifier is None:
+        raise ImportError(
+            "lightgbm is not installed. Install with `pip install lightgbm` to use LGBM."
+        )
+    return LGBMClassifier()
+
+
+def _catboost_builder():
+    if CatBoostClassifier is None:
+        raise ImportError(
+            "catboost is not installed. Install with `pip install catboost` to use CATBOOST."
+        )
+    return CatBoostClassifier(verbose=False)
+
+
+def _cnn_builder():  # pragma: no cover - lazy import
+    from .neural import SpectralCNN
+
+    return SpectralCNN()
+
+
+def _lstm_builder():  # pragma: no cover - lazy import
+    from .neural import SpectralLSTM
+
+    return SpectralLSTM()
+
+
+def _extratrees_builder():
+    return ExtraTreesClassifier()
+
+
+MODEL_BUILDERS = {
+    "PLSDA": lambda: PLSDA(),
+    "SVM_RBF": lambda: SVC(probability=True),
+    "SVM_LINEAR": lambda: SVC(kernel="linear", probability=True),
+    "RF": lambda: RandomForestClassifier(),
+    "GB": lambda: GradientBoostingClassifier(),
+    "ET": _extratrees_builder,
+    "EXTRATREES": _extratrees_builder,
+    "ADABOOST": lambda: AdaBoostClassifier(),
+    "LOGREG": lambda: LogisticRegression(max_iter=5000),
+    "QDA": lambda: QuadraticDiscriminantAnalysis(),
+    "XGBOOST": _xgb_builder,
+    "LGBM": _lgbm_builder,
+    "CATBOOST": _catboost_builder,
+    "MLP": lambda: MLPClassifier(),
+    "DT": lambda: DecisionTreeClassifier(),
+    "KNN": lambda: KNeighborsClassifier(),
+    "CNN1D": _cnn_builder,
+    "LSTM1D": _lstm_builder,
+    "GAUSSIANNB": lambda: GaussianNB(),
+    "NB": lambda: GaussianNB(),
+    "MULTINB": lambda: MultinomialNB(),
+    "BERNOULLINB": lambda: BernoulliNB(),
+}
+
+
+DEFAULT_GRIDS = {
+    "LOGREG": {"C": [1.0]},
+    "ADABOOST": {"n_estimators": [50], "learning_rate": [1.0]},
+    "XGBOOST": {"n_estimators": [100], "max_depth": [3], "learning_rate": [0.1]},
+    "LGBM": {"n_estimators": [100], "num_leaves": [31], "learning_rate": [0.1]},
+    "CATBOOST": {"iterations": [100], "depth": [6], "learning_rate": [0.1]},
+    "CNN1D": {"n_filters": [32], "kernel_size": [3], "n_epochs": [10]},
+    "LSTM1D": {"hidden_dim": [64], "num_layers": [1], "n_epochs": [10]},
+    "QDA": {"reg_param": [0.0]},
+    "GAUSSIANNB": {"var_smoothing": [1e-09]},
+    "NB": {"var_smoothing": [1e-09]},
+    "MULTINB": {"alpha": [1.0]},
+    "BERNOULLINB": {"alpha": [1.0]},
+}
+
 def make_models_from_config(models_cfg: List[Dict[str, Any]]):
     out = []
     for m in models_cfg:
         name = m["name"]
         upper = name.upper()
-        if upper == "PLSDA":
-            est = PLSDA()
-        elif upper == "SVM_RBF":
-            est = SVC(probability=True)
-        elif upper == "SVM_LINEAR":
-            est = SVC(kernel="linear", probability=True)
-        elif upper == "RF":
-            est = RandomForestClassifier()
-        elif upper == "GB":
-            est = GradientBoostingClassifier()
-        elif upper in ("ET", "EXTRATREES"):
-            est = ExtraTreesClassifier()
-        elif upper == "ADABOOST":
-            est = AdaBoostClassifier()
-        elif upper == "LOGREG":
-            est = LogisticRegression(max_iter=5000)
-        elif upper == "QDA":
-            est = QuadraticDiscriminantAnalysis()
-        elif upper == "XGBOOST":
-            if XGBClassifier is None:
-                raise ImportError(
-                    "xgboost is not installed. Install with `pip install xgboost` to use XGBOOST."
-                )
-            est = XGBClassifier(use_label_encoder=False, eval_metric="logloss")
-        elif upper == "LGBM":
-            if LGBMClassifier is None:
-                raise ImportError(
-                    "lightgbm is not installed. Install with `pip install lightgbm` to use LGBM."
-                )
-            est = LGBMClassifier()
-        elif upper == "CATBOOST":
-            if CatBoostClassifier is None:
-                raise ImportError(
-                    "catboost is not installed. Install with `pip install catboost` to use CATBOOST."
-                )
-            est = CatBoostClassifier(verbose=False)
-        elif upper == "MLP":
-            est = MLPClassifier()
-        elif upper == "DT":
-            est = DecisionTreeClassifier()
-        elif upper == "KNN":
-            est = KNeighborsClassifier()
-        elif upper == "CNN1D":
-            from .neural import SpectralCNN  # lazy import
-            est = SpectralCNN()
-        elif upper == "LSTM1D":
-            from .neural import SpectralLSTM  # lazy import
-            est = SpectralLSTM()
-        elif upper in ("GAUSSIANNB", "NB"):
-            est = GaussianNB()
-        elif upper == "MULTINB":
-            est = MultinomialNB()
-        elif upper == "BERNOULLINB":
-            est = BernoulliNB()
-        else:
+
+        builder = MODEL_BUILDERS.get(upper)
+        if builder is None:
             raise ValueError(f"Modelo não suportado: {name}")
+        est = builder()
+
         params = m.get("params", {})
         if params:
             est.set_params(**params)
+
         grid = m.get("grid", {})
-        if upper == "LOGREG":
-            grid.setdefault("C", [1.0])
-        elif upper == "ADABOOST":
-            grid.setdefault("n_estimators", [50])
-            grid.setdefault("learning_rate", [1.0])
-        elif upper == "XGBOOST":
-            grid.setdefault("n_estimators", [100])
-            grid.setdefault("max_depth", [3])
-            grid.setdefault("learning_rate", [0.1])
-        elif upper == "LGBM":
-            grid.setdefault("n_estimators", [100])
-            grid.setdefault("num_leaves", [31])
-            grid.setdefault("learning_rate", [0.1])
-        elif upper == "CATBOOST":
-            grid.setdefault("iterations", [100])
-            grid.setdefault("depth", [6])
-            grid.setdefault("learning_rate", [0.1])
-        elif upper == "CNN1D":
-            grid.setdefault("n_filters", [32])
-            grid.setdefault("kernel_size", [3])
-            grid.setdefault("n_epochs", [10])
-        elif upper == "LSTM1D":
-            grid.setdefault("hidden_dim", [64])
-            grid.setdefault("num_layers", [1])
-            grid.setdefault("n_epochs", [10])
-        elif upper == "QDA":
-            grid.setdefault("reg_param", [0.0])
-        elif upper in ("GAUSSIANNB", "NB"):
-            grid.setdefault("var_smoothing", [1e-09])
-        elif upper == "MULTINB":
-            grid.setdefault("alpha", [1.0])
-        elif upper == "BERNOULLINB":
-            grid.setdefault("alpha", [1.0])
+        defaults = DEFAULT_GRIDS.get(upper, {})
+        for k, v in defaults.items():
+            grid.setdefault(k, v)
+
         out.append({"name": name, "estimator": est, "grid": grid})
+
     return out
