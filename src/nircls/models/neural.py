@@ -21,17 +21,27 @@ class _BaseTorchClassifier(BaseEstimator, ClassifierMixin):
         batch_size: int = 32,
         lr: float = 1e-3,
         random_state: Optional[int] = None,
+        device: str = "cpu",
+        patience: int = 0,
     ) -> None:
         self.n_epochs = n_epochs
         self.batch_size = batch_size
         self.lr = lr
         self.random_state = random_state
+        self.device = device
+        self.patience = patience
 
     def _build_model(self, n_features: int, n_classes: int) -> "nn.Module":  # pragma: no cover - abstract
         raise NotImplementedError
 
     # scikit-learn API -------------------------------------------------
-    def fit(self, X: np.ndarray, y: np.ndarray):
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        X_val: Optional[np.ndarray] = None,
+        y_val: Optional[np.ndarray] = None,
+    ):
         if torch is None:
             raise ImportError(
                 "torch is required for neural models. Install with `pip install torch`.")
@@ -46,21 +56,66 @@ class _BaseTorchClassifier(BaseEstimator, ClassifierMixin):
         n_features = X.shape[1]
         n_classes = len(classes)
 
-        self.model_ = self._build_model(n_features, n_classes)
+        device = torch.device(self.device)
+        self.model_ = self._build_model(n_features, n_classes).to(device)
         optimizer = torch.optim.Adam(self.model_.parameters(), lr=self.lr)
         criterion = nn.CrossEntropyLoss()
 
         dataset = TensorDataset(torch.from_numpy(X), torch.from_numpy(y_indices))
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
-        self.model_.train()
+        val_loader = None
+        if X_val is not None and y_val is not None:
+            X_val = np.asarray(X_val, dtype=np.float32)
+            y_val = np.asarray(y_val)
+            class_to_idx = {c: i for i, c in enumerate(classes)}
+            y_val_indices = np.array([class_to_idx[yy] for yy in y_val])
+            val_ds = TensorDataset(
+                torch.from_numpy(X_val), torch.from_numpy(y_val_indices)
+            )
+            val_loader = DataLoader(val_ds, batch_size=self.batch_size, shuffle=False)
+
+        best_state = None
+        best_loss = float("inf")
+        epochs_no_improve = 0
+
         for _ in range(self.n_epochs):
+            self.model_.train()
             for xb, yb in loader:
+                xb = xb.to(device)
+                yb = yb.to(device)
                 optimizer.zero_grad()
                 logits = self.model_(xb)
                 loss = criterion(logits, yb)
                 loss.backward()
                 optimizer.step()
+
+            if val_loader is not None:
+                self.model_.eval()
+                val_loss = 0.0
+                with torch.no_grad():
+                    for xb, yb in val_loader:
+                        xb = xb.to(device)
+                        yb = yb.to(device)
+                        logits = self.model_(xb)
+                        loss = criterion(logits, yb)
+                        val_loss += loss.item() * xb.size(0)
+                val_loss /= len(val_loader.dataset)
+                if val_loss < best_loss:
+                    best_loss = val_loss
+                    best_state = {
+                        k: v.detach().cpu().clone() for k, v in self.model_.state_dict().items()
+                    }
+                    epochs_no_improve = 0
+                else:
+                    epochs_no_improve += 1
+                    if self.patience and epochs_no_improve >= self.patience:
+                        break
+
+        if best_state is not None:
+            self.model_.load_state_dict(best_state)
+
+        self.device_ = device
         return self
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
@@ -70,7 +125,7 @@ class _BaseTorchClassifier(BaseEstimator, ClassifierMixin):
         X = np.asarray(X, dtype=np.float32)
         self.model_.eval()
         with torch.no_grad():
-            logits = self.model_(torch.from_numpy(X))
+            logits = self.model_(torch.from_numpy(X).to(self.device_))
             probs = torch.softmax(logits, dim=1).cpu().numpy()
         return probs
 
@@ -92,8 +147,17 @@ class SpectralCNN(_BaseTorchClassifier):
         batch_size: int = 32,
         lr: float = 1e-3,
         random_state: Optional[int] = None,
+        device: str = "cpu",
+        patience: int = 0,
     ) -> None:
-        super().__init__(n_epochs=n_epochs, batch_size=batch_size, lr=lr, random_state=random_state)
+        super().__init__(
+            n_epochs=n_epochs,
+            batch_size=batch_size,
+            lr=lr,
+            random_state=random_state,
+            device=device,
+            patience=patience,
+        )
         self.n_filters = n_filters
         self.kernel_size = kernel_size
         self.hidden_dim = hidden_dim
@@ -125,8 +189,17 @@ class SpectralLSTM(_BaseTorchClassifier):
         batch_size: int = 32,
         lr: float = 1e-3,
         random_state: Optional[int] = None,
+        device: str = "cpu",
+        patience: int = 0,
     ) -> None:
-        super().__init__(n_epochs=n_epochs, batch_size=batch_size, lr=lr, random_state=random_state)
+        super().__init__(
+            n_epochs=n_epochs,
+            batch_size=batch_size,
+            lr=lr,
+            random_state=random_state,
+            device=device,
+            patience=patience,
+        )
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
 
