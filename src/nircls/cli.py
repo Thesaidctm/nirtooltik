@@ -21,6 +21,7 @@ from .pipeline import (
     predict_with_model,
     explain_model,
 )
+from .report import generate_report
 from .dashboard import run_dashboard
 from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id
@@ -61,8 +62,10 @@ def main(argv=None):
     p_prep.add_argument("--config", required=True)
     p_tr = sp.add_parser("train")
     p_tr.add_argument("--config", required=True)
+    p_tr.add_argument("--report-pdf")
     p_cv = sp.add_parser("crossval")
     p_cv.add_argument("--config", required=True)
+    p_cv.add_argument("--report-pdf")
     p_demo = sp.add_parser("demo")
     p_wz = sp.add_parser("wizard")
     p_ev = sp.add_parser("evaluate")
@@ -119,12 +122,14 @@ def main(argv=None):
         run_id = make_run_id("train")
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
-        msg = train_and_save(
+        msg, metrics_path, figs_dir = train_and_save(
             cfg.dict(),
             out_dir,
         )
         if msg:
             print(msg, file=sys.stderr)
+        if args.report_pdf and metrics_path and figs_dir:
+            generate_report(metrics_path, figs_dir, Path(args.report_pdf))
     elif args.cmd == "crossval":
         if cfg.data is None or not cfg.models or cfg.cv is None:
             print(
@@ -139,10 +144,19 @@ def main(argv=None):
         run_id = make_run_id("cv")
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
-        run_multiple_eval(
+        outputs = run_multiple_eval(
             cfg.dict(),
             out_dir,
         )
+        if args.report_pdf:
+            pdf_path = Path(args.report_pdf)
+            multi = len(outputs) > 1
+            for metrics_path, figs_dir in outputs:
+                out_pdf = pdf_path
+                if pdf_path.suffix.lower() != ".pdf" or multi:
+                    base_dir = pdf_path if pdf_path.suffix.lower() != ".pdf" else pdf_path.parent
+                    out_pdf = base_dir / f"{metrics_path.parent.name}.pdf"
+                generate_report(metrics_path, figs_dir, out_pdf)
     elif args.cmd == "demo":
         demo_cfg = Path(__file__).resolve().parents[2] / "configs" / "demo.yaml"
         with open(demo_cfg) as f:
@@ -172,7 +186,7 @@ def main(argv=None):
             print(f"Dados preparados em: {prep_file}")
         train_dir = base_dir / "train"
         ensure_dirs(train_dir)
-        msg = train_and_save(cfg.dict(), train_dir)
+        msg, _, _ = train_and_save(cfg.dict(), train_dir)
         if msg:
             print(msg, file=sys.stderr)
         else:
@@ -223,7 +237,7 @@ def main(argv=None):
             ensure_dirs(base_dir)
             train_dir = base_dir / "train"
             ensure_dirs(train_dir)
-            msg = train_and_save(cfg_obj.dict(), train_dir)
+            msg, _, _ = train_and_save(cfg_obj.dict(), train_dir)
             if msg:
                 print(msg, file=sys.stderr)
             else:

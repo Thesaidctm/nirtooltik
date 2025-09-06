@@ -543,7 +543,7 @@ def run_multiple_eval(
     out_dir: Path,
     *,
     interactive: bool = False,
-) -> None:
+) -> List[Tuple[Path, Path]]:
     """Run evaluation for multiple cross-validation strategies.
 
     Parameters
@@ -554,11 +554,17 @@ def run_multiple_eval(
         Directory that receives a subfolder for each strategy.
     interactive:
         If ``True``, also generate interactive Plotly HTML figures.
+    Returns
+    -------
+    list of tuple(Path, Path)
+        Pairs with the paths to ``metrics.json`` and the ``figures`` directory
+        for each evaluated strategy.
     """
 
     _validate_cfg(cfg, need_data=True, need_cv=True, need_models=True)
     strategies = cfg.get("cv", {}).get("strategies", [])
     random_state = cfg.get("cv", {}).get("random_state", 42)
+    outputs: List[Tuple[Path, Path]] = []
     with Progress() as progress:
         strat_task = progress.add_task(
             "CV strategy", total=len(strategies)
@@ -586,33 +592,31 @@ def run_multiple_eval(
                     sub = out_dir / f"kfold_{k}"
                     sub.mkdir(parents=True, exist_ok=True)
                     _run_cv(cfg, sub, outer, progress, interactive=interactive)
-                    generate_report(
-                        sub / "metrics.json",
-                        sub / "figures",
-                        sub / "report.md",
-                    )
+                    metrics = sub / "metrics.json"
+                    figs = sub / "figures"
+                    generate_report(metrics, figs, sub / "report.md")
+                    outputs.append((metrics, figs))
             elif stype == "loo":
                 sub = out_dir / "loo"
                 sub.mkdir(parents=True, exist_ok=True)
                 _run_cv(cfg, sub, LeaveOneOut(), progress, interactive=interactive)
-                generate_report(
-                    sub / "metrics.json",
-                    sub / "figures",
-                    sub / "report.md",
-                )
+                metrics = sub / "metrics.json"
+                figs = sub / "figures"
+                generate_report(metrics, figs, sub / "report.md")
+                outputs.append((metrics, figs))
             elif stype == "holdout":
                 sub = out_dir / "holdout"
                 sub.mkdir(parents=True, exist_ok=True)
                 test_size = float(strat.get("test_size", 0.3))
                 _run_holdout(cfg, sub, test_size, random_state, interactive=interactive)
-                generate_report(
-                    sub / "metrics.json",
-                    sub / "figures",
-                    sub / "report.md",
-                )
+                metrics = sub / "metrics.json"
+                figs = sub / "figures"
+                generate_report(metrics, figs, sub / "report.md")
+                outputs.append((metrics, figs))
             else:
                 raise ValueError(f"Unknown CV strategy: {stype}")
             progress.advance(strat_task)
+    return outputs
 
 
 def train_and_save(
@@ -620,7 +624,7 @@ def train_and_save(
     out_dir: Path,
     *,
     interactive: bool = False,
-):
+) -> Tuple[Optional[str], Optional[Path], Optional[Path]]:
     """Train final model and persist artefacts.
 
     Parameters
@@ -631,6 +635,11 @@ def train_and_save(
         Destination for the trained model and related files.
     interactive:
         If ``True``, also generate interactive Plotly HTML figures.
+    Returns
+    -------
+    tuple
+        ``(msg, metrics_path, figures_dir)`` where ``msg`` is an optional
+        error message.
     """
 
     try:
@@ -705,10 +714,11 @@ def train_and_save(
                 out_dir / "report.md",
             )
             progress.update(save_task, completed=1)
+        return None, out_dir / "metrics.json", out_dir / "figures"
     except FileNotFoundError:
-        return "Arquivo de dados não encontrado"
+        return "Arquivo de dados não encontrado", None, None
     except ValueError:
-        return "Modelo incompatível"
+        return "Modelo incompatível", None, None
 def evaluate_saved_model(model_path: Path, data_path: Path):
     est = load(model_path)
     X, y_list = read_xlsx_xy(data_path)
