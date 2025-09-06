@@ -17,6 +17,7 @@ xgboost = ["xgboost"]
 lightgbm = ["lightgbm"]
 catboost = ["catboost"]
 torch = ["torch"]
+questionary = ["questionary"]
 
 [project.scripts]
 nircls = "nircls.cli:main"
