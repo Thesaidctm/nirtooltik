@@ -106,7 +106,9 @@ def build_pipeline_from_config(cfg: Dict[str, Any]):
             calib_cfg = (m.get("calibration") or {})
             method = calib_cfg.get("method", "sigmoid")
             est = CalibratedClassifierCV(estimator=est, method=method)
-            grid.update({f"clf__estimator__{k}": v for k, v in model_grid.items()})
+            grid.update(
+                {f'clf__estimator__{k}': v for k, v in model_grid.items()}
+            )
         else:
             grid.update({f"clf__{k}": v for k, v in model_grid.items()})
         pipe = Pipeline(pre_steps + [("clf", est)])
@@ -162,7 +164,19 @@ def _run_cv(
     outer,
     progress: Progress,
 ) -> None:
-    """Run cross-validation for configured datasets and models."""
+    """Run cross-validation for configured datasets and models.
+
+    Parameters
+    ----------
+    cfg:
+        Experiment configuration.
+    out_dir:
+        Directory used to persist metrics and plots.
+    outer:
+        External cross-validation splitter.
+    progress:
+        Progress bar instance for user feedback.
+    """
 
     data = prepare_inputs(cfg["data"])
     rows: List[Dict[str, Any]] = []
@@ -330,7 +344,19 @@ def _run_holdout(
     test_size: float,
     random_state: int,
 ) -> None:
-    """Evaluate models using a single train/test split."""
+    """Evaluate models using a single train/test split.
+
+    Parameters
+    ----------
+    cfg:
+        Experiment configuration.
+    out_dir:
+        Output folder for generated artefacts.
+    test_size:
+        Proportion of the dataset used for testing.
+    random_state:
+        Seed applied to the train/test split.
+    """
 
     data = prepare_inputs(cfg["data"])
     rows: List[Dict[str, Any]] = []
@@ -422,7 +448,15 @@ def _run_holdout(
 
 
 def run_multiple_eval(cfg: Dict[str, Any], out_dir: Path) -> None:
-    """Run evaluation for multiple cross-validation strategies."""
+    """Run evaluation for multiple cross-validation strategies.
+
+    Parameters
+    ----------
+    cfg:
+        Experiment configuration.
+    out_dir:
+        Directory that receives a subfolder for each strategy.
+    """
 
     strategies = cfg.get("cv", {}).get("strategies", [])
     random_state = cfg.get("cv", {}).get("random_state", 42)
@@ -483,7 +517,15 @@ def run_multiple_eval(cfg: Dict[str, Any], out_dir: Path) -> None:
 
 
 def train_and_save(cfg: Dict[str, Any], out_dir: Path):
-    """Train final model and persist artefacts."""
+    """Train final model and persist artefacts.
+
+    Parameters
+    ----------
+    cfg:
+        Experiment configuration.
+    out_dir:
+        Destination for the trained model and related files.
+    """
 
     ds = prepare_inputs(cfg["data"])[0]
     X, y = ds["X"], ds["Y"]
