@@ -112,3 +112,90 @@ def plot_reliability(y_true, y_proba, out_base: Path, n_bins: int = 10):
     plt.savefig(out_base.with_suffix(".svg"))
     plt.close()
 
+
+def plot_confusion_interactive(
+    cm, classes, out_base: Path, normalize: bool = False
+):
+    """Interactive confusion matrix using Plotly.
+
+    Parameters
+    ----------
+    cm : array-like
+        Confusion matrix values.
+    classes : list-like
+        Class labels for axes.
+    out_base : Path
+        Base path (without suffix) where the HTML file will be saved.
+    normalize : bool, optional
+        Whether to normalise the confusion matrix before plotting.
+    """
+
+    try:  # pragma: no cover - optional dependency
+        import plotly.graph_objects as go
+    except Exception as exc:  # pragma: no cover - plotly not installed
+        raise RuntimeError("plotly is required for interactive plots") from exc
+
+    if normalize:
+        cmn = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-12)
+        text = np.round(cmn, 2)
+    else:
+        cmn = cm
+        text = cm
+
+    heatmap = go.Heatmap(
+        z=cmn,
+        x=classes,
+        y=classes,
+        text=text,
+        texttemplate="%{text}",
+        colorscale="Viridis",
+        colorbar=dict(
+            title="Taxa de acerto normalizada"
+            if normalize
+            else "Número de indivíduos"
+        ),
+    )
+    fig = go.Figure(data=[heatmap])
+    fig.update_layout(
+        title="Confusion Matrix (normalized)" if normalize else "Confusion Matrix",
+        xaxis_title="Pred",
+        yaxis_title="True",
+    )
+    out_base.parent.mkdir(parents=True, exist_ok=True)
+    fig.write_html(out_base.with_suffix(".html"), include_plotlyjs="cdn")
+
+
+def plot_roc_interactive(y_true, y_proba, classes, out_base: Path):
+    """Interactive one-vs-rest ROC curves using Plotly."""
+
+    try:  # pragma: no cover - optional dependency
+        import plotly.graph_objects as go
+    except Exception as exc:  # pragma: no cover - plotly not installed
+        raise RuntimeError("plotly is required for interactive plots") from exc
+
+    fig = go.Figure()
+    n_classes = len(classes)
+    if y_proba.shape[1] == 2:
+        y_bin = (y_true == 1).astype(int)
+        fpr, tpr, _ = roc_curve(y_bin, y_proba[:, 1])
+        fig.add_trace(go.Scatter(x=fpr, y=tpr, mode="lines", name=str(classes[1])))
+    else:
+        y_bin = label_binarize(y_true, classes=list(range(n_classes)))
+        for i in range(n_classes):
+            fpr, tpr, _ = roc_curve(y_bin[:, i], y_proba[:, i])
+            fig.add_trace(
+                go.Scatter(x=fpr, y=tpr, mode="lines", name=str(classes[i]))
+            )
+    fig.add_trace(
+        go.Scatter(
+            x=[0, 1],
+            y=[0, 1],
+            mode="lines",
+            name="Chance",
+            line=dict(dash="dash"),
+        )
+    )
+    fig.update_layout(xaxis_title="FPR", yaxis_title="TPR", title="ROC OvR")
+    out_base.parent.mkdir(parents=True, exist_ok=True)
+    fig.write_html(out_base.with_suffix(".html"), include_plotlyjs="cdn")
+

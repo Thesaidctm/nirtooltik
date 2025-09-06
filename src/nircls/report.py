@@ -167,12 +167,18 @@ def generate_report(
         lines.append("| " + " | ".join(map(str, row.tolist())) + " |")
     table_md = "\n".join(lines)
 
-    # collect figures
+    # collect figures (static images with optional interactive HTML)
     figs = sorted(figures_dir.glob("*.png"))
     fig_lines = []
     for fig in figs:
         rel = f"{figures_dir.name}/{fig.name}"
         fig_lines.append(f"![{fig.stem}]({rel})")
+        html = fig.with_suffix(".html")
+        if html.exists():
+            rel_html = f"{figures_dir.name}/{html.name}"
+            fig_lines.append(
+                f'<iframe src="{rel_html}" height="500" width="700"></iframe>'
+            )
     fig_md = "\n\n".join(fig_lines)
 
     ai_md = ""
