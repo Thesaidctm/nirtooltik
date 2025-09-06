@@ -52,6 +52,7 @@ def main(argv=None):
     p_tr.add_argument("--config", required=True)
     p_cv = sp.add_parser("crossval")
     p_cv.add_argument("--config", required=True)
+    p_demo = sp.add_parser("demo")
     p_ev = sp.add_parser("evaluate")
     p_ev.add_argument("--model", required=True)
     p_ev.add_argument("--data", required=True)
@@ -128,6 +129,41 @@ def main(argv=None):
             cfg.dict(),
             out_dir,
         )
+    elif args.cmd == "demo":
+        demo_cfg = Path(__file__).resolve().parents[2] / "configs" / "demo.yaml"
+        with open(demo_cfg) as f:
+            raw = yaml.safe_load(f)
+        raw["data"]["input_path"] = str(
+            (demo_cfg.parent.parent / raw["data"]["input_path"]).resolve()
+        )
+        try:
+            cfg = ConfigModel(**raw)
+        except ValidationError as e:  # pragma: no cover - user feedback
+            print(f"Configuração inválida: {e}", file=sys.stderr)
+            return 1
+        run_id = make_run_id("demo")
+        base_dir = Path(cfg.data.out_dir or "results") / run_id
+        ensure_dirs(base_dir)
+        ds_list = prepare_inputs(cfg.data.dict())
+        if ds_list:
+            first = ds_list[0]
+            prep_file = base_dir / f"prepared_{first['target']}.xlsx"
+            export_xy_xlsx(
+                prep_file,
+                first["X"],
+                first["Y"],
+                cfg.data.x_sheet or "X",
+                cfg.data.y_sheet or "Y",
+            )
+            print(f"Dados preparados em: {prep_file}")
+        train_dir = base_dir / "train"
+        ensure_dirs(train_dir)
+        train_and_save(cfg.dict(), train_dir)
+        print(f"Modelo treinado em: {train_dir}")
+        cv_dir = base_dir / "cv"
+        ensure_dirs(cv_dir)
+        run_multiple_eval(cfg.dict(), cv_dir)
+        print(f"Resultados de cross-val em: {cv_dir}")
     elif args.cmd == "evaluate":
         evaluate_saved_model(Path(args.model), Path(args.data))
     elif args.cmd == "predict":
