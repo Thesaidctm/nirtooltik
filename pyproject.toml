@@ -16,6 +16,7 @@ dependencies = [
 xgboost = ["xgboost"]
 lightgbm = ["lightgbm"]
 catboost = ["catboost"]
+torch = ["torch"]
 
 [project.scripts]
 nircls = "nircls.cli:main"

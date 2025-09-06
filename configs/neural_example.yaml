@@ -1,0 +1,25 @@
+data:
+  input_path: data/raw/*.xlsx
+  x_sheet: X
+  y_sheet: Y
+  target_cols: all
+  spectral_range: null
+  drop_nans: true
+  out_dir: results
+
+preprocess:
+  steps: [SNV, SCALE]
+
+models:
+  - name: CNN1D
+    grid:
+      n_filters: [16, 32]
+      kernel_size: [3, 5]
+      n_epochs: [20]
+      lr: [0.001]
+  - name: LSTM1D
+    grid:
+      hidden_dim: [64, 128]
+      num_layers: [1, 2]
+      n_epochs: [20]
+      lr: [0.001]

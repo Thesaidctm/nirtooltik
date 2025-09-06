@@ -139,6 +139,12 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             est = DecisionTreeClassifier()
         elif upper == "KNN":
             est = KNeighborsClassifier()
+        elif upper == "CNN1D":
+            from .neural import SpectralCNN  # lazy import
+            est = SpectralCNN()
+        elif upper == "LSTM1D":
+            from .neural import SpectralLSTM  # lazy import
+            est = SpectralLSTM()
         elif upper in ("GAUSSIANNB", "NB"):
             est = GaussianNB()
         elif upper == "MULTINB":
@@ -168,6 +174,14 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             grid.setdefault("iterations", [100])
             grid.setdefault("depth", [6])
             grid.setdefault("learning_rate", [0.1])
+        elif upper == "CNN1D":
+            grid.setdefault("n_filters", [32])
+            grid.setdefault("kernel_size", [3])
+            grid.setdefault("n_epochs", [10])
+        elif upper == "LSTM1D":
+            grid.setdefault("hidden_dim", [64])
+            grid.setdefault("num_layers", [1])
+            grid.setdefault("n_epochs", [10])
         elif upper == "QDA":
             grid.setdefault("reg_param", [0.0])
         elif upper in ("GAUSSIANNB", "NB"):
