@@ -203,8 +203,7 @@ def _save_plots(
     plot_confusion(
         cm,
         classes,
-        out_fig / f"{stem}__{target}__{model}__cm",
-        normalize=False,
+        out_fig / f"{stem}__{target}__{model}__confusion",
         interactive=interactive,
     )
     if y_proba is not None:

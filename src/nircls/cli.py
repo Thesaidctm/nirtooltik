@@ -94,6 +94,17 @@ def _print_metrics_table(metrics_json: Path) -> None:
     print(df[display_cols].to_string(index=False))
 
 
+def _print_confusion_paths(fig_dir: Path) -> None:
+    """Print paths of confusion matrix images if they exist."""
+
+    if not fig_dir or not fig_dir.exists():
+        return
+    for p in sorted(fig_dir.glob("*confusion_raw.png")):
+        print(f"Matriz de confusão (bruta): {p}")
+    for p in sorted(fig_dir.glob("*confusion_norm.png")):
+        print(f"Matriz de confusão (normalizada): {p}")
+
+
 def _parse_params(s: str) -> dict[str, Any]:
     """Parse ``key=value`` pairs into a dictionary."""
     params: dict[str, Any] = {}
@@ -235,6 +246,8 @@ def main(argv=None):
             return 1
         if metrics_path:
             _print_metrics_table(metrics_path)
+        if figs_dir:
+            _print_confusion_paths(figs_dir)
         if args.report_pdf and metrics_path and figs_dir:
             generate_report(metrics_path, figs_dir, Path(args.report_pdf))
         print(f"Resultados em: {out_dir}")
@@ -272,17 +285,18 @@ def main(argv=None):
         if args.report_pdf:
             pdf_path = Path(args.report_pdf)
             multi = len(outputs) > 1
-            for metrics_path, figs_dir in outputs:
-                out_pdf = pdf_path
-                if pdf_path.suffix.lower() != ".pdf" or multi:
-                    base_dir = (
-                        pdf_path if pdf_path.suffix.lower() != ".pdf" else pdf_path.parent
-                    )
-                    out_pdf = base_dir / f"{metrics_path.parent.name}.pdf"
-                generate_report(metrics_path, figs_dir, out_pdf)
-        for metrics_path, _ in outputs:
+        for metrics_path, figs_dir in outputs:
+            out_pdf = pdf_path
+            if pdf_path.suffix.lower() != ".pdf" or multi:
+                base_dir = (
+                    pdf_path if pdf_path.suffix.lower() != ".pdf" else pdf_path.parent
+                )
+                out_pdf = base_dir / f"{metrics_path.parent.name}.pdf"
+            generate_report(metrics_path, figs_dir, out_pdf)
+        for metrics_path, figs_dir in outputs:
             print(f"== {metrics_path.parent.name} ==")
             _print_metrics_table(metrics_path)
+            _print_confusion_paths(figs_dir)
         print(f"Resultados em: {out_dir}")
     elif args.cmd == "demo":
         demo_cfg = Path(__file__).resolve().parents[2] / "configs" / "demo.yaml"
@@ -318,11 +332,13 @@ def main(argv=None):
         train_dir = base_dir / "train"
         ensure_dirs(train_dir)
         try:
-            metrics_path, _ = train_and_save(
+            metrics_path, figs_dir = train_and_save(
                 cfg.dict(), train_dir, random_state=args.seed
             )
             if metrics_path:
                 _print_metrics_table(metrics_path)
+            if figs_dir:
+                _print_confusion_paths(figs_dir)
             print(f"Modelo treinado em: {train_dir}")
         except DataError as e:
             print(f"Dados inválidos: {e}", file=sys.stderr)
@@ -332,8 +348,9 @@ def main(argv=None):
         ensure_dirs(cv_dir)
         try:
             outputs = run_multiple_eval(cfg.dict(), cv_dir, random_state=args.seed)
-            for metrics_path, _ in outputs:
+            for metrics_path, figs_dir in outputs:
                 _print_metrics_table(metrics_path)
+                _print_confusion_paths(figs_dir)
             print(f"Resultados de cross-val em: {cv_dir}")
         except DataError as e:
             print(f"Dados inválidos: {e}", file=sys.stderr)
@@ -423,19 +440,22 @@ def main(argv=None):
             train_dir = base_dir / "train"
             ensure_dirs(train_dir)
             try:
-                metrics_path, _ = train_and_save(
+                metrics_path, figs_dir = train_and_save(
                     cfg_obj.dict(), train_dir, random_state=args.seed
                 )
                 if metrics_path:
                     _print_metrics_table(metrics_path)
+                if figs_dir:
+                    _print_confusion_paths(figs_dir)
                 print(f"Treino em: {train_dir}")
                 cv_dir = base_dir / "cv"
                 ensure_dirs(cv_dir)
                 outputs = run_multiple_eval(
                     cfg_obj.dict(), cv_dir, random_state=args.seed
                 )
-                for metrics_path, _ in outputs:
+                for metrics_path, figs_dir in outputs:
                     _print_metrics_table(metrics_path)
+                    _print_confusion_paths(figs_dir)
                 print(f"Avaliação em: {cv_dir}")
             except DataError as e:
                 print(f"Dados inválidos: {e}", file=sys.stderr)
