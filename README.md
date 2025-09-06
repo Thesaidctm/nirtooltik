@@ -153,3 +153,7 @@ podem ser adicionados implementando classes compatíveis com `scikit-learn` e
 registrando‑as nos módulos apropriados. Contribuições são bem‑vindas via pull
 requests.
 
+Os resultados serão salvos em `results/<run_id>/<estratégia>/`. Cada pasta de
+estratégia contém as métricas (`metrics.json`, `metrics_summary.xlsx`), as figuras
+geradas e um relatório final em Markdown (`report.md`).
+
