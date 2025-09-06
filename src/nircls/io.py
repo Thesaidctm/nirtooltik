@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Sequence
+from typing import Dict, List, Tuple, Optional, Sequence, Any
 import numpy as np, pandas as pd
 from glob import glob
 
@@ -137,7 +137,9 @@ def prepare_inputs(data_cfg: Dict):
         else:
             X, y_list, groups = read_tabular(f, tgt, grp)
         X = _filter_range(X, sp)
-        X = X.replace([np.inf, -np.inf], np.nan).dropna(axis=0)
+        X = X.replace([np.inf, -np.inf], np.nan)
+        n_nans = int(X.isna().any(axis=1).sum())
+        X = X.dropna(axis=0)
         if groups is not None:
             groups = groups.loc[X.index]
         for name, y in y_list:
@@ -147,8 +149,46 @@ def prepare_inputs(data_cfg: Dict):
                 "target": name,
                 "X": X.reset_index(drop=True),
                 "Y": y.reset_index(drop=True),
+                "n_nans": n_nans,
             }
             if groups is not None:
                 ds["groups"] = groups.reset_index(drop=True)
             out.append(ds)
     return out
+
+
+def summarize_dataset(ds_list: List[Dict]) -> pd.DataFrame:
+    """Summarize dataset information.
+
+    Parameters
+    ----------
+    ds_list:
+        Output of :func:`prepare_inputs`.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table with columns ``target``, ``class``, ``count``, ``spectral_min``,
+        ``spectral_max`` and ``n_nans`` summarising each dataset.
+    """
+
+    rows: List[Dict[str, Any]] = []
+    for ds in ds_list:
+        X: pd.DataFrame = ds["X"]
+        y: pd.Series = ds["Y"]
+        spectral_min = float(min(X.columns)) if not X.empty else float("nan")
+        spectral_max = float(max(X.columns)) if not X.empty else float("nan")
+        n_nans = int(ds.get("n_nans", 0))
+        counts = y.value_counts()
+        for cls, cnt in counts.items():
+            rows.append(
+                {
+                    "target": ds["target"],
+                    "class": cls,
+                    "count": int(cnt),
+                    "spectral_min": spectral_min,
+                    "spectral_max": spectral_max,
+                    "n_nans": n_nans,
+                }
+            )
+    return pd.DataFrame(rows)

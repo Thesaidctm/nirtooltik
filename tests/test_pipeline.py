@@ -16,7 +16,7 @@ from nircls.pipeline import (
     train_and_save,
     predict_with_model,
 )
-from nircls.io import prepare_inputs
+from nircls.io import prepare_inputs, summarize_dataset
 from nircls.feature_selection.vip import compute_vip
 from nircls.utils.errors import DataError, ModelError
 
@@ -141,6 +141,28 @@ def test_prepare_inputs_with_multiple_targets(tmp_path):
     ds_list = prepare_inputs(cfg)
     assert len(ds_list) == 2
     assert {d["target"] for d in ds_list} == {"t1", "t2"}
+
+
+def test_summarize_dataset_columns(tmp_path):
+    rng = np.random.RandomState(0)
+    X = rng.rand(5, 3)
+    y = np.array(["A"] * 3 + ["B"] * 2)
+    df = pd.DataFrame(X, columns=[str(i) for i in range(3)])
+    df["target"] = y
+    df.loc[0, "0"] = np.nan
+    data_file = tmp_path / "data.csv"
+    df.to_csv(data_file, index=False)
+    cfg = {"input_path": str(data_file), "target_cols": ["target"]}
+    ds_list = prepare_inputs(cfg)
+    summary = summarize_dataset(ds_list)
+    assert set(summary.columns) == {
+        "target",
+        "class",
+        "count",
+        "spectral_min",
+        "spectral_max",
+        "n_nans",
+    }
 
 
 def test_nested_crossval_report(tmp_path):

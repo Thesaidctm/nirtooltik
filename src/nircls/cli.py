@@ -16,7 +16,7 @@ from typing import Any
 import pandas as pd
 
 from . import __version__
-from .io import prepare_inputs, export_xy_xlsx
+from .io import prepare_inputs, export_xy_xlsx, summarize_dataset
 from .pipeline import (
     run_multiple_eval,
     train_and_save,
@@ -210,6 +210,9 @@ def main(argv=None):
         except DataError as e:
             print(f"Dados inválidos: {e}", file=sys.stderr)
             return 1
+        summary = summarize_dataset(ds_list)
+        if not summary.empty:
+            print(summary.to_string(index=False))
         if args.run == "one":
             ds_list = ds_list[:1]
         for ds in ds_list:
@@ -231,6 +234,14 @@ def main(argv=None):
         run_id = make_run_id("train")
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
+        try:
+            ds_list = prepare_inputs(cfg.data.dict())
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
+            return 1
+        summary = summarize_dataset(ds_list)
+        if not summary.empty:
+            print(summary.to_string(index=False))
         try:
             metrics_path, figs_dir = train_and_save(
                 cfg.dict(),
@@ -258,14 +269,16 @@ def main(argv=None):
                 file=sys.stderr,
             )
             return 1
-        if args.run == "one":
-            try:
-                first = prepare_inputs(cfg.data.dict())
-            except DataError as e:
-                print(f"Dados inválidos: {e}", file=sys.stderr)
-                return 1
-            if first:
-                cfg.data.target_cols = first[0]["target"]
+        try:
+            ds_list = prepare_inputs(cfg.data.dict())
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
+            return 1
+        summary = summarize_dataset(ds_list)
+        if not summary.empty:
+            print(summary.to_string(index=False))
+        if args.run == "one" and ds_list:
+            cfg.data.target_cols = ds_list[0]["target"]
         run_id = make_run_id("cv")
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
