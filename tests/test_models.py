@@ -8,12 +8,34 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from nircls.pipeline import build_pipeline_from_config
 
 
-def test_logreg_default_grid_contains_C():
+def test_logreg_default_grid_contains_C_and_balanced_class_weight():
     cfg = {"models": [{"name": "LOGREG"}]}
     name, pipe, grid = build_pipeline_from_config(cfg)[0]
     assert name == "LOGREG"
     assert "clf__C" in grid
     assert pipe.named_steps["clf"].max_iter == 5000
+    assert pipe.named_steps["clf"].class_weight == "balanced"
+
+
+def test_svm_defaults_to_balanced_class_weight():
+    cfg = {"models": [{"name": "SVM_RBF"}]}
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "SVM_RBF"
+    assert pipe.named_steps["clf"].class_weight == "balanced"
+
+
+def test_rf_defaults_to_balanced_class_weight():
+    cfg = {"models": [{"name": "RF"}]}
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "RF"
+    assert pipe.named_steps["clf"].class_weight == "balanced"
+
+
+def test_extratrees_defaults_to_balanced_class_weight():
+    cfg = {"models": [{"name": "ET"}]}
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "ET"
+    assert pipe.named_steps["clf"].class_weight == "balanced"
 
 
 def test_mlp_accepts_hidden_layer_and_alpha():
