@@ -11,6 +11,7 @@ import argparse
 import sys
 import yaml
 from pathlib import Path
+from typing import Any
 
 from .io import prepare_inputs, export_xy_xlsx
 from .pipeline import (
@@ -24,6 +25,16 @@ from .dashboard import run_dashboard
 from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id
 from .config_schema import ConfigModel, ValidationError
+
+
+def _parse_params(s: str) -> dict[str, Any]:
+    """Parse ``key=value`` pairs into a dictionary."""
+    params: dict[str, Any] = {}
+    for part in s.split(","):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            params[k.strip()] = yaml.safe_load(v.strip())
+    return params
 
 def main(argv=None):
     """Run the ``nircls`` command-line interface.
@@ -53,6 +64,7 @@ def main(argv=None):
     p_cv = sp.add_parser("crossval")
     p_cv.add_argument("--config", required=True)
     p_demo = sp.add_parser("demo")
+    p_wz = sp.add_parser("wizard")
     p_ev = sp.add_parser("evaluate")
     p_ev.add_argument("--model", required=True)
     p_ev.add_argument("--data", required=True)
@@ -164,6 +176,54 @@ def main(argv=None):
         ensure_dirs(cv_dir)
         run_multiple_eval(cfg.dict(), cv_dir)
         print(f"Resultados de cross-val em: {cv_dir}")
+    elif args.cmd == "wizard":
+        input_path = input("Caminho dos dados: ").strip()
+        target = input("Coluna alvo: ").strip()
+        models_raw = input(
+            "Modelos (separados por vírgula, ex: RF,SVM_RBF): "
+        ).strip()
+        models_cfg = []
+        for name in models_raw.split(","):
+            name = name.strip()
+            if not name:
+                continue
+            params_raw = input(
+                f"Parâmetros para {name} (k=v, separados por vírgula, opcional): "
+            ).strip()
+            model_entry: dict[str, Any] = {"name": name}
+            if params_raw:
+                params = _parse_params(params_raw)
+                if params:
+                    model_entry["params"] = params
+            models_cfg.append(model_entry)
+        out_dir_str = input(
+            "Diretório para salvar config.yaml (padrão: .): "
+        ).strip() or "."
+        out_path = Path(out_dir_str)
+        out_path.mkdir(parents=True, exist_ok=True)
+        cfg_dict = {
+            "data": {"input_path": input_path, "target_cols": target},
+            "models": models_cfg,
+            "cv": {"strategies": [{"type": "holdout", "test_size": 0.2}]},
+        }
+        cfg_file = out_path / "config.yaml"
+        with open(cfg_file, "w") as f:
+            yaml.safe_dump(cfg_dict, f)
+        print(f"Configuração salva em: {cfg_file}")
+        run_now = input("Iniciar treino e avaliação agora? (s/n): ").strip().lower()
+        if run_now.startswith("s"):
+            cfg_obj = ConfigModel(**cfg_dict)
+            run_id = make_run_id("wizard")
+            base_dir = Path(cfg_obj.data.out_dir or "results") / run_id
+            ensure_dirs(base_dir)
+            train_dir = base_dir / "train"
+            ensure_dirs(train_dir)
+            train_and_save(cfg_obj.dict(), train_dir)
+            cv_dir = base_dir / "cv"
+            ensure_dirs(cv_dir)
+            run_multiple_eval(cfg_obj.dict(), cv_dir)
+            print(f"Treino em: {train_dir}")
+            print(f"Avaliação em: {cv_dir}")
     elif args.cmd == "evaluate":
         evaluate_saved_model(Path(args.model), Path(args.data))
     elif args.cmd == "predict":

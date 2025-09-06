@@ -77,6 +77,9 @@ cv:
 O comando principal é `nircls` e suporta várias sub‑rotinas:
 
 ```bash
+# Assistente interativo para gerar config.yaml
+nircls wizard
+
 # Execução de demonstração com dados de exemplo
 nircls demo
 
@@ -95,6 +98,11 @@ nircls predict --model caminho/model.joblib --data novos.xlsx --output preds
 # Dashboard interativo
 nircls dashboard --results results
 ```
+
+O subcomando `wizard` abre um assistente que solicita os caminhos dos dados,
+coluna alvo, modelos e parâmetros básicos, gerando automaticamente um
+`config.yaml`. Ao final é possível iniciar imediatamente o treinamento e a
+avaliação com base nas escolhas feitas.
 
 Consulte a seção [Dashboard interativo](#dashboard-interativo) para executar
 experimentos completos pela interface web.
