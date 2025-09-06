@@ -88,13 +88,6 @@ nircls train --config experimento.yml
 # Predições usando um modelo salvo
 nircls predict --model caminho/model.joblib --data novos.xlsx --output preds
 
-# Relatório com resumo via ChatGPT (usa OPENAI_API_KEY se não informado)
-nircls crossval --config experimento.yml --ai-summary --openai-key SUA_CHAVE
-
-# Ou definindo a chave por variável de ambiente
-export OPENAI_API_KEY=SUA_CHAVE
-nircls train --config experimento.yml --ai-summary
-
 # Dashboard interativo de resultados
 nircls dashboard --results results
 ```
