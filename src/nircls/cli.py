@@ -1,8 +1,15 @@
-"""Command-line interface for the NIR Species Classification Toolkit."""
+"""Command-line interface for the NIR species classification toolkit.
+
+This module exposes the :func:`main` function which backs the ``nircls``
+command-line utility for preparing data, training models, evaluating saved
+models, making predictions and generating explanations.
+"""
 
 from __future__ import annotations
 
-import argparse, sys, yaml
+import argparse
+import sys
+import yaml
 from pathlib import Path
 
 from .io import prepare_inputs, export_xy_xlsx
@@ -17,7 +24,14 @@ from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id
 
 def main(argv=None):
-    """Parse command-line arguments and execute the requested subcommand."""
+    """Run the ``nircls`` command-line interface.
+
+    Parameters
+    ----------
+    argv : list[str] | None
+        Optional list of arguments. When ``None`` (default), ``sys.argv`` is
+        used.
+    """
 
     argv = argv or sys.argv[1:]
     parser = argparse.ArgumentParser(
