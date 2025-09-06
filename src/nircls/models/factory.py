@@ -6,13 +6,7 @@ from sklearn.discriminant_analysis import (
     LinearDiscriminantAnalysis,
     QuadraticDiscriminantAnalysis,
 )
-from sklearn.svm import SVC
-from sklearn.ensemble import (
-    RandomForestClassifier,
-    GradientBoostingClassifier,
-    ExtraTreesClassifier,
-    AdaBoostClassifier,
-)
+from sklearn.ensemble import GradientBoostingClassifier, AdaBoostClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.cross_decomposition import PLSRegression
@@ -20,6 +14,9 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB
 import numpy as np
+
+# Helpers for model construction with optional class weighting
+from .builders import _build_svm, _build_rf, _build_etc, _build_logreg
 
 # Optional third-party estimators
 try:  # pragma: no cover - optional dependency
@@ -129,33 +126,29 @@ def _lstm_builder():  # pragma: no cover - lazy import
     return SpectralLSTM()
 
 
-def _extratrees_builder():
-    return ExtraTreesClassifier()
-
-
 MODEL_BUILDERS = {
-    "PLSDA": lambda: PLSDA(),
-    "SVM_RBF": lambda: SVC(probability=True),
-    "SVM_LINEAR": lambda: SVC(kernel="linear", probability=True),
-    "RF": lambda: RandomForestClassifier(),
-    "GB": lambda: GradientBoostingClassifier(),
-    "ET": _extratrees_builder,
-    "EXTRATREES": _extratrees_builder,
-    "ADABOOST": lambda: AdaBoostClassifier(),
-    "LOGREG": lambda: LogisticRegression(max_iter=5000),
-    "QDA": lambda: QuadraticDiscriminantAnalysis(),
-    "XGBOOST": _xgb_builder,
-    "LGBM": _lgbm_builder,
-    "CATBOOST": _catboost_builder,
-    "MLP": lambda: MLPClassifier(),
-    "DT": lambda: DecisionTreeClassifier(),
-    "KNN": lambda: KNeighborsClassifier(),
-    "CNN1D": _cnn_builder,
-    "LSTM1D": _lstm_builder,
-    "GAUSSIANNB": lambda: GaussianNB(),
-    "NB": lambda: GaussianNB(),
-    "MULTINB": lambda: MultinomialNB(),
-    "BERNOULLINB": lambda: BernoulliNB(),
+    "PLSDA": lambda grid: PLSDA(),
+    "SVM_RBF": lambda grid: _build_svm(grid, kernel="rbf"),
+    "SVM_LINEAR": lambda grid: _build_svm(grid, kernel="linear"),
+    "RF": _build_rf,
+    "GB": lambda grid: GradientBoostingClassifier(),
+    "ET": _build_etc,
+    "EXTRATREES": _build_etc,
+    "ADABOOST": lambda grid: AdaBoostClassifier(),
+    "LOGREG": _build_logreg,
+    "QDA": lambda grid: QuadraticDiscriminantAnalysis(),
+    "XGBOOST": lambda grid: _xgb_builder(),
+    "LGBM": lambda grid: _lgbm_builder(),
+    "CATBOOST": lambda grid: _catboost_builder(),
+    "MLP": lambda grid: MLPClassifier(),
+    "DT": lambda grid: DecisionTreeClassifier(),
+    "KNN": lambda grid: KNeighborsClassifier(),
+    "CNN1D": lambda grid: _cnn_builder(),
+    "LSTM1D": lambda grid: _lstm_builder(),
+    "GAUSSIANNB": lambda grid: GaussianNB(),
+    "NB": lambda grid: GaussianNB(),
+    "MULTINB": lambda grid: MultinomialNB(),
+    "BERNOULLINB": lambda grid: BernoulliNB(),
 }
 
 
@@ -195,16 +188,17 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
         builder = MODEL_BUILDERS.get(upper)
         if builder is None:
             raise ValueError(f"Modelo não suportado: {name}")
-        est = builder()
+
+        grid = m.get("grid", {}) or {}
+        defaults = DEFAULT_GRIDS.get(upper, {})
+        for k, v in defaults.items():
+            grid.setdefault(k, v)
+
+        est = builder(grid)
 
         params = m.get("params", {})
         if params:
             est.set_params(**params)
-
-        grid = m.get("grid", {})
-        defaults = DEFAULT_GRIDS.get(upper, {})
-        for k, v in defaults.items():
-            grid.setdefault(k, v)
 
         out.append({"name": name, "estimator": est, "grid": grid})
 
