@@ -78,6 +78,9 @@ cv:
 O comando principal é `nircls` e suporta várias sub‑rotinas:
 
 ```bash
+# Verificar a versão instalada
+nircls --version
+
 # Assistente interativo para gerar config.yaml
 nircls wizard
 

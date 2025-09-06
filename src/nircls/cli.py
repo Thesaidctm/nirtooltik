@@ -15,6 +15,7 @@ from typing import Any
 
 import pandas as pd
 
+from . import __version__
 from .io import prepare_inputs, export_xy_xlsx
 from .pipeline import (
     run_multiple_eval,
@@ -116,6 +117,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="nircls", description="NIR Species Classification Toolkit"
     )
+    parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument(
         "--run",
         choices=["one", "all"],

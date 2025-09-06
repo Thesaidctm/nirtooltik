@@ -1,20 +1,16 @@
 """Top-level package for nircls.
 
 This module exposes key public functions and defines the package version
-based on ``pyproject.toml``.
+using ``pkg_resources`` when available.
 """
 
-from importlib.metadata import PackageNotFoundError, version as _version
 from pathlib import Path
+from pkg_resources import DistributionNotFound, get_distribution
 
 try:  # pragma: no cover - runtime convenience
-    __version__ = _version("nircls")
-except PackageNotFoundError:  # pragma: no cover - development fallback
-    import tomllib
-
-    project_root = Path(__file__).resolve().parents[2]
-    with (project_root / "pyproject.toml").open("rb") as f:
-        __version__ = tomllib.load(f)["project"]["version"]
+    __version__ = get_distribution("nircls").version
+except DistributionNotFound:  # pragma: no cover - development fallback
+    __version__ = "0.1.0"
 
 from .pipeline import build_pipeline_from_config, train_and_save
 
