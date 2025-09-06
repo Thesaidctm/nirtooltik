@@ -157,4 +157,4 @@ class EPO(BaseEstimator, TransformerMixin):
     def transform(self, X):
         if self.P_ is None:
             return X
-        return self.P_ @ X
+        return X @ self.P_
