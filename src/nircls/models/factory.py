@@ -18,6 +18,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB
 import numpy as np
 
 # Optional third-party estimators
@@ -138,6 +139,12 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             est = DecisionTreeClassifier()
         elif upper == "KNN":
             est = KNeighborsClassifier()
+        elif upper in ("GAUSSIANNB", "NB"):
+            est = GaussianNB()
+        elif upper == "MULTINB":
+            est = MultinomialNB()
+        elif upper == "BERNOULLINB":
+            est = BernoulliNB()
         else:
             raise ValueError(f"Modelo não suportado: {name}")
         params = m.get("params", {})
@@ -163,5 +170,11 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             grid.setdefault("learning_rate", [0.1])
         elif upper == "QDA":
             grid.setdefault("reg_param", [0.0])
+        elif upper in ("GAUSSIANNB", "NB"):
+            grid.setdefault("var_smoothing", [1e-09])
+        elif upper == "MULTINB":
+            grid.setdefault("alpha", [1.0])
+        elif upper == "BERNOULLINB":
+            grid.setdefault("alpha", [1.0])
         out.append({"name": name, "estimator": est, "grid": grid})
     return out

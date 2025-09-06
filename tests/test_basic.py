@@ -2,6 +2,7 @@
 import sys, pathlib, numpy as np, pandas as pd
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
 from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
 from joblib import dump
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
@@ -139,6 +140,19 @@ def test_qda_accepts_params_and_grid():
     gs = GridSearchCV(pipe, grid, cv=2)
     gs.fit(X, y)
     assert gs.best_params_["clf__reg_param"] in [0.0, 0.1]
+
+
+def test_gaussian_nb_model_with_default_grid():
+    X = np.random.RandomState(0).randn(20, 5)
+    y = (np.arange(20) % 2).astype(int)
+    cfg = {"models": [{"name": "NB"}]}
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "NB"
+    assert isinstance(pipe.named_steps["clf"], GaussianNB)
+    assert "clf__var_smoothing" in grid
+    gs = GridSearchCV(pipe, grid, cv=2)
+    gs.fit(X, y)
+    assert gs.best_params_["clf__var_smoothing"] in [1e-09]
 
 
 def test_estimator_without_proba_is_calibrated(monkeypatch):
