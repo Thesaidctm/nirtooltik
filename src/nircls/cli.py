@@ -29,6 +29,41 @@ from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id
 from .config_schema import ConfigModel, ValidationError
 
+# Human-friendly names for interactive wizard choices
+MODEL_DESCRIPTIONS = {
+    "PLSDA": "Partial Least Squares Discriminant Analysis",
+    "SVM_RBF": "Support Vector Machine (RBF)",
+    "SVM_LINEAR": "Support Vector Machine (Linear)",
+    "RF": "Random Forest",
+    "GB": "Gradient Boosting",
+    "ET": "Extra Trees",
+    "ADABOOST": "AdaBoost",
+    "LOGREG": "Logistic Regression",
+    "QDA": "Quadratic Discriminant Analysis",
+    "XGBOOST": "XGBoost",
+    "LGBM": "LightGBM",
+    "CATBOOST": "CatBoost",
+    "MLP": "Multilayer Perceptron",
+    "DT": "Decision Tree",
+    "KNN": "k-Nearest Neighbors",
+    "CNN1D": "1D Convolutional Neural Network",
+    "LSTM1D": "1D LSTM Network",
+    "GAUSSIANNB": "Gaussian Naive Bayes",
+    "NB": "Gaussian Naive Bayes",
+    "MULTINB": "Multinomial Naive Bayes",
+    "BERNOULLINB": "Bernoulli Naive Bayes",
+}
+
+PREPROCESS_DESCRIPTIONS = {
+    "SNV": "Standard Normal Variate",
+    "MSC": "Multiplicative Scatter Correction",
+    "DETREND": "Polynomial Detrend",
+    "SG": "Savitzky-Golay Filter",
+    "EMSC": "Extended MSC",
+    "EPO": "External Parameter Orthogonalization",
+    "SCALE": "Standard Scaling",
+}
+
 
 def _print_metrics_table(metrics_json: Path) -> None:
     """Print a compact table with mean ± std metrics."""
@@ -300,28 +335,65 @@ def main(argv=None):
             _print_metrics_table(metrics_path)
         print(f"Resultados de cross-val em: {cv_dir}")
     elif args.cmd == "wizard":
-        input_path = input("Caminho dos dados: ").strip()
-        target = input("Coluna alvo: ").strip()
-        models_raw = input(
-            "Modelos (separados por vírgula, ex: RF,SVM_RBF): "
-        ).strip()
+        try:  # pragma: no cover - interactive session
+            import questionary
+            from questionary import Choice
+        except Exception:  # pragma: no cover - missing optional dependency
+            print(
+                "'questionary' não está instalado. Instale com `pip install questionary`.",
+                file=sys.stderr,
+            )
+            return 1
+
+        from typing import Union
+
+        def _validate_path(p: str) -> Union[bool, str]:
+            return Path(p).exists() or "Arquivo não encontrado"
+
+        input_path = questionary.text(
+            "Caminho dos dados:", validate=_validate_path
+        ).ask()
+        target = questionary.text(
+            "Coluna alvo:", validate=lambda t: bool(t) or "Informe a coluna alvo"
+        ).ask()
+
+        from .models.factory import MODEL_BUILDERS
+
+        model_choices = [
+            Choice(title=f"{k} - {MODEL_DESCRIPTIONS.get(k, k)}", value=k)
+            for k in MODEL_BUILDERS.keys()
+        ]
+        selected_models = questionary.checkbox(
+            "Modelos:",
+            choices=model_choices,
+            validate=lambda m: bool(m) or "Selecione pelo menos um modelo",
+        ).ask()
+
         models_cfg = []
-        for name in models_raw.split(","):
-            name = name.strip()
-            if not name:
-                continue
-            params_raw = input(
-                f"Parâmetros para {name} (k=v, separados por vírgula, opcional): "
-            ).strip()
+        for name in selected_models:
+            params_raw = questionary.text(
+                f"Parâmetros para {name} (k=v, separados por vírgula, opcional):"
+            ).ask()
             model_entry: dict[str, Any] = {"name": name}
             if params_raw:
                 params = _parse_params(params_raw)
                 if params:
                     model_entry["params"] = params
             models_cfg.append(model_entry)
-        out_dir_str = input(
-            "Diretório para salvar config.yaml (padrão: .): "
-        ).strip() or "."
+
+        pre_choices = [
+            Choice(title=f"{k} - {v}", value=k) for k, v in PREPROCESS_DESCRIPTIONS.items()
+        ]
+        preprocess_steps = questionary.checkbox(
+            "Pré-processadores:", choices=pre_choices
+        ).ask()
+
+        out_dir_str = (
+            questionary.text(
+                "Diretório para salvar config.yaml (padrão: .):", default="."
+            ).ask()
+            or "."
+        )
         out_path = Path(out_dir_str)
         out_path.mkdir(parents=True, exist_ok=True)
         cfg_dict = {
@@ -329,12 +401,16 @@ def main(argv=None):
             "models": models_cfg,
             "cv": {"strategies": [{"type": "holdout", "test_size": 0.2}]},
         }
+        if preprocess_steps:
+            cfg_dict["preprocess"] = {"steps": preprocess_steps}
         cfg_file = out_path / "config.yaml"
         with open(cfg_file, "w") as f:
             yaml.safe_dump(cfg_dict, f)
         print(f"Configuração salva em: {cfg_file}")
-        run_now = input("Iniciar treino e avaliação agora? (s/n): ").strip().lower()
-        if run_now.startswith("s"):
+        run_now = questionary.confirm(
+            "Iniciar treino e avaliação agora?"
+        ).ask()
+        if run_now:
             cfg_obj = ConfigModel(**cfg_dict)
             run_id = make_run_id("wizard")
             base_dir = Path(cfg_obj.data.out_dir or "results") / run_id
