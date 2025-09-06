@@ -1,0 +1,19 @@
+data:
+  input_path: data/demo.csv
+  target_cols: [target]
+  out_dir: results
+
+preprocess:
+  steps: [SNV]
+
+models:
+  - name: PLSDA
+    grid: {n_components: [2]}
+
+cv:
+  random_state: 0
+  inner_folds: 2
+  strategies:
+    - type: kfold
+      n_splits: [2]
+      n_repeats: 1

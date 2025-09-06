@@ -77,6 +77,9 @@ cv:
 O comando principal é `nircls` e suporta várias sub‑rotinas:
 
 ```bash
+# Execução de demonstração com dados de exemplo
+nircls demo
+
 # Validação cruzada/k-fold
 nircls crossval --config experimento.yml
 
