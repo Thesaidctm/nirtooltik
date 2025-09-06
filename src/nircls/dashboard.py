@@ -7,12 +7,14 @@ import argparse
 import json
 import tempfile
 from datetime import datetime
+import copy
 
 import pandas as pd
+import yaml
 
 from .io import prepare_inputs
 from .pipeline import train_and_save, run_multiple_eval, predict_with_model
-from .models.factory import MODEL_BUILDERS
+from .models.factory import MODEL_BUILDERS, DEFAULT_GRIDS
 from . import DEFAULT_RESULTS_DIR
 
 
@@ -52,8 +54,8 @@ def _render_dashboard(results_dir: Path) -> None:
     st.set_page_config(page_title="nircls Dashboard")
     st.title("nircls Dashboard")
 
-    tab_prep, tab_train, tab_eval = st.tabs(
-        ["Preparar Dados", "Treinar", "Avaliar"]
+    tab_prep, tab_train, tab_eval, tab_cfg = st.tabs(
+        ["Preparar Dados", "Treinar", "Avaliar", "Gerar Configuração"]
     )
 
     # ------------------------------------------------------------------
@@ -223,6 +225,85 @@ def _render_dashboard(results_dir: Path) -> None:
             progress.progress(100)
             status.write("Concluído!")
             st.success(f"Arquivo predictions.csv em {out_dir}")
+
+
+    # ------------------------------------------------------------------
+    # Gerar Configuração
+    # ------------------------------------------------------------------
+    with tab_cfg:
+        st.header("Gerar Configuração")
+        cfg_dir = Path(__file__).resolve().parents[2] / "configs"
+        templates = {
+            p.name: yaml.safe_load(p.read_text()) for p in cfg_dir.glob("*.yaml")
+        }
+        tpl_name = st.selectbox(
+            "Template", ["<vazio>"] + sorted(templates.keys())
+        )
+        tpl_cfg = copy.deepcopy(templates.get(tpl_name, {}))
+        data_cfg = tpl_cfg.get("data", {})
+        model_cfg = tpl_cfg.get("models", [{}])[0]
+        pre_cfg = tpl_cfg.get("preprocess", {})
+        with st.form("config_form"):
+            upload = st.file_uploader(
+                "Arquivo de dados (Excel)", type=["xlsx", "xls"], key="cfg_file"
+            )
+            x_sheet = st.text_input(
+                "Planilha X", value=data_cfg.get("x_sheet", "X")
+            )
+            y_sheet = st.text_input(
+                "Planilha Y", value=data_cfg.get("y_sheet", "Y")
+            )
+            pre_opts = ["SNV", "MSC", "DETREND", "SG", "EMSC", "EPO", "SCALE"]
+            pre_sel = st.multiselect(
+                "Pré-processadores", pre_opts, default=pre_cfg.get("steps", [])
+            )
+            model_names = sorted(MODEL_BUILDERS.keys())
+            default_model = model_cfg.get("name", model_names[0])
+            model_idx = (
+                model_names.index(default_model)
+                if default_model in model_names
+                else 0
+            )
+            model_name = st.selectbox("Modelo", model_names, index=model_idx)
+            default_grid = model_cfg.get(
+                "grid", DEFAULT_GRIDS.get(model_name.upper(), {})
+            )
+            grid_text = st.text_input(
+                "Hiperparâmetros (JSON)", value=json.dumps(default_grid)
+            )
+            submit_cfg = st.form_submit_button("Salvar config")
+
+        if submit_cfg:
+            if upload is None:
+                st.error("Envie um arquivo de dados.")
+            else:
+                try:
+                    grid = json.loads(grid_text) if grid_text.strip() else {}
+                except Exception:
+                    st.error("Grid de parâmetros inválido. Use JSON.")
+                    grid = {}
+                run_id = datetime.now().strftime("cfg_%Y%m%d_%H%M%S")
+                out_dir = results_dir / run_id
+                out_dir.mkdir(parents=True, exist_ok=True)
+                data_path = out_dir / upload.name
+                data_path.write_bytes(upload.getbuffer())
+                cfg = copy.deepcopy(tpl_cfg)
+                cfg.setdefault("data", {})
+                cfg["data"].update(
+                    {
+                        "input_path": data_path.as_posix(),
+                        "x_sheet": x_sheet,
+                        "y_sheet": y_sheet,
+                    }
+                )
+                pre_cfg = cfg.get("preprocess", {})
+                pre_cfg["steps"] = pre_sel
+                cfg["preprocess"] = pre_cfg
+                cfg["models"] = [{"name": model_name, "grid": grid}]
+                config_file = out_dir / "config.yaml"
+                with config_file.open("w") as f:
+                    yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
+                st.success(f"Configuração salva em {config_file}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,15 @@
+data:
+  input_path: data/raw/data.xlsx
+  x_sheet: X
+  y_sheet: Y
+  target_cols: all
+  spectral_range: null
+  drop_nans: true
+  out_dir: results
+
+preprocess:
+  steps: [SNV]
+
+models:
+  - name: PLSDA
+    grid: {n_components: [5]}
