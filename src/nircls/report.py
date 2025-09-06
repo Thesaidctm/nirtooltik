@@ -2,7 +2,6 @@ from __future__ import annotations
 from pathlib import Path
 import json
 import os
-from typing import List
 
 import pandas as pd
 
@@ -69,6 +68,37 @@ def generate_ai_summary(metrics_path: Path, model: str) -> str:
     return response["choices"][0]["message"]["content"].strip()
 
 
+def markdown_to_pdf(md_text: str, out_file: Path) -> None:
+    """Convert Markdown text to a PDF file.
+
+    The function first converts the markdown to HTML using the ``markdown``
+    package and then tries to render the HTML to PDF using ``weasyprint``. If
+    ``weasyprint`` is unavailable, it falls back to ``pdfkit``, which requires
+    the external ``wkhtmltopdf`` binary.
+    """
+
+    try:
+        from markdown import markdown
+    except Exception as e:  # pragma: no cover - optional dependency
+        raise RuntimeError("markdown package is required for PDF export") from e
+
+    html = markdown(md_text)
+
+    try:  # pragma: no cover - optional dependency
+        from weasyprint import HTML  # type: ignore
+
+        HTML(string=html).write_pdf(str(out_file))
+    except Exception:
+        try:
+            import pdfkit  # type: ignore
+
+            pdfkit.from_string(html, str(out_file))
+        except Exception as e:
+            raise RuntimeError(
+                "Install weasyprint or pdfkit with wkhtmltopdf for PDF export"
+            ) from e
+
+
 def generate_report(
     metrics_json: Path,
     figures_dir: Path,
@@ -94,6 +124,13 @@ def generate_report(
         ChatGPT model to use when ``use_chatgpt`` is ``True``.
     api_key : str, optional
         OpenAI API key. Falls back to ``OPENAI_API_KEY`` environment variable.
+
+    Notes
+    -----
+    When ``out_file`` ends with ``.pdf`` the markdown content is converted to HTML
+    and then rendered to PDF using :func:`markdown_to_pdf`. This requires the
+    ``markdown`` package and either ``weasyprint`` (recommended) or ``pdfkit``
+    with the ``wkhtmltopdf`` binary installed.
     """
     metrics_json = Path(metrics_json)
     figures_dir = Path(figures_dir)
@@ -161,42 +198,12 @@ def generate_report(
             pass
     elif suffix == ".pdf":
         try:
-            from reportlab.platypus import (
-                SimpleDocTemplate,
-                Paragraph,
-                Spacer,
-                Image as RLImage,
-                Table as RLTable,
-            )
-            from reportlab.lib.styles import getSampleStyleSheet
-            from reportlab.lib import utils
-        except Exception as e:
-            raise RuntimeError("reportlab is required for PDF export") from e
+            from markdown import markdown as md_to_html
+        except Exception as e:  # pragma: no cover - optional dependency
+            raise RuntimeError("markdown package is required for PDF export") from e
 
-        doc = SimpleDocTemplate(str(out_file))
-        styles = getSampleStyleSheet()
-        elements: List = []
-        elements.append(Paragraph("Evaluation Report", styles["Title"]))
-        if ai_md:
-            elements.append(Paragraph("Resumo AI", styles["Heading2"]))
-            elements.append(Paragraph(ai_text, styles["BodyText"]))
-            elements.append(Spacer(1, 12))
-        elements.append(Paragraph("Metrics", styles["Heading2"]))
-        table_data = [table_df.columns.tolist()] + table_df.values.tolist()
-        elements.append(RLTable(table_data))
-        elements.append(Spacer(1, 12))
-        if figs:
-            elements.append(Paragraph("Figures", styles["Heading2"]))
-            for fig in figs:
-                try:
-                    img = utils.ImageReader(str(fig))
-                    iw, ih = img.getSize()
-                    width = 400
-                    height = ih * (width / iw)
-                    elements.append(RLImage(str(fig), width=width, height=height))
-                    elements.append(Spacer(1, 12))
-                except Exception:
-                    continue
-        doc.build(elements)
+        html = md_to_html(md)
+        out_file.with_suffix(".html").write_text(html)
+        markdown_to_pdf(md, out_file)
     else:
         raise ValueError("Unsupported output format. Use .md or .pdf")

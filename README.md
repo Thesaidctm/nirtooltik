@@ -30,6 +30,11 @@ pip install -e .
 Principais dependências: `numpy`, `pandas`, `scikit-learn`, `scipy`, `matplotlib`,
 `seaborn`, `pyyaml`, `rich`, `joblib`, `openpyxl` e `tqdm`.
 
+Para exportar relatórios em PDF é necessário instalar dependências extras:
+
+* `markdown` e `weasyprint` (recomendado), ou
+* `markdown` e `pdfkit`, juntamente com o executável `wkhtmltopdf`.
+
 ## Configuração via YAML
 
 Os experimentos são definidos em arquivos YAML. Exemplo simplificado:
