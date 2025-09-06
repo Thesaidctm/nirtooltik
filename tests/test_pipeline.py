@@ -75,6 +75,30 @@ def test_end_to_end_cv_and_export(tmp_path):
     assert (train_dir / "classes.json").exists()
 
 
+def test_pipeline_runs_with_spxy_cv_method(tmp_path):
+    rng = np.random.RandomState(0)
+    X = rng.rand(12, 4)
+    y = np.array(["A"] * 6 + ["B"] * 6)
+    df = pd.DataFrame(X, columns=[str(i) for i in range(4)])
+    df["target"] = y
+    data_file = tmp_path / "data.csv"
+    df.to_csv(data_file, index=False)
+
+    cfg = {
+        "data": {"input_path": str(data_file), "target_cols": ["target"]},
+        "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
+        "cv": {
+            "cv_method": "spxy",
+            "random_state": 0,
+            "strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}],
+        },
+    }
+
+    out_dir = tmp_path / "cv_spxy"
+    run_multiple_eval(cfg, out_dir)
+    assert (out_dir / "kfold_2" / "metrics_summary.xlsx").exists()
+
+
 def test_prepare_inputs_with_multiple_targets(tmp_path):
     rng = np.random.RandomState(0)
     X = rng.rand(10, 4)
