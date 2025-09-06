@@ -535,6 +535,7 @@ def run_multiple_eval(
     cfg: Dict[str, Any],
     out_dir: Path,
     *,
+    random_state: int = 42,
     interactive: bool = False,
 ) -> List[Tuple[Path, Path]]:
     """Run evaluation for multiple cross-validation strategies.
@@ -556,7 +557,7 @@ def run_multiple_eval(
 
     _validate_cfg(cfg, need_data=True, need_cv=True, need_models=True)
     strategies = cfg.get("cv", {}).get("strategies", [])
-    random_state = cfg.get("cv", {}).get("random_state", 42)
+    random_state = cfg.get("cv", {}).get("random_state", random_state)
     outputs: List[Tuple[Path, Path]] = []
     with Progress() as progress:
         strat_task = progress.add_task(
@@ -618,6 +619,7 @@ def train_and_save(
     cfg: Dict[str, Any],
     out_dir: Path,
     *,
+    random_state: int = 42,
     interactive: bool = False,
 ) -> Tuple[Optional[str], Optional[Path], Optional[Path]]:
     """Train final model and persist artefacts.
@@ -655,7 +657,9 @@ def train_and_save(
                 pipe,
                 grid,
                 scoring="f1_macro",
-                cv=RepeatedStratifiedKFold(n_splits=5, n_repeats=1, random_state=42),
+                cv=RepeatedStratifiedKFold(
+                    n_splits=5, n_repeats=1, random_state=random_state
+                ),
                 n_jobs=-1,
             )
             gs.fit(X.values, y_enc)
