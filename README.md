@@ -111,6 +111,9 @@ produzidos:
 * `report.md` – relatório em Markdown com tabelas e figuras;
 * `figures/` – gráficos de curva ROC, matriz de confusão e confiabilidade.
 
+O relatório é gerado inteiramente de forma local, sem qualquer integração com
+serviços externos ou APIs.
+
 ## Métricas de calibração e validação
 
 Os arquivos de métricas contêm resultados para calibração (dados de treino) e
