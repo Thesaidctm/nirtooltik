@@ -37,53 +37,45 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
             out_base.with_suffix(".html").write_text("")
 
 
-def plot_confusion(
-    cm, classes, out_base: Path, normalize: bool = False, interactive: bool = False
-) -> None:
-    """Plot confusion matrix using Plotly.
 
-    Parameters
-    ----------
-    cm : array-like
-        Confusion matrix values.
-    classes : list-like
-        Class labels for axes.
-    out_base : Path
-        Base path (without suffix) for output files.
-    normalize : bool, optional
-        Whether to normalise the confusion matrix before plotting.
-    interactive : bool, optional
-        If ``True``, also export an interactive HTML figure.
+def plot_confusion(cm, classes, out_base: Path, interactive: bool = False) -> None:
+    """Plot and export confusion matrices in raw and normalised forms.
+
+    The generated heatmaps include labels showing both the percentage and raw
+    count for each cell (``"{percent:.1%}\n(n={count})"``) and are saved with
+    ``*_raw`` and ``*_norm`` suffixes.
     """
 
-    if normalize:
-        cmn = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-12)
-        text = np.round(cmn, 2)
-    else:
-        cmn = cm
-        text = cm
+    cm = np.asarray(cm)
+    cm_percent = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-12)
+    labels = np.vectorize(lambda p, c: f"{p:.1%}\n(n={c})")(cm_percent, cm)
 
-    heatmap = go.Heatmap(
-        z=cmn,
-        x=classes,
-        y=classes,
-        text=text,
-        texttemplate="%{text}",
-        colorscale="Viridis",
-        colorbar=dict(
-            title="Taxa de acerto normalizada"
-            if normalize
-            else "Número de indivíduos"
-        ),
+    def _single(z, title, suffix, colorbar_title):
+        heatmap = go.Heatmap(
+            z=z,
+            x=classes,
+            y=classes,
+            text=labels,
+            texttemplate="%{text}",
+            colorscale="Viridis",
+            colorbar=dict(title=colorbar_title),
+        )
+        fig = go.Figure(data=[heatmap])
+        fig.update_xaxes(tickangle=45)
+        fig.update_layout(
+            title=title,
+            xaxis_title="Pred",
+            yaxis_title="True",
+        )
+        _export(fig, out_base.with_name(out_base.name + suffix), interactive)
+
+    _single(
+        cm_percent,
+        "Confusion Matrix (normalized)",
+        "_norm",
+        "Taxa de acerto normalizada",
     )
-    fig = go.Figure(data=[heatmap])
-    fig.update_xaxes(tickangle=45)
-    fig.update_layout(
-        title="Confusion Matrix (normalized)" if normalize else "Confusion Matrix",
-        xaxis_title="Pred",
-        yaxis_title="True",
-    )
-    _export(fig, out_base, interactive)
+    _single(cm, "Confusion Matrix", "_raw", "Número de indivíduos")
 
 
 def plot_roc_ovr(
