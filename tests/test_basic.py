@@ -119,6 +119,28 @@ def test_knn_model_with_grid():
     gs.fit(X, y)
 
 
+def test_qda_accepts_params_and_grid():
+    X = np.random.RandomState(0).randn(20, 5)
+    y = (np.arange(20) % 2).astype(int)
+    cfg = {
+        "preprocess": {"steps": []},
+        "models": [
+            {
+                "name": "QDA",
+                "params": {"reg_param": 0.1},
+                "grid": {"reg_param": [0.0, 0.1]},
+            }
+        ],
+    }
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "QDA"
+    assert pipe.named_steps["clf"].reg_param == 0.1
+    assert "clf__reg_param" in grid
+    gs = GridSearchCV(pipe, grid, cv=2)
+    gs.fit(X, y)
+    assert gs.best_params_["clf__reg_param"] in [0.0, 0.1]
+
+
 def test_estimator_without_proba_is_calibrated(monkeypatch):
     from sklearn.base import BaseEstimator, ClassifierMixin
     from sklearn.calibration import CalibratedClassifierCV
