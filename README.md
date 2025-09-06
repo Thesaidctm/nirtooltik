@@ -29,6 +29,12 @@ instale no ambiente atual:
 pip install -e .
 ```
 
+Para uma instalação reprodutível, utilize:
+
+```bash
+pip install -r requirements-lock.txt
+```
+
 Principais dependências: `numpy`, `pandas`, `scikit-learn`, `scipy`, `matplotlib`,
 `seaborn`, `pyyaml`, `rich`, `joblib`, `openpyxl` e `tqdm`.
 
