@@ -6,10 +6,12 @@ from contextlib import nullcontext
 import warnings
 import json
 import sys
+import subprocess
 from glob import glob
 import numpy as np
 import pandas as pd
 import sklearn
+import yaml
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from rich.progress import Progress
@@ -94,6 +96,30 @@ def _validate_cfg(
             "Seção 'cv' é obrigatória. Defina ao menos uma estratégia de validação."
         )
     return model
+
+
+def save_run_metadata(cfg: Dict[str, Any], out_dir: Path) -> None:
+    """Persist experiment configuration and environment details."""
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    try:  # pragma: no cover - best effort
+        with open(out_dir / "config.yaml", "w") as f:
+            yaml.safe_dump(cfg, f)
+    except Exception:  # pragma: no cover
+        logger.debug("Could not save config.yaml", exc_info=True)
+
+    log_versions()
+    try:  # pragma: no cover - best effort
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "freeze"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        (out_dir / "env.txt").write_text(result.stdout)
+    except Exception:  # pragma: no cover
+        logger.debug("Could not save env.txt", exc_info=True)
 
 
 def prepare_inputs(cfg: Dict[str, Any], *, use_cache: bool = True) -> List[Dict[str, Any]]:
@@ -739,9 +765,7 @@ def run_multiple_eval(
                     "cv_method": cv_method,
                 }
             )
-
-        # log and persist environment metadata for reproducibility
-        log_versions()
+        save_run_metadata(cfg, out_dir)
         files = [Path(p) for p in glob(cfg["data"]["input_path"])]
         input_hashes = {f.as_posix(): file_hash(f) for f in files}
         metadata = {
@@ -932,12 +956,12 @@ def train_and_save(
             y_enc = le.transform(y)
             # persist class labels for later use in predictions
             out_dir.mkdir(parents=True, exist_ok=True)
+            save_run_metadata(cfg, out_dir)
             with open(out_dir / "classes.json", "w") as f:
                 json.dump(le.classes_.tolist(), f)
             progress.update(load_task, completed=1)
 
-            # log and persist environment metadata
-            log_versions()
+            # persist environment metadata
             input_hashes = {}
             if Path(ds["file"]).exists():
                 input_hashes[ds["file"]] = file_hash(ds["file"])
