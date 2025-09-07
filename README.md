@@ -372,6 +372,8 @@ Execute os comandos do `nircls` apontando para o URI do servidor:
 
 ```bash
 nircls train --config experimento.yml --mlflow http://localhost:5000
+# ou rode validação cruzada
+nircls crossval --config experimento.yml --mlflow http://localhost:5000
 ```
 
 Abra `http://localhost:5000` no navegador para consultar o histórico de
