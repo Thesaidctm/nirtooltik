@@ -1,4 +1,4 @@
-# nircls — NIR Species Classification Toolkit
+# NIRCLS — NIR Species Classification Toolkit
 Autor: Thalles Loiola Dias | PPGCTM | UFLA |
 
 ## Introdução
