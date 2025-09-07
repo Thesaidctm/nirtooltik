@@ -104,6 +104,16 @@ cv:
       n_splits: [5]
 ```
 
+Para carregar múltiplos arquivos de uma pasta, utilize um padrão
+glob. Por exemplo, para ler todos os arquivos Excel em
+`data/RAW/`, configure:
+
+```yaml
+data:
+  input_path: data/RAW/*.xlsx
+  target_col: especie
+```
+
 * `preprocess.steps` lista os transformadores aplicados antes do classificador.
   Alguns pré-processos como `SG` aceitam parâmetros (janela, ordem do polinômio,
   derivada) que podem ser fixos ou listas para busca em grade.
@@ -132,7 +142,11 @@ cv:
 ### Chaves suportadas
 
 #### data
-- **input_path** (`str`): caminho ou padrão glob para arquivos de entrada.
+- **input_path** (`str`): caminho para arquivo ou padrão glob de arquivos de
+  entrada. Exemplos:
+  `data/dados.xlsx` ou `data/RAW/*.xlsx` para múltiplos arquivos. Diretórios
+  simples não são aceitos; se um diretório for informado, o `nircls` emitirá
+  `DataError: Caminho(s) inválido(s)`.
 - **x_sheet** (`str`, padrão `"X"`): nome da planilha com os espectros.
 - **y_sheet** (`str`, padrão `"Y"`): nome da planilha com as classes.
 - **target_cols** (`list[str]` | `str`): colunas alvo ou `"all"`. A chave
@@ -403,6 +417,9 @@ coluna `y_true`.
 * **Arquivo de configuração não encontrado** – verifique o caminho informado na opção `--config`.
 * **Coluna alvo ausente** – confirme se a planilha contém a coluna especificada em `data.target_cols`.
 * **Arquivo de dados não encontrado** – confira o valor de `data.input_path` no YAML.
+* **Diretório informado em `data.input_path`** – a chave deve apontar para
+  arquivos ou padrões glob (ex.: `data/RAW/*.xlsx`). Passar um diretório simples
+  gera `DataError: Caminho(s) inválido(s)`.
 * **Modelo incompatível** – utilize um nome de modelo suportado e revise os parâmetros.
 
 ## Extensões e contribuições
