@@ -32,31 +32,10 @@ from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id, set_seed, RAW_DIR, RESULTS_DIR, now_ts
 from .config_schema import ConfigModel, ValidationError
 from .utils.errors import DataError, ModelError
+from .models.factory import get_model_builders, get_model_descriptions
 
 # Human-friendly names for interactive wizard choices
-MODEL_DESCRIPTIONS = {
-    "PLSDA": "Partial Least Squares Discriminant Analysis",
-    "SVM_RBF": "Support Vector Machine (RBF)",
-    "SVM_LINEAR": "Support Vector Machine (Linear)",
-    "RF": "Random Forest",
-    "GB": "Gradient Boosting",
-    "ET": "Extra Trees",
-    "ADABOOST": "AdaBoost",
-    "LOGREG": "Logistic Regression",
-    "QDA": "Quadratic Discriminant Analysis",
-    "XGBOOST": "XGBoost",
-    "LGBM": "LightGBM",
-    "CATBOOST": "CatBoost",
-    "MLP": "Multilayer Perceptron",
-    "DT": "Decision Tree",
-    "KNN": "k-Nearest Neighbors",
-    "CNN1D": "1D Convolutional Neural Network",
-    "LSTM1D": "1D LSTM Network",
-    "GAUSSIANNB": "Gaussian Naive Bayes",
-    "NB": "Gaussian Naive Bayes",
-    "MULTINB": "Multinomial Naive Bayes",
-    "BERNOULLINB": "Bernoulli Naive Bayes",
-}
+MODEL_DESCRIPTIONS = get_model_descriptions()
 
 PREPROCESS_DESCRIPTIONS = {
     "SNV": "Standard Normal Variate",
@@ -80,6 +59,7 @@ STRINGS = {
         "run_all_help": "Process raw data and run training + evaluation with defaults",
         "run_all_config_help": "Configuration file to override defaults",
         "dashboard_results_help": "Folder with results",
+        "models_help": "List available model builders",
         "mlflow_not_installed": "'mlflow' is not installed. Install with `pip install mlflow`.",
         "config_not_found": "Configuration file not found. Check the provided path.",
         "invalid_config": "Invalid configuration: {err}. Review required fields.",
@@ -126,6 +106,7 @@ STRINGS = {
         "run_all_help": "Processa dados brutos e executa treino+avaliação com padrões",
         "run_all_config_help": "Arquivo de configuração para sobrescrever parâmetros padrão",
         "dashboard_results_help": "Pasta com resultados",
+        "models_help": "Listar modelos disponíveis",
         "mlflow_not_installed": "'mlflow' não está instalado. Instale com `pip install mlflow`.",
         "config_not_found": "Arquivo de configuração não encontrado. Verifique o caminho informado.",
         "invalid_config": "Configuração inválida: {err}. Revise os campos obrigatórios.",
@@ -311,6 +292,7 @@ def main(argv=None):
         help=t("astm_help"),
     )
     p_demo = sp.add_parser("demo")
+    sp.add_parser("list-models", help=t("models_help"))
     p_all = sp.add_parser("run-all", help=t("run_all_help"))
     p_all.add_argument("--config", help=t("run_all_config_help"))
     p_wz = sp.add_parser("wizard")
@@ -341,6 +323,12 @@ def main(argv=None):
             print(t("mlflow_not_installed"), file=sys.stderr)
             return 1
         mlflow.set_tracking_uri(mlflow_uri)
+    if args.cmd == "list-models":
+        builders = get_model_builders()
+        descs = get_model_descriptions()
+        for name in sorted(builders.keys()):
+            print(f"{name}: {descs.get(name, name)}")
+        return 0
     if args.cmd in {"prepare-data", "train", "crossval"}:
         try:
             with open(args.config) as f:
@@ -612,11 +600,10 @@ def main(argv=None):
             t("wizard_target_col"), validate=lambda t: bool(t) or t("wizard_target_required")
         ).ask()
 
-        from .models.factory import MODEL_BUILDERS
-
+        builders = get_model_builders()
         model_choices = [
             Choice(title=f"{k} - {MODEL_DESCRIPTIONS.get(k, k)}", value=k)
-            for k in MODEL_BUILDERS.keys()
+            for k in builders.keys()
         ]
         selected_models = questionary.checkbox(
             t("wizard_models"),

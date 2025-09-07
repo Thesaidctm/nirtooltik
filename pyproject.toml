@@ -42,6 +42,9 @@ shap = ["shap"]
 nircls = "nircls.cli:main"
 nircls-dashboard = "nircls.dashboard:main"
 
+[project.entry-points."nircls.model_builders"]
+# Third-party packages can register their builders here
+
 [tool.setuptools.package-data]
 nircls = ["run_dashboard.sh", "run_dashboard.bat"]
 
