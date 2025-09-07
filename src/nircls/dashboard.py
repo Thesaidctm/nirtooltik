@@ -6,39 +6,12 @@ import subprocess
 import sys
 import argparse
 import json
-import re
 import webbrowser
 
 import pandas as pd
-import plotly.graph_objects as go
+import plotly.io as pio
 
 from .utils.misc import RESULTS_DIR
-
-
-def _load_plotly_html(path: Path) -> go.Figure | None:
-    """Return a Plotly figure reconstructed from an HTML file.
-
-    Parameters
-    ----------
-    path:
-        Path to the HTML file produced by ``fig.write_html``.
-    """
-
-    try:
-        html = path.read_text(encoding="utf-8")
-        match = re.search(
-            r"Plotly.newPlot\(\"[^\"]+\",\s*(\[.*?\]),\s*(\{.*?\})",
-            html,
-            re.S,
-        )
-        if not match:
-            return None
-        data = json.loads(match.group(1))
-        layout = json.loads(match.group(2))
-        return go.Figure(data=data, layout=layout)
-    except Exception:
-        return None
-
 
 def _figure_caption(stem: str) -> str:
     """Map figure filename stems to human-friendly captions."""
@@ -114,16 +87,22 @@ def _render_dashboard(results_dir: Path) -> None:
         bases = {
             p.with_suffix("")
             for p in fig_dir.glob("*")
-            if p.suffix in {".png", ".html"}
+            if p.suffix in {".png", ".json"}
         }
         for base in sorted(bases):
-            html_file = base.with_suffix(".html")
+            json_file = base.with_suffix(".json")
             png_file = base.with_suffix(".png")
             caption = _figure_caption(base.name)
-            fig = _load_plotly_html(html_file) if html_file.exists() else None
-            if fig is not None:
-                st.plotly_chart(fig, use_container_width=True)
-                st.caption(caption)
+            if json_file.exists():
+                try:
+                    fig = pio.from_json(json_file.read_text())
+                except Exception:
+                    fig = None
+                if fig is not None:
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.caption(caption)
+                elif png_file.exists():
+                    st.image(str(png_file), caption=caption)
             elif png_file.exists():
                 st.image(str(png_file), caption=caption)
             if png_file.exists():
