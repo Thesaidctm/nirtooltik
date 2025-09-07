@@ -31,7 +31,8 @@ lightgbm = ["lightgbm"]
 catboost = ["catboost"]
 torch = ["torch"]
 questionary = ["questionary"]
-tracking = ["mlflow"]
+dvc = ["dvc"]
+tracking = ["mlflow", "dvc"]
 
 [project.scripts]
 nircls = "nircls.cli:main"

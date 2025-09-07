@@ -1,0 +1,51 @@
+schema: '2.0'
+stages:
+  prepare_inputs:
+    cmd: PYTHONPATH=src python scripts/dvc_prepare.py configs/demo.yaml 
+      data/prepared/demo.xlsx
+    deps:
+    - path: configs/demo.yaml
+      hash: md5
+      md5: fa617e3989964fa67e7b5bb67bf3d3e8
+      size: 271
+    - path: data/demo.csv
+      hash: md5
+      md5: bd5c90619dcee0f18b4c706960121185
+      size: 2000
+    - path: scripts/dvc_prepare.py
+      hash: md5
+      md5: 3f2314e4c2fbd94954b192a0aeca75a6
+      size: 628
+      isexec: true
+    outs:
+    - path: data/prepared/demo.xlsx
+      hash: md5
+      md5: 988ee571f868b3dd98f4a3a5762a4a1a
+      size: 6935
+  train_and_save:
+    cmd: PYTHONPATH=src python scripts/dvc_train.py configs/demo.yaml 
+      results/model
+    deps:
+    - path: configs/demo.yaml
+      hash: md5
+      md5: fa617e3989964fa67e7b5bb67bf3d3e8
+      size: 271
+    - path: data/demo.csv
+      hash: md5
+      md5: bd5c90619dcee0f18b4c706960121185
+      size: 2000
+    - path: data/prepared/demo.xlsx
+      hash: md5
+      md5: 988ee571f868b3dd98f4a3a5762a4a1a
+      size: 6935
+    - path: scripts/dvc_train.py
+      hash: md5
+      md5: f8d2d8e92a4aaaea7a751b09ab276bc9
+      size: 508
+      isexec: true
+    outs:
+    - path: results/model
+      hash: md5
+      md5: 6bf71b295915ddfa96661341fb054556.dir
+      size: 18026
+      nfiles: 21

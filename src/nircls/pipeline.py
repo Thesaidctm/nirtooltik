@@ -1000,6 +1000,14 @@ def train_and_save(
                 out_dir / "report.md",
             )
             if mlflow_uri:
+                try:
+                    from dvc.api import DVCFileSystem
+
+                    fs = DVCFileSystem()
+                    info = fs.info(ds["file"])
+                    mlflow.log_param("dvc_data_md5", info.get("md5"))
+                except Exception:  # pragma: no cover - best effort
+                    logger.debug("Could not log DVC metadata", exc_info=True)
                 params = {
                     "model": name,
                     "preprocess_steps": ",".join(steps_cfg),
