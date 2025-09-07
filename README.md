@@ -302,7 +302,10 @@ produzidos:
 O relatório é gerado inteiramente de forma local, sem qualquer integração com
 serviços externos ou APIs. O `report.md` contém um cabeçalho YAML com título e
 data do experimento, permitindo compartilhamento e citação direta em artigos ou
-repositórios.
+repositórios. Para distribuir os resultados, basta enviar o `report.md` junto com
+a pasta `figures/` (que contém as imagens referenciadas no relatório) ou a
+versão PDF (`report.pdf`). O cabeçalho YAML traz título, data e versão do
+projeto, facilitando citações padronizadas.
 
 ## Métricas de calibração e validação
 
