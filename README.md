@@ -28,7 +28,8 @@ de uso da API.
 14. [Extensões e contribuições](#extensoes-e-contribuicoes)
 15. [Rastreamento com MLflow](#rastreamento-com-mlflow)
 16. [Testes](#testes)
-17. [Créditos/Autoria](#creditosautoria)
+17. [Docker](#docker)
+18. [Créditos/Autoria](#creditosautoria)
 
 ## Requisitos
 
@@ -403,6 +404,23 @@ Para rodar a suíte de testes utilize o [pytest](https://pytest.org):
 pytest
 ```
 
+
+
+## Docker
+
+Para construir a imagem:
+
+```bash
+docker build -t nircls .
+```
+
+Para iniciar o dashboard:
+
+```bash
+docker run -p 8501:8501 nircls
+```
+
+Opcionalmente, publique a imagem em um registro interno para facilitar a distribuição no laboratório.
 
 ## Créditos/Autoria
 
