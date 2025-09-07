@@ -1,9 +1,10 @@
 from __future__ import annotations
-from pathlib import Path
-import json
-import subprocess
-import shutil
+
 import datetime as dt
+import json
+import shutil
+import subprocess
+from pathlib import Path
 
 import pandas as pd
 
@@ -171,19 +172,34 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
             break
     best_model = None
     best_score = None
+    best_steps: list[str] | None = None
     if key_metric is not None:
         idx = df[key_metric].astype(float).idxmax()
         best_row = df.loc[idx]
         best_model = best_row.get("model")
         best_score = float(best_row[key_metric])
+        if "preprocess_steps" in best_row:
+            val = best_row["preprocess_steps"]
+            if isinstance(val, (list, tuple)):
+                best_steps = list(val)
+            elif pd.notna(val):
+                best_steps = [str(val)]
 
     data_cfg = cfg.get("data", {}) if isinstance(cfg, dict) else {}
     steps = cfg.get("preprocess", {}).get("steps", []) if isinstance(cfg, dict) else []
-    models = [m.get("name", "") for m in cfg.get("models", [])] if isinstance(cfg, dict) else []
+    models = (
+        [m.get("name", "") for m in cfg.get("models", [])]
+        if isinstance(cfg, dict)
+        else []
+    )
 
     lines = [
         "---",
-        f'title: "{cfg.get("title", "Scientific Report")}"' if isinstance(cfg, dict) else 'title: "Scientific Report"',
+        (
+            f'title: "{cfg.get("title", "Scientific Report")}"'
+            if isinstance(cfg, dict)
+            else 'title: "Scientific Report"'
+        ),
         f"date: {dt.date.today().isoformat()}",
         "---",
         "",
@@ -193,13 +209,21 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
     ]
     if best_model is not None and key_metric is not None and best_score is not None:
         metric_name = key_metric.replace("_mean", "")
-        lines.append(f"**Best model**: {best_model} ({metric_name}: {best_score:.3f})")
+        steps_str = f" ({', '.join(best_steps)})" if best_steps else ""
+        lines.append(
+            f"**Best model**: {best_model}{steps_str} ({metric_name}: {best_score:.3f})"
+        )
 
     lines.append("")
     summary_md = "\n".join(lines)
 
     # Metrics table
-    table_df = df[[c for c in ["file", "model"] if c in df.columns]].copy()
+    table_cols = [c for c in ["file", "model", "preprocess_steps"] if c in df.columns]
+    table_df = df[table_cols].copy()
+    if "preprocess_steps" in table_df.columns:
+        table_df["preprocess_steps"] = table_df["preprocess_steps"].apply(
+            lambda v: ", ".join(v) if isinstance(v, (list, tuple)) else str(v)
+        )
     for col in df.columns:
         if col.endswith("_mean"):
             base = col[:-5]
@@ -236,12 +260,15 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
     pdf_path = out_dir / "report.pdf"
     try:  # pragma: no cover - optional dependency
         if shutil.which("pandoc"):
-            subprocess.run([
-                "pandoc",
-                str(report_md),
-                "-o",
-                str(pdf_path),
-            ], check=True)
+            subprocess.run(
+                [
+                    "pandoc",
+                    str(report_md),
+                    "-o",
+                    str(pdf_path),
+                ],
+                check=True,
+            )
         else:
             markdown_to_pdf(md, pdf_path)
     except Exception:

@@ -265,16 +265,23 @@ def build_pipeline_from_config(
     return out
 
 
-def _save_metrics(rows: List[Dict[str, Any]], out_dir: Path) -> None:
+def _save_metrics(
+    rows: List[Dict[str, Any]],
+    out_dir: Path,
+    preprocess_steps: Sequence[str],
+) -> None:
     """Persist metrics to Excel and JSON files."""
 
+    for row in rows:
+        row["preprocess_steps"] = list(preprocess_steps)
     df = pd.DataFrame(rows)
 
-    # Validation metrics: drop training columns
-    val_df = df.loc[:, ~df.columns.str.startswith("train_")]
+    id_cols = ["file", "target", "model", "preprocess_steps", "calibrated"]
+    val_cols = id_cols + [
+        c for c in df.columns if c not in id_cols and not c.startswith("train_")
+    ]
+    val_df = df[val_cols]
 
-    # Calibration metrics: keep identifier columns and rename training columns
-    id_cols = ["file", "target", "model", "calibrated"]
     train_cols = [c for c in df.columns if c.startswith("train_")]
     calib_df = df[id_cols + train_cols].copy()
     calib_df.rename(
@@ -608,7 +615,7 @@ def _run_cv(
             )
             progress.advance(model_task)
         progress.advance(tgt_task)
-    _save_metrics(rows, out_dir)
+    _save_metrics(rows, out_dir, cfg.get("preprocess", {}).get("steps", []))
     if cfg.get("astm"):
         flags = check_astm_classification(
             summary, {"external_validation": isinstance(outer, LeaveOneOut)}
@@ -766,7 +773,7 @@ def _run_holdout(
                 proba,
                 interactive=interactive,
             )
-    _save_metrics(rows, out_dir)
+    _save_metrics(rows, out_dir, cfg.get("preprocess", {}).get("steps", []))
     if cfg.get("astm"):
         flags = check_astm_classification(summary, {"external_validation": True})
         with open(out_dir / "astm_classification.json", "w") as f:
@@ -1114,7 +1121,7 @@ def train_and_save(
                 row["ECE_mean"] = float(
                     expected_calibration_error(y_enc, proba, n_bins=15)
                 )
-            _save_metrics([row], out_dir)
+            _save_metrics([row], out_dir, cfg.get("preprocess", {}).get("steps", []))
             if cfg.get("astm"):
                 flags = check_astm_classification(
                     summary, {"external_validation": False}

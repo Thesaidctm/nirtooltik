@@ -71,13 +71,17 @@ def test_end_to_end_cv_and_export(tmp_path):
     xls = pd.ExcelFile(metrics_path)
     assert set(xls.sheet_names) == {"validation", "calibration"}
     val_df = xls.parse("validation")
+    calib_df = xls.parse("calibration")
     assert {"Yscramble_mean", "Yscramble_p95"}.issubset(val_df.columns)
+    assert "preprocess_steps" in val_df.columns
+    assert "preprocess_steps" in calib_df.columns
     assert any((strat_dir / "figures").glob("*.png"))
     assert (strat_dir / "report.md").exists()
     assert (strat_dir / "astm_classification.json").exists()
     with open(strat_dir / "metrics.json") as f:
         metrics_json = json.load(f)
     assert "Yscramble_mean" in metrics_json[0]
+    assert metrics_json[0]["preprocess_steps"] == ["SNV"]
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
