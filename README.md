@@ -40,6 +40,12 @@ Para treinar todos os modelos disponíveis (pode exigir dependências opcionais)
 nircls run-all --config configs/eucalipto_spxy.yaml --all-models
 ```
 
+Para aplicar todos os pré-processamentos suportados (SNV, MSC, DETREND, SG, EMSC, EPO, SCALE) em conjunto com todos os modelos, combine as duas flags:
+
+```bash
+nircls run-all --config configs/eucalipto_spxy.yaml --all-models --all-preprocess
+```
+
 ## Sumário
 
 1. [Introdução](#introducao)
@@ -205,7 +211,7 @@ Cada item da lista define um estimador:
 
 ## Interface de linha de comando
 
-O comando principal é `nircls` e suporta várias sub‑rotinas. As mensagens da CLI podem ser exibidas em português (`--lang pt`) ou inglês (`--lang en`, padrão). Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar o modelo padrão PLSDA. Para tentar todos os modelos disponíveis (requer dependências opcionais como `xgboost`, `lightgbm`, `catboost` e `torch`), utilize a flag `--all-models`. Essa opção ignora qualquer lista `models:` definida no arquivo de configuração e treina todos os modelos suportados:
+O comando principal é `nircls` e suporta várias sub‑rotinas. As mensagens da CLI podem ser exibidas em português (`--lang pt`) ou inglês (`--lang en`, padrão). Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar o modelo padrão PLSDA. Para tentar todos os modelos disponíveis (requer dependências opcionais como `xgboost`, `lightgbm`, `catboost` e `torch`), utilize a flag `--all-models`. Essa opção ignora qualquer lista `models:` definida no arquivo de configuração e treina todos os modelos suportados. Para aplicar todos os tratamentos de pré-processamento (`SNV`, `MSC`, `DETREND`, `SG`, `EMSC`, `EPO`, `SCALE`), utilize `--all-preprocess`:
 
 ```bash
 # Execução completa com parâmetros padrão (PLSDA)
@@ -213,6 +219,9 @@ nircls run-all
 
 # Todos os modelos disponíveis (requer dependências opcionais)
 nircls run-all --all-models
+
+# Todos os modelos e pré-processamentos
+nircls run-all --all-models --all-preprocess
 
 # Mensagens em português
 nircls run-all --lang pt
