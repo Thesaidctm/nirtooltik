@@ -9,6 +9,10 @@ import hashlib
 import numpy as np
 
 
+# Default directories for raw data and results
+RAW_DIR = Path(os.getenv("NIRCLS_RAW", "data/RAW"))
+RESULTS_DIR = Path(os.getenv("NIRCLS_RESULTS", "results"))
+
 def ensure_dirs(*paths: Path) -> None:
     """Create directories if they do not already exist."""
 

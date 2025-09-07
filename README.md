@@ -130,7 +130,10 @@ cv:
 - **spectral_range** (`[float, float]`): limites inferior e superior de
   comprimento de onda.
 - **drop_nans** (`bool`, padrão `true`): remove linhas com valores ausentes.
-- **out_dir** (`str`, padrão `"results"`): diretório base de saída.
+- **out_dir** (`str`, padrão valor de `NIRCLS_RESULTS` ou `"results"`): diretório base de saída.
+
+Os diretórios padrão para dados brutos e resultados podem ser ajustados
+pelas variáveis de ambiente `NIRCLS_RAW` e `NIRCLS_RESULTS`.
 
 #### preprocess
 - **steps** (`list[str]`): lista de pré-processadores, por exemplo
@@ -157,7 +160,7 @@ Cada item da lista define um estimador:
 
 ## Interface de linha de comando
 
-O comando principal é `nircls` e suporta várias sub‑rotinas. Para usuários leigos, basta executar `nircls run-all` para processar dados em `data/RAW`, treinar e avaliar modelos com parâmetros padrão:
+O comando principal é `nircls` e suporta várias sub‑rotinas. Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar modelos com parâmetros padrão:
 
 ```bash
 # Execução completa com parâmetros padrão

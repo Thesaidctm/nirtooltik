@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Union, Literal
 from pydantic import BaseModel, Field, root_validator, ValidationError
 
+from .utils.misc import RESULTS_DIR
+
 class DataConfig(BaseModel):
     """Dataset related configuration."""
 
@@ -24,7 +26,10 @@ class DataConfig(BaseModel):
         None, description="Lower and upper wavelength limits"
     )
     drop_nans: Optional[bool] = True
-    out_dir: Optional[str] = Field("results", description="Base output directory")
+    out_dir: Optional[str] = Field(
+        default_factory=lambda: str(RESULTS_DIR),
+        description="Base output directory",
+    )
 
     @root_validator(pre=True)
     def _normalise_target(cls, values: Dict[str, Any]) -> Dict[str, Any]:

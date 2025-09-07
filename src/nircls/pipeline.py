@@ -32,6 +32,7 @@ from sklearn.calibration import CalibratedClassifierCV
 from joblib import dump, load
 from glob import glob
 from .io import prepare_inputs as _prepare_inputs, export_xy_xlsx, read_xlsx_xy, read_tabular
+from .utils.misc import RESULTS_DIR
 from .preprocessors.spectro import (
     SNV,
     MSC,
@@ -97,7 +98,7 @@ def prepare_inputs(cfg: Dict[str, Any], *, use_cache: bool = True) -> List[Dict[
     files = [Path(p) for p in glob(cfg["input_path"])]
     sp = cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
-    out_dir = Path(cfg.get("out_dir", "results"))
+    out_dir = Path(cfg.get("out_dir", RESULTS_DIR))
     cache_dir = out_dir / "cache"
 
     cached_items: List[Tuple[Path, Dict[str, Any]]] = []
