@@ -6,7 +6,9 @@ Autor: Thalles Loiola Dias, Discente da UFLA
 Toolkit em Python para classificação de espécies a partir de espectroscopia no
 infravermelho próximo (NIR). O pacote oferece uma interface de linha de comando
 e utilidades para criação de pipelines de pré‑processamento, seleção de modelos
-e geração de relatórios completos de avaliação. Consulte o notebook
+e geração de relatórios completos de avaliação. A partir das métricas geradas,
+o comando produz automaticamente um relatório científico em Markdown com tabelas
+e figuras embutidas, além de metadados de citação. Consulte o notebook
 [examples/quickstart.ipynb](examples/quickstart.ipynb) para um exemplo rápido
 de uso da API.
 
@@ -287,7 +289,10 @@ produzidos:
 
 * `metrics.json` – métricas detalhadas por partição;
 * `metrics_summary.csv` – resumo das métricas agregadas;
-* `report.md` – relatório em Markdown com tabelas e figuras;
+* `report.md` – relatório científico em Markdown com tabelas, figuras e
+  metadados de citação;
+* `report.pdf` – versão em PDF quando `pandoc` ou `weasyprint` estiver
+  disponível;
 * `figures/` – gráficos de curva ROC, matriz de confusão e confiabilidade,
   além de `*.confusion.csv` com a matriz em formato tabular para análises
   externas.
@@ -295,7 +300,9 @@ produzidos:
   entrada, versões das dependências e semente aleatória.
 
 O relatório é gerado inteiramente de forma local, sem qualquer integração com
-serviços externos ou APIs.
+serviços externos ou APIs. O `report.md` contém um cabeçalho YAML com título e
+data do experimento, permitindo compartilhamento e citação direta em artigos ou
+repositórios.
 
 ## Métricas de calibração e validação
 

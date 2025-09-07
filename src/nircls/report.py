@@ -1,6 +1,9 @@
 from __future__ import annotations
 from pathlib import Path
 import json
+import subprocess
+import shutil
+import datetime as dt
 
 import pandas as pd
 
@@ -129,3 +132,112 @@ def generate_report(
         markdown_to_pdf(md, out_file)
     else:
         raise ValueError("Unsupported output format. Use .md or .pdf")
+
+
+def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
+    """Build a concise scientific report in Markdown.
+
+    Parameters
+    ----------
+    metrics:
+        Dictionary or list of dictionaries with metrics as produced by the
+        training/validation routines.
+    cfg:
+        Experiment configuration dictionary used to run the pipeline.
+    out_dir:
+        Directory where ``report.md`` (and optionally ``report.pdf``) will be
+        written.
+    """
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = metrics if isinstance(metrics, list) else [metrics]
+    if not rows:
+        raise ValueError("metrics is empty")
+    df = pd.DataFrame(rows)
+
+    # Determine the key metric and best model
+    key_metric = None
+    for cand in ["F1-macro_mean", "Accuracy_mean", "R2_mean"]:
+        if cand in df.columns:
+            key_metric = cand
+            break
+    best_model = None
+    best_score = None
+    if key_metric is not None:
+        idx = df[key_metric].astype(float).idxmax()
+        best_row = df.loc[idx]
+        best_model = best_row.get("model")
+        best_score = float(best_row[key_metric])
+
+    data_cfg = cfg.get("data", {}) if isinstance(cfg, dict) else {}
+    steps = cfg.get("preprocess", {}).get("steps", []) if isinstance(cfg, dict) else []
+    models = [m.get("name", "") for m in cfg.get("models", [])] if isinstance(cfg, dict) else []
+
+    lines = [
+        "---",
+        f'title: "{cfg.get("title", "Scientific Report")}"' if isinstance(cfg, dict) else 'title: "Scientific Report"',
+        f"date: {dt.date.today().isoformat()}",
+        "---",
+        "",
+        f"**Data**: `{data_cfg.get('input_path', '')}`",
+        f"**Preprocessing**: {', '.join(steps) if steps else 'None'}",
+        f"**Algorithms tested**: {', '.join(models) if models else 'N/A'}",
+    ]
+    if best_model is not None and key_metric is not None and best_score is not None:
+        metric_name = key_metric.replace("_mean", "")
+        lines.append(f"**Best model**: {best_model} ({metric_name}: {best_score:.3f})")
+
+    lines.append("")
+    summary_md = "\n".join(lines)
+
+    # Metrics table
+    table_df = df[[c for c in ["file", "model"] if c in df.columns]].copy()
+    for col in df.columns:
+        if col.endswith("_mean"):
+            base = col[:-5]
+            mean_col = col
+            std_col = f"{base}_std"
+            if std_col in df.columns:
+                table_df[base] = df.apply(
+                    lambda r: f"{r[mean_col]:.3f} ± {r[std_col]:.3f}", axis=1
+                )
+            else:
+                table_df[base] = df[mean_col].map(lambda v: f"{v:.3f}")
+    header = "| " + " | ".join(table_df.columns.tolist()) + " |"
+    sep = "| " + " | ".join(["---"] * len(table_df.columns)) + " |"
+    lines = [header, sep]
+    for _, row in table_df.iterrows():
+        lines.append("| " + " | ".join(map(str, row.tolist())) + " |")
+    table_md = "\n".join(lines)
+
+    # Figures
+    fig_dir = out_dir / "figures"
+    fig_lines = []
+    if fig_dir.exists():
+        for fig in sorted(fig_dir.glob("*.png")):
+            rel = f"figures/{fig.name}"
+            fig_lines.append(f"![{fig.stem}]({rel})")
+    fig_md = "\n\n".join(fig_lines)
+
+    md = summary_md + f"## Metrics\n\n{table_md}\n\n## Figures\n\n{fig_md}\n"
+
+    report_md = out_dir / "report.md"
+    report_md.write_text(md)
+
+    # Optional PDF export
+    pdf_path = out_dir / "report.pdf"
+    try:  # pragma: no cover - optional dependency
+        if shutil.which("pandoc"):
+            subprocess.run([
+                "pandoc",
+                str(report_md),
+                "-o",
+                str(pdf_path),
+            ], check=True)
+        else:
+            markdown_to_pdf(md, pdf_path)
+    except Exception:
+        pass
+
+    return report_md

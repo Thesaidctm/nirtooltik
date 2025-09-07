@@ -57,7 +57,7 @@ from .utils.plots import (
     plot_roc_ovr,
     plot_reliability,
 )
-from .report import generate_report
+from .report import generate_scientific_report
 from .utils.logging import logger, log_versions
 from .utils.errors import DataError, ModelError
 from .utils.split import spxy_split
@@ -825,7 +825,9 @@ def run_multiple_eval(
                         )
                         metrics = sub / "metrics.json"
                         figs = sub / "figures"
-                        generate_report(metrics, figs, sub / "report.md")
+                        with open(metrics) as f:
+                            metrics_data = json.load(f)
+                        generate_scientific_report(metrics_data, cfg, sub)
                         outputs.append((metrics, figs))
                         if mlflow_enabled:
                             params = {
@@ -866,7 +868,9 @@ def run_multiple_eval(
                     )
                     metrics = sub / "metrics.json"
                     figs = sub / "figures"
-                    generate_report(metrics, figs, sub / "report.md")
+                    with open(metrics) as f:
+                        metrics_data = json.load(f)
+                    generate_scientific_report(metrics_data, cfg, sub)
                     outputs.append((metrics, figs))
                     if mlflow_enabled:
                         params = {"strategy": "loo"}
@@ -897,7 +901,9 @@ def run_multiple_eval(
                     _run_holdout(cfg, sub, test_size, random_state, interactive=interactive)
                     metrics = sub / "metrics.json"
                     figs = sub / "figures"
-                    generate_report(metrics, figs, sub / "report.md")
+                    with open(metrics) as f:
+                        metrics_data = json.load(f)
+                    generate_scientific_report(metrics_data, cfg, sub)
                     outputs.append((metrics, figs))
                     if mlflow_enabled:
                         params = {
@@ -1065,11 +1071,9 @@ def train_and_save(
                 proba,
                 interactive=interactive,
             )
-            generate_report(
-                out_dir / "metrics.json",
-                out_dir / "figures",
-                out_dir / "report.md",
-            )
+            with open(out_dir / "metrics.json") as f:
+                metrics_data = json.load(f)
+            generate_scientific_report(metrics_data, cfg, out_dir)
             if mlflow_uri:
                 try:
                     from dvc.api import DVCFileSystem

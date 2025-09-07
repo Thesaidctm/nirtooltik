@@ -26,7 +26,6 @@ from .pipeline import (
     explain_model,
     prepare_inputs,
 )
-from .report import generate_report
 from .dashboard import run_dashboard
 from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id, set_seed, RAW_DIR, RESULTS_DIR, now_ts
@@ -288,7 +287,6 @@ def main(argv=None):
     p_prep.add_argument("--config", required=True)
     p_tr = sp.add_parser("train")
     p_tr.add_argument("--config", required=True)
-    p_tr.add_argument("--report-pdf")
     p_tr.add_argument(
         "--interactive",
         action="store_true",
@@ -301,7 +299,6 @@ def main(argv=None):
     )
     p_cv = sp.add_parser("crossval")
     p_cv.add_argument("--config", required=True)
-    p_cv.add_argument("--report-pdf")
     p_cv.add_argument(
         "--interactive",
         action="store_true",
@@ -416,8 +413,6 @@ def main(argv=None):
             _print_confusion_paths(figs_dir)
         if args.astm:
             _print_astm_report(out_dir / "astm_classification.json")
-        if args.report_pdf and metrics_path and figs_dir:
-            generate_report(metrics_path, figs_dir, Path(args.report_pdf))
         print(t("results_in", path=out_dir))
     elif args.cmd == "crossval":
         if cfg.data is None or not cfg.models or cfg.cv is None:
@@ -451,17 +446,6 @@ def main(argv=None):
         except ModelError as e:
             print(t("invalid_model", err=e), file=sys.stderr)
             return 1
-        if args.report_pdf:
-            pdf_path = Path(args.report_pdf)
-            multi = len(outputs) > 1
-        for metrics_path, figs_dir in outputs:
-            out_pdf = pdf_path
-            if pdf_path.suffix.lower() != ".pdf" or multi:
-                base_dir = (
-                    pdf_path if pdf_path.suffix.lower() != ".pdf" else pdf_path.parent
-                )
-                out_pdf = base_dir / f"{metrics_path.parent.name}.pdf"
-            generate_report(metrics_path, figs_dir, out_pdf)
         for metrics_path, figs_dir in outputs:
             print(f"== {metrics_path.parent.name} ==")
             _print_metrics_table(metrics_path)
