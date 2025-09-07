@@ -27,6 +27,7 @@ from .pipeline import (
     prepare_inputs,
 )
 from .dashboard import run_dashboard
+from .utils.summarize import summarize_runs
 from .utils.logging import setup_logging, log_versions
 from .utils.misc import ensure_dirs, make_run_id, set_seed, RAW_DIR, RESULTS_DIR, now_ts
 from .config_schema import ConfigModel, ValidationError
@@ -326,6 +327,8 @@ def main(argv=None):
     p_ex.add_argument("--output", default=str(RESULTS_DIR))
     p_db = sp.add_parser("dashboard")
     p_db.add_argument("--results", required=True, help=t("dashboard_results_help"))
+    p_sum = sp.add_parser("summary")
+    p_sum.add_argument("--results", required=True, help=t("dashboard_results_help"))
     args = parser.parse_args(argv)
     set_seed(args.seed)
     setup_logging()
@@ -707,6 +710,10 @@ def main(argv=None):
             print(t("invalid_model", err=e), file=sys.stderr)
     elif args.cmd == "explain":
         explain_model(Path(args.model), Path(args.data), Path(args.output))
+    elif args.cmd == "summary":
+        df = summarize_runs(Path(args.results))
+        if not df.empty:
+            print(df.to_string(index=False))
     elif args.cmd == "dashboard":
         run_dashboard(Path(args.results))
 
