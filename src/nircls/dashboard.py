@@ -85,11 +85,12 @@ def _render_dashboard(results_dir: Path) -> None:
         bases = {
             p.with_suffix("")
             for p in fig_dir.glob("*")
-            if p.suffix in {".png", ".json"}
+            if p.suffix in {".png", ".json", ".html"}
         }
         for base in sorted(bases):
             json_file = base.with_suffix(".json")
             png_file = base.with_suffix(".png")
+            html_file = base.with_suffix(".html")
             caption = _figure_caption(base.name)
             if json_file.exists():
                 try:
@@ -101,6 +102,17 @@ def _render_dashboard(results_dir: Path) -> None:
                     st.caption(caption)
                 elif png_file.exists():
                     st.image(str(png_file), caption=caption)
+            elif html_file.exists():
+                try:
+                    import streamlit.components.v1 as components
+
+                    components.html(
+                        html_file.read_text(), height=600, scrolling=True
+                    )
+                    st.caption(caption)
+                except Exception:
+                    if png_file.exists():
+                        st.image(str(png_file), caption=caption)
             elif png_file.exists():
                 st.image(str(png_file), caption=caption)
             if png_file.exists():
@@ -110,6 +122,14 @@ def _render_dashboard(results_dir: Path) -> None:
                         f,
                         file_name=png_file.name,
                         mime="image/png",
+                    )
+            if html_file.exists():
+                with html_file.open("r") as f:
+                    st.download_button(
+                        f"Download {html_file.name}",
+                        f,
+                        file_name=html_file.name,
+                        mime="text/html",
                     )
 
     prep_tab, exec_tab, results_tab, summary_tab = st.tabs(

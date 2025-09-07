@@ -1237,10 +1237,11 @@ def explain_model(model_path: Path, data_path: Path, out_dir: Path):
     explainer = shap.Explainer(est, X)
     shap_values = explainer(X)
 
-    # summary_plot accepts the Explanation object directly
-    shap.summary_plot(shap_values, X, show=False)
     import matplotlib.pyplot as plt
 
+    # Summary plot (PNG + interactive HTML)
+    shap.plots.summary(shap_values, show=False)
+    shap.save_html(out_dir / "shap_summary.html", shap_values)
     plt.savefig(out_dir / "shap_summary.png", bbox_inches="tight")
     plt.close()
 
@@ -1249,8 +1250,18 @@ def explain_model(model_path: Path, data_path: Path, out_dir: Path):
         values = values[:, :, 0]
     mean_abs = np.abs(values).mean(axis=0)
     top_idx = int(mean_abs.argmax())
-    shap.dependence_plot(top_idx, values, X, show=False)
+    feature_name = X.columns[top_idx]
+
+    # Dependence plot for the most important feature
+    shap.plots.scatter(shap_values[:, top_idx], color=shap_values, show=False)
+    shap.save_html(out_dir / f"shap_dependence_{feature_name}.html", shap_values[:, top_idx])
     plt.savefig(
-        out_dir / f"shap_dependence_{X.columns[top_idx]}.png", bbox_inches="tight"
+        out_dir / f"shap_dependence_{feature_name}.png", bbox_inches="tight"
     )
+    plt.close()
+
+    # Waterfall plot for first sample
+    shap.plots.waterfall(shap_values[0], show=False)
+    shap.save_html(out_dir / "shap_waterfall.html", shap_values[0])
+    plt.savefig(out_dir / "shap_waterfall.png", bbox_inches="tight")
     plt.close()
