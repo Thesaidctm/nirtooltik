@@ -1,11 +1,14 @@
-import sys
+import logging
 import pathlib
+import sys
+
 import numpy as np
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
 from sklearn.naive_bayes import GaussianNB
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from nircls.pipeline import build_pipeline_from_config
+from nircls.models.plsda import PLSDA
 
 
 def test_logreg_default_grid_contains_C_and_balanced_class_weight():
@@ -190,3 +193,13 @@ def test_estimator_without_proba_is_calibrated(monkeypatch):
     name, pipe, grid = build_pipeline_from_config(cfg)[0]
     assert isinstance(pipe.named_steps["clf"], CalibratedClassifierCV)
     assert "clf__estimator__constant" in grid
+
+
+def test_plsda_warns_when_components_high(caplog):
+    rng = np.random.RandomState(0)
+    X = rng.rand(10, 20)
+    y = (np.arange(10) % 2).astype(int)
+    model = PLSDA(n_components=8)
+    with caplog.at_level(logging.WARNING):
+        model.fit(X, y)
+    assert any("overfit" in r.message.lower() for r in caplog.records)

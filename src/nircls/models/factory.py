@@ -4,15 +4,8 @@ from __future__ import annotations
 from importlib.metadata import entry_points
 from typing import Any, Dict, List
 
-import numpy as np
-from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.cross_decomposition import PLSRegression
-from sklearn.discriminant_analysis import (
-    LinearDiscriminantAnalysis,
-    QuadraticDiscriminantAnalysis,
-)
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import BernoulliNB, GaussianNB, MultinomialNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
@@ -22,6 +15,7 @@ from .base import BaseModelBuilder
 
 # Helpers for model construction with optional class weighting
 from .builders import _build_svm, _build_rf, _build_etc, _build_logreg
+from .plsda import PLSDA
 
 # Optional third-party estimators
 try:  # pragma: no cover - optional dependency
@@ -38,61 +32,6 @@ try:  # pragma: no cover
     from catboost import CatBoostClassifier
 except Exception:  # pragma: no cover
     CatBoostClassifier = None
-
-
-class PLSDA(BaseEstimator, ClassifierMixin):
-    """Partial Least Squares Discriminant Analysis estimator.
-
-    A minimal wrapper combining :class:`PLSRegression` with a probabilistic
-    classifier (logistic regression or LDA). Parameters are exposed in a
-    scikit-learn compatible way so the estimator can be used inside pipelines
-    and grid-search routines.
-    """
-
-    def __init__(self, n_components=10, method="logreg", C=1.0):
-        self.n_components = n_components
-        self.method = method
-        self.C = C
-        self.pls = PLSRegression(n_components=n_components)
-        self.clf = (
-            LogisticRegression(max_iter=5000)
-            if method == "logreg"
-            else LinearDiscriminantAnalysis()
-        )
-
-    def fit(self, X, y):
-        Y = np.eye(len(np.unique(y)))[y]
-        self.pls.fit(X, Y)
-        T = self.pls.transform(X)
-        if isinstance(self.clf, LogisticRegression):
-            self.clf.set_params(C=self.C)
-        self.clf.fit(T, y)
-        return self
-
-    def predict(self, X):
-        T = self.pls.transform(X)
-        return self.clf.predict(T)
-
-    def predict_proba(self, X):
-        T = self.pls.transform(X)
-        return self.clf.predict_proba(T)
-
-    def get_params(self, deep=True):
-        return {"n_components": self.n_components, "method": self.method, "C": self.C}
-
-    def set_params(self, **p):
-        for k, v in p.items():
-            setattr(self, k, v)
-        # Recreate inner models with updated parameters
-        self.pls = PLSRegression(n_components=self.n_components)
-        self.clf = (
-            LogisticRegression(max_iter=5000)
-            if self.method == "logreg"
-            else LinearDiscriminantAnalysis()
-        )
-        if isinstance(self.clf, LogisticRegression):
-            self.clf.set_params(C=self.C)
-        return self
 
 
 def _xgb_builder():

@@ -12,5 +12,7 @@ preprocess:
 
 models:
   - name: PLSDA
+    # Mantenha `n_components` abaixo de 80% de min(n_amostras - 1, n_variáveis)
+    # para reduzir risco de sobreajuste
     grid: {n_components: [5]}
     # overfit_check: false  # desativa Y-scrambling (ativo por padrão)
