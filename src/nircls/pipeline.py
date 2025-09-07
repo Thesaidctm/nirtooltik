@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple, Optional, Sequence
 from contextlib import nullcontext
 import warnings
 import json
@@ -10,7 +10,7 @@ from glob import glob
 import numpy as np
 import pandas as pd
 import sklearn
-import yaml
+import yaml  # type: ignore[import-untyped]
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from rich.progress import Progress
@@ -194,7 +194,9 @@ def prepare_inputs(
     return out
 
 
-def _make_preprocess(steps_cfg, cfg):
+def _make_preprocess(
+    steps_cfg: Optional[Sequence[str]], cfg: Dict[str, Any]
+) -> Tuple[List[Tuple[str, Any]], Dict[str, Any]]:
     """Create preprocessing steps and optional parameter grid.
 
     For the Savitzky-Golay (SG) step it is possible to provide a list of
@@ -243,12 +245,14 @@ def _make_preprocess(steps_cfg, cfg):
     return steps, grid
 
 
-def build_pipeline_from_config(cfg: Dict[str, Any]):
+def build_pipeline_from_config(
+    cfg: Dict[str, Any]
+) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
     _validate_cfg(cfg, need_models=True)
     steps_cfg = cfg.get("preprocess", {}).get("steps", [])
     pre_steps, pre_grid = _make_preprocess(steps_cfg, cfg.get("preprocess", {}))
     models = make_models_from_config(cfg["models"])
-    out = []
+    out: List[Tuple[str, Pipeline, Dict[str, Any]]] = []
     for m in models:
         est = m["estimator"]
         grid = pre_grid.copy()
@@ -366,7 +370,7 @@ def _save_plots(
 def _run_cv(
     cfg: Dict[str, Any],
     out_dir: Path,
-    outer,
+    outer: Any,
     progress: Progress,
     *,
     random_state: int,
@@ -414,19 +418,19 @@ def _run_cv(
             progress.update(model_task, description=f"Model: {name}")
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
-            scores_val = {
+            scores_val: Dict[str, List[float]] = {
                 "F1-macro": [],
                 "BalancedAcc": [],
                 "Accuracy": [],
-                "Brier": None,
-                "ECE": None,
+                "Brier": [],
+                "ECE": [],
             }
-            scores_train = {
+            scores_train: Dict[str, List[float]] = {
                 "F1-macro": [],
                 "BalancedAcc": [],
                 "Accuracy": [],
-                "Brier": None,
-                "ECE": None,
+                "Brier": [],
+                "ECE": [],
             }
             y_true_all: List[np.ndarray] = []
             y_pred_all: List[np.ndarray] = []
@@ -450,6 +454,7 @@ def _run_cv(
                     inner = spxy_split(Xtr, ytr, inner_folds)
                 elif cv_method == "group":
                     inner = GroupKFold(n_splits=inner_folds)
+                    assert groups is not None
                     fit_kwargs["groups"] = groups.iloc[tr]
                 else:
                     inner = StratifiedKFold(
@@ -477,11 +482,6 @@ def _run_cv(
                 scores_val["Accuracy"].append(accuracy_score(yte, yhat))
                 proba_fn = getattr(best, "predict_proba", None)
                 if proba_fn is not None:
-                    if scores_val["Brier"] is None:
-                        scores_val["Brier"] = []
-                        scores_val["ECE"] = []
-                        scores_train["Brier"] = []
-                        scores_train["ECE"] = []
                     proba = proba_fn(Xte)
                     y_proba_all.append(proba)
                     brier = np.mean(
@@ -490,7 +490,7 @@ def _run_cv(
                             for k in range(len(classes))
                         ]
                     )
-                    scores_val["Brier"].append(brier)
+                    scores_val["Brier"].append(float(brier))
                     scores_val["ECE"].append(
                         expected_calibration_error(yte, proba, n_bins=15)
                     )
@@ -510,7 +510,7 @@ def _run_cv(
                             for k in range(len(classes))
                         ]
                     )
-                    scores_train["Brier"].append(brier_tr)
+                    scores_train["Brier"].append(float(brier_tr))
                     scores_train["ECE"].append(
                         expected_calibration_error(ytr, proba_tr, n_bins=15)
                     )
@@ -1197,7 +1197,7 @@ def predict_with_model(model_path: Path, data_path: Path, out_dir: Path) -> None
         progress.update(save_task, completed=1)
 
 
-def explain_model(model_path: Path, data_path: Path, out_dir: Path):
+def explain_model(model_path: Path, data_path: Path, out_dir: Path) -> None:
     """Generate SHAP explanations for a saved model and dataset.
 
     Parameters

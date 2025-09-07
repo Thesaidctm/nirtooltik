@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Sequence, Any
+from typing import Dict, List, Tuple, Optional, Sequence, Any, cast
 import numpy as np, pandas as pd
 from glob import glob
 from joblib import dump
@@ -46,18 +46,20 @@ def read_xlsx_xy(
     y_sheet: str = "Y",
     target_cols: Optional[Sequence[str] | str] = None,
     group_col: Optional[str] = None,
-):
+) -> Tuple[pd.DataFrame, List[Tuple[str, pd.Series]], Optional[pd.Series]]:
     try:
         X = pd.read_excel(path, sheet_name=x_sheet)
         Ydf = pd.read_excel(path, sheet_name=y_sheet)
     except ValueError as e:
         raise DataError(str(e)) from e
     if target_cols in [None, "all"]:
-        target_cols = [c for c in Ydf.columns if c != group_col]
+        target_cols_list = [c for c in Ydf.columns if c != group_col]
     elif isinstance(target_cols, str):
-        target_cols = [target_cols]
+        target_cols_list = [target_cols]
+    else:
+        target_cols_list = list(cast(Sequence[str], target_cols))
     out: List[Tuple[str, pd.Series]] = []
-    for col in target_cols:
+    for col in target_cols_list:
         if col not in Ydf.columns:
             raise DataError(f"Coluna alvo {col} não encontrada em {path}")
         out.append((col, Ydf[col].astype("category")))
@@ -77,16 +79,18 @@ def read_tabular(
     path: Path,
     target_cols: Optional[Sequence[str] | str] = None,
     group_col: Optional[str] = None,
-):
+) -> Tuple[pd.DataFrame, List[Tuple[str, pd.Series]], Optional[pd.Series]]:
     df = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
     if target_cols in [None, "all"]:
-        target_cols = [
+        target_cols_list = [
             c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c]) and c != group_col
         ]
     elif isinstance(target_cols, str):
-        target_cols = [target_cols]
+        target_cols_list = [target_cols]
+    else:
+        target_cols_list = list(cast(Sequence[str], target_cols))
     y_list: List[Tuple[str, pd.Series]] = []
-    for col in target_cols:
+    for col in target_cols_list:
         if col not in df.columns:
             raise DataError(f"Coluna alvo {col} não encontrada em {path}")
         y_list.append((col, df[col].astype("category")))
@@ -95,7 +99,7 @@ def read_tabular(
         if group_col not in df.columns:
             raise DataError(f"Coluna de grupos {group_col} não encontrada em {path}")
         groups = df[group_col].astype("category")
-    drop_cols = list(target_cols)
+    drop_cols = list(target_cols_list)
     if group_col:
         drop_cols.append(group_col)
     X = df.drop(columns=drop_cols).select_dtypes(include=[np.number])
@@ -105,13 +109,17 @@ def read_tabular(
         raise DataError("X e Y com n_amostras diferente")
     return X, y_list, groups
 
-def export_xy_xlsx(path: Path, X: pd.DataFrame, y: pd.Series, x_sheet="X", y_sheet="Y"):
+def export_xy_xlsx(
+    path: Path, X: pd.DataFrame, y: pd.Series, x_sheet: str = "X", y_sheet: str = "Y"
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(path, engine="openpyxl") as w:
         X.to_excel(w, index=False, sheet_name=x_sheet)
         y.to_frame(name=y.name or "target").to_excel(w, index=False, sheet_name=y_sheet)
 
-def prepare_inputs(data_cfg: Dict, *, use_cache: bool = True):
+def prepare_inputs(
+    data_cfg: Dict[str, Any], *, use_cache: bool = True
+) -> List[Dict[str, Any]]:
     """Load and clean spectral datasets specified in configuration.
 
     Column names are normalised to floats (nanometers) and filtered by the
@@ -181,7 +189,7 @@ def prepare_inputs(data_cfg: Dict, *, use_cache: bool = True):
     return out
 
 
-def summarize_dataset(ds_list: List[Dict]) -> pd.DataFrame:
+def summarize_dataset(ds_list: List[Dict[str, Any]]) -> pd.DataFrame:
     """Summarize dataset information.
 
     Parameters
