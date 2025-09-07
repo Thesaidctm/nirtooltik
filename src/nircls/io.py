@@ -1,14 +1,16 @@
-
 from __future__ import annotations
-from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Sequence, Any, cast
-import numpy as np, pandas as pd
+
 from glob import glob
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
+
+import numpy as np
+import pandas as pd
 from joblib import dump
 
+from .utils.errors import DataError
 from .utils.misc import RESULTS_DIR
 
-from .utils.errors import DataError
 
 def _normalize_columns_to_float(df: pd.DataFrame) -> pd.DataFrame:
     """Return dataframe with numeric spectral columns converted to float.
@@ -39,6 +41,7 @@ def _filter_range(
     lo, hi = spectral_range
     keep = [c for c in df.columns if lo <= c <= hi]
     return df.loc[:, keep]
+
 
 def read_xlsx_xy(
     path: Path,
@@ -75,15 +78,23 @@ def read_xlsx_xy(
         raise DataError("X e Y com n_amostras diferente")
     return X, out, groups
 
+
 def read_tabular(
     path: Path,
     target_cols: Optional[Sequence[str] | str] = None,
     group_col: Optional[str] = None,
 ) -> Tuple[pd.DataFrame, List[Tuple[str, pd.Series]], Optional[pd.Series]]:
-    df = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
+    if not path.is_file() or path.suffix.lower() not in {".csv", ".xls", ".xlsx"}:
+        raise DataError("Caminho é um diretório ou possui formato não suportado")
+    try:
+        df = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
+    except (FileNotFoundError, PermissionError) as e:
+        raise DataError(str(e)) from e
     if target_cols in [None, "all"]:
         target_cols_list = [
-            c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c]) and c != group_col
+            c
+            for c in df.columns
+            if not pd.api.types.is_numeric_dtype(df[c]) and c != group_col
         ]
     elif isinstance(target_cols, str):
         target_cols_list = [target_cols]
@@ -109,6 +120,7 @@ def read_tabular(
         raise DataError("X e Y com n_amostras diferente")
     return X, y_list, groups
 
+
 def export_xy_xlsx(
     path: Path, X: pd.DataFrame, y: pd.Series, x_sheet: str = "X", y_sheet: str = "Y"
 ) -> None:
@@ -116,6 +128,7 @@ def export_xy_xlsx(
     with pd.ExcelWriter(path, engine="openpyxl") as w:
         X.to_excel(w, index=False, sheet_name=x_sheet)
         y.to_frame(name=y.name or "target").to_excel(w, index=False, sheet_name=y_sheet)
+
 
 def prepare_inputs(
     data_cfg: Dict[str, Any], *, use_cache: bool = True
@@ -144,7 +157,9 @@ def prepare_inputs(
     grp = data_cfg.get("group_col")
     out = []
     for f in files:
-        if f.suffix.lower() in [".xlsx", ".xls"] and ("x_sheet" in data_cfg or "y_sheet" in data_cfg):
+        if f.suffix.lower() in [".xlsx", ".xls"] and (
+            "x_sheet" in data_cfg or "y_sheet" in data_cfg
+        ):
             X, y_list, groups = read_xlsx_xy(
                 f,
                 data_cfg.get("x_sheet", "X"),
