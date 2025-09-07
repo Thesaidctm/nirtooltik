@@ -12,6 +12,8 @@ e figuras embutidas, além de metadados de citação. Consulte o notebook
 [examples/quickstart.ipynb](examples/quickstart.ipynb) para um exemplo rápido
 de uso da API.
 
+A documentação completa está disponível em [https://Thesaidctm.github.io/nirtooltik/](https://Thesaidctm.github.io/nirtooltik/).
+
 Para uma execução completa com parâmetros padrão, usuários iniciantes podem
 simplesmente rodar:
 
