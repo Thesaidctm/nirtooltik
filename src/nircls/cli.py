@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import json
 import yaml
 from pathlib import Path
 from typing import Any
@@ -106,6 +107,26 @@ def _print_confusion_paths(fig_dir: Path) -> None:
         print(f"Matriz de confusão (normalizada): {p}")
 
 
+def _print_astm_report(astm_json: Path) -> None:
+    """Print ASTM compliance flags if report exists."""
+
+    if not astm_json or not astm_json.exists():
+        return
+    try:
+        flags = json.loads(astm_json.read_text())
+    except Exception:
+        return
+    labels = {
+        "min_samples": "≥ 30 amostras",
+        "min_per_class": "≥ 10 por classe",
+        "external_validation": "Validação externa",
+    }
+    for key, label in labels.items():
+        val = flags.get(key)
+        mark = "✔" if val else "✖"
+        print(f"{mark} {label}")
+
+
 def _parse_params(s: str) -> dict[str, Any]:
     """Parse ``key=value`` pairs into a dictionary."""
     params: dict[str, Any] = {}
@@ -168,6 +189,11 @@ def main(argv=None):
         action="store_true",
         help="Gerar arquivos HTML com gráficos Plotly interativos",
     )
+    p_tr.add_argument(
+        "--astm",
+        action="store_true",
+        help="Verificar critérios ASTM para classificação",
+    )
     p_cv = sp.add_parser("crossval")
     p_cv.add_argument("--config", required=True)
     p_cv.add_argument("--report-pdf")
@@ -175,6 +201,11 @@ def main(argv=None):
         "--interactive",
         action="store_true",
         help="Gerar arquivos HTML com gráficos Plotly interativos",
+    )
+    p_cv.add_argument(
+        "--astm",
+        action="store_true",
+        help="Verificar critérios ASTM para classificação",
     )
     p_demo = sp.add_parser("demo")
     p_all = sp.add_parser(
@@ -266,6 +297,7 @@ def main(argv=None):
                 file=sys.stderr,
             )
             return 1
+        cfg.astm = args.astm
         run_id = make_run_id("train")
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
@@ -295,6 +327,8 @@ def main(argv=None):
             _print_metrics_table(metrics_path)
         if figs_dir:
             _print_confusion_paths(figs_dir)
+        if args.astm:
+            _print_astm_report(out_dir / "astm_classification.json")
         if args.report_pdf and metrics_path and figs_dir:
             generate_report(metrics_path, figs_dir, Path(args.report_pdf))
         print(f"Resultados em: {out_dir}")
@@ -318,6 +352,7 @@ def main(argv=None):
         run_id = make_run_id("cv")
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
+        cfg.astm = args.astm
         try:
             outputs = run_multiple_eval(
                 cfg.dict(),
@@ -347,6 +382,8 @@ def main(argv=None):
             print(f"== {metrics_path.parent.name} ==")
             _print_metrics_table(metrics_path)
             _print_confusion_paths(figs_dir)
+            if args.astm:
+                _print_astm_report(metrics_path.parent / "astm_classification.json")
         print(f"Resultados em: {out_dir}")
     elif args.cmd == "run-all":
         default_cfg = {

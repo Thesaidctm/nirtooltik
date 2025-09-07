@@ -191,6 +191,13 @@ nircls predict --model caminho/model.joblib --data novos.xlsx --output preds
 nircls dashboard --results results
 ```
 
+A verificação de conformidade com a norma ASTM para classificação pode ser
+ativada com a flag `--astm` nos subcomandos `train` e `crossval`. O relatório
+`astm_classification.json` informa se o conjunto possui ao menos 30 amostras,
+se cada classe conta com 10 ou mais exemplos e se foi realizada validação
+externa (holdout ou LOOCV). O resumo dos critérios é exibido no console com
+marcas de verificação.
+
 A maioria dos subcomandos aceita o argumento global `--seed` para definir a
 semente das operações aleatórias (como divisão de dados ou embaralhamento),
 permitindo reproduzir resultados. Por padrão utiliza-se o valor `42`.
