@@ -484,3 +484,11 @@ Em outra máquina:
 
 Desenvolvido por Thalles Loiola Dias, Discente da UFLA.
 
+## Como citar
+
+Se utilizar este toolkit em trabalhos acadêmicos ou publicações, cite conforme o arquivo [CITATION.cff](CITATION.cff).
+
+## Licença
+
+Distribuído sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE) para mais informações.
+

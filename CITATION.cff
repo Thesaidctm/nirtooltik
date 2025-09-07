@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+title: "nircls — NIR Species Classification Toolkit"
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Dias"
+    given-names: "Thalles Loiola"
+version: "0.1.0"
+url: "https://github.com/Thesaidctm/nirtooltik"
