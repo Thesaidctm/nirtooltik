@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, root_validator, ValidationError
 
 from .utils.misc import RESULTS_DIR
 
+
 class DataConfig(BaseModel):
     """Dataset related configuration."""
 
@@ -30,6 +31,7 @@ class DataConfig(BaseModel):
         default_factory=lambda: str(RESULTS_DIR),
         description="Base output directory",
     )
+    qc: bool = False
 
     @root_validator(pre=True)
     def _normalise_target(cls, values: Dict[str, Any]) -> Dict[str, Any]:

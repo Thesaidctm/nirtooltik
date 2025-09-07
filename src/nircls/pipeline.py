@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
@@ -62,12 +61,14 @@ from .utils.errors import DataError, ModelError
 from .utils.split import spxy_split
 from .utils.misc import file_hash
 from .utils.compliance import check_astm_classification
+from .utils.qc import find_duplicates, detect_identical_spectra, pca_outliers
 
 warnings.filterwarnings(
     "ignore",
     message="This Pipeline instance is not fitted yet",
     category=FutureWarning,
 )
+
 
 def _validate_cfg(
     cfg: Dict[str, Any],
@@ -87,9 +88,7 @@ def _validate_cfg(
     if need_data and model.data is None:
         raise DataError("Seção 'data' é obrigatória. Informe o caminho dos dados.")
     if need_models and (not model.models):
-        raise ModelError(
-            "Seção 'models' é obrigatória. Adicione pelo menos um modelo."
-        )
+        raise ModelError("Seção 'models' é obrigatória. Adicione pelo menos um modelo.")
     if need_cv and (model.cv is None or not model.cv.strategies):
         raise ModelError(
             "Seção 'cv' é obrigatória. Defina ao menos uma estratégia de validação."
@@ -121,7 +120,9 @@ def save_run_metadata(cfg: Dict[str, Any], out_dir: Path) -> None:
         logger.debug("Could not save env.txt", exc_info=True)
 
 
-def prepare_inputs(cfg: Dict[str, Any], *, use_cache: bool = True) -> List[Dict[str, Any]]:
+def prepare_inputs(
+    cfg: Dict[str, Any], *, use_cache: bool = True
+) -> List[Dict[str, Any]]:
     """Load datasets, using cached features when available."""
 
     if not use_cache:
@@ -163,7 +164,9 @@ def prepare_inputs(cfg: Dict[str, Any], *, use_cache: bool = True) -> List[Dict[
         keep_idx = cached["keep_idx"]
         X = cached["X"]
         n_nans = cached.get("n_nans", 0)
-        if f.suffix.lower() in [".xlsx", ".xls"] and ("x_sheet" in cfg or "y_sheet" in cfg):
+        if f.suffix.lower() in [".xlsx", ".xls"] and (
+            "x_sheet" in cfg or "y_sheet" in cfg
+        ):
             _, y_list, groups = read_xlsx_xy(
                 f,
                 cfg.get("x_sheet", "X"),
@@ -189,6 +192,8 @@ def prepare_inputs(cfg: Dict[str, Any], *, use_cache: bool = True) -> List[Dict[
                 ds["groups"] = groups_reset
             out.append(ds)
     return out
+
+
 def _make_preprocess(steps_cfg, cfg):
     """Create preprocessing steps and optional parameter grid.
 
@@ -237,12 +242,11 @@ def _make_preprocess(steps_cfg, cfg):
             )
     return steps, grid
 
+
 def build_pipeline_from_config(cfg: Dict[str, Any]):
     _validate_cfg(cfg, need_models=True)
     steps_cfg = cfg.get("preprocess", {}).get("steps", [])
-    pre_steps, pre_grid = _make_preprocess(
-        steps_cfg, cfg.get("preprocess", {})
-    )
+    pre_steps, pre_grid = _make_preprocess(steps_cfg, cfg.get("preprocess", {}))
     models = make_models_from_config(cfg["models"])
     out = []
     for m in models:
@@ -286,6 +290,33 @@ def _save_metrics(rows: List[Dict[str, Any]], out_dir: Path) -> None:
     json_rows = df.where(pd.notnull(df), None).to_dict(orient="records")
     with open(out_dir / "metrics.json", "w") as f:
         json.dump(json_rows, f, indent=2)
+
+
+def _maybe_run_qc(
+    cfg: Dict[str, Any], data: List[Dict[str, Any]], out_dir: Path
+) -> None:
+    """Run optional quality control checks and persist a report."""
+
+    if not cfg.get("qc"):
+        return
+
+    report: List[Dict[str, Any]] = []
+    for ds in data:
+        X, y = ds["X"], ds["Y"]
+        df = X.copy()
+        df[ds["target"]] = y
+        report.append(
+            {
+                "file": ds["file"],
+                "target": ds["target"],
+                "duplicates": find_duplicates(df).index.tolist(),
+                "identical_spectra": detect_identical_spectra(X),
+                "pca_outliers": pca_outliers(X).to_dict(orient="index"),
+            }
+        )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "qc_report.json", "w") as f:
+        json.dump(report, f, indent=2)
 
 
 def _save_plots(
@@ -359,6 +390,7 @@ def _run_cv(
 
     try:
         data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+        _maybe_run_qc(cfg, data, out_dir)
     except DataError as e:
         raise DataError(
             "Arquivo de dados não encontrado. Verifique o caminho informado."
@@ -378,7 +410,7 @@ def _run_cv(
         models = build_pipeline_from_config(cfg)
         model_cfgs = cfg.get("models", [])
         model_task = progress.add_task("Model", total=len(models))
-        for (m_cfg, (name, pipe, grid)) in zip(model_cfgs, models):
+        for m_cfg, (name, pipe, grid) in zip(model_cfgs, models):
             progress.update(model_task, description=f"Model: {name}")
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
@@ -400,9 +432,7 @@ def _run_cv(
             y_pred_all: List[np.ndarray] = []
             y_proba_all: List[np.ndarray] = []
             if cv_method == "spxy":
-                outer_splits = spxy_split(
-                    X.values, y_enc, outer.get_n_splits(X, y_enc)
-                )
+                outer_splits = spxy_split(X.values, y_enc, outer.get_n_splits(X, y_enc))
             elif cv_method == "group":
                 if groups is None:
                     raise DataError(
@@ -427,9 +457,7 @@ def _run_cv(
                         shuffle=True,
                         random_state=random_state,
                     )
-                gs = GridSearchCV(
-                    pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1
-                )
+                gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
                 gs.fit(Xtr, ytr, **fit_kwargs)
 
                 best = gs.best_estimator_
@@ -444,15 +472,9 @@ def _run_cv(
 
                 # validation metrics
                 yhat = best.predict(Xte)
-                scores_val["F1-macro"].append(
-                    f1_score(yte, yhat, average="macro")
-                )
-                scores_val["BalancedAcc"].append(
-                    balanced_accuracy_score(yte, yhat)
-                )
-                scores_val["Accuracy"].append(
-                    accuracy_score(yte, yhat)
-                )
+                scores_val["F1-macro"].append(f1_score(yte, yhat, average="macro"))
+                scores_val["BalancedAcc"].append(balanced_accuracy_score(yte, yhat))
+                scores_val["Accuracy"].append(accuracy_score(yte, yhat))
                 proba_fn = getattr(best, "predict_proba", None)
                 if proba_fn is not None:
                     if scores_val["Brier"] is None:
@@ -464,9 +486,7 @@ def _run_cv(
                     y_proba_all.append(proba)
                     brier = np.mean(
                         [
-                            brier_score_loss(
-                                (yte == k).astype(int), proba[:, k]
-                            )
+                            brier_score_loss((yte == k).astype(int), proba[:, k])
                             for k in range(len(classes))
                         ]
                     )
@@ -477,30 +497,22 @@ def _run_cv(
 
                 # training metrics
                 yhat_tr = best.predict(Xtr)
-                scores_train["F1-macro"].append(
-                    f1_score(ytr, yhat_tr, average="macro")
-                )
+                scores_train["F1-macro"].append(f1_score(ytr, yhat_tr, average="macro"))
                 scores_train["BalancedAcc"].append(
                     balanced_accuracy_score(ytr, yhat_tr)
                 )
-                scores_train["Accuracy"].append(
-                    accuracy_score(ytr, yhat_tr)
-                )
+                scores_train["Accuracy"].append(accuracy_score(ytr, yhat_tr))
                 if proba_fn is not None:
                     proba_tr = proba_fn(Xtr)
                     brier_tr = np.mean(
                         [
-                            brier_score_loss(
-                                (ytr == k).astype(int), proba_tr[:, k]
-                            )
+                            brier_score_loss((ytr == k).astype(int), proba_tr[:, k])
                             for k in range(len(classes))
                         ]
                     )
                     scores_train["Brier"].append(brier_tr)
                     scores_train["ECE"].append(
-                        expected_calibration_error(
-                            ytr, proba_tr, n_bins=15
-                        )
+                        expected_calibration_error(ytr, proba_tr, n_bins=15)
                     )
                 y_true_all.append(yte)
                 y_pred_all.append(yhat)
@@ -512,11 +524,7 @@ def _run_cv(
                 "calibrated": bool(m_cfg.get("calibration")),
             }
             row.update(
-                {
-                    f"{k}_mean": float(np.mean(v))
-                    for k, v in scores_val.items()
-                    if v
-                }
+                {f"{k}_mean": float(np.mean(v)) for k, v in scores_val.items() if v}
             )
             row.update(
                 {
@@ -596,6 +604,7 @@ def _run_holdout(
 
     try:
         data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+        _maybe_run_qc(cfg, data, out_dir)
     except DataError as e:
         raise DataError(
             "Arquivo de dados não encontrado. Verifique o caminho informado."
@@ -610,7 +619,9 @@ def _run_holdout(
         cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
         inner_folds = cfg.get("cv", {}).get("inner_folds", 3)
         model_cfgs = cfg.get("models", [])
-        for m_cfg, (name, pipe, grid) in zip(model_cfgs, build_pipeline_from_config(cfg)):
+        for m_cfg, (name, pipe, grid) in zip(
+            model_cfgs, build_pipeline_from_config(cfg)
+        ):
             Xtr, Xte, ytr, yte = train_test_split(
                 X.values,
                 y_enc,
@@ -628,9 +639,7 @@ def _run_holdout(
                     shuffle=True,
                     random_state=random_state,
                 )
-            gs = GridSearchCV(
-                pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1
-            )
+            gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
             gs.fit(Xtr, ytr)
             best = gs.best_estimator_
             calib_cfg = m_cfg.get("calibration")
@@ -648,24 +657,12 @@ def _run_holdout(
                 "target": ds["target"],
                 "model": name,
                 "calibrated": bool(calib_cfg),
-                "F1-macro_mean": float(
-                    f1_score(yte, yhat, average="macro")
-                ),
-                "BalancedAcc_mean": float(
-                    balanced_accuracy_score(yte, yhat)
-                ),
-                "Accuracy_mean": float(
-                    accuracy_score(yte, yhat)
-                ),
-                "train_F1-macro_mean": float(
-                    f1_score(ytr, yhat_tr, average="macro")
-                ),
-                "train_BalancedAcc_mean": float(
-                    balanced_accuracy_score(ytr, yhat_tr)
-                ),
-                "train_Accuracy_mean": float(
-                    accuracy_score(ytr, yhat_tr)
-                ),
+                "F1-macro_mean": float(f1_score(yte, yhat, average="macro")),
+                "BalancedAcc_mean": float(balanced_accuracy_score(yte, yhat)),
+                "Accuracy_mean": float(accuracy_score(yte, yhat)),
+                "train_F1-macro_mean": float(f1_score(ytr, yhat_tr, average="macro")),
+                "train_BalancedAcc_mean": float(balanced_accuracy_score(ytr, yhat_tr)),
+                "train_Accuracy_mean": float(accuracy_score(ytr, yhat_tr)),
             }
             proba_fn = getattr(best, "predict_proba", None)
             proba = None
@@ -684,9 +681,7 @@ def _run_holdout(
                 proba_tr = proba_fn(Xtr)
                 brier_tr = np.mean(
                     [
-                        brier_score_loss(
-                            (ytr == k).astype(int), proba_tr[:, k]
-                        )
+                        brier_score_loss((ytr == k).astype(int), proba_tr[:, k])
                         for k in range(len(classes))
                     ]
                 )
@@ -749,6 +744,7 @@ def run_multiple_eval(
     mlflow_cm = nullcontext()
     if mlflow_enabled:
         import mlflow
+
         mlflow.set_tracking_uri(mlflow_uri)
         mlflow_cm = mlflow.start_run(run_name="crossval")
     model_names = [m.get("name", "") for m in cfg.get("models", [])]
@@ -782,14 +778,10 @@ def run_multiple_eval(
 
         outputs: List[Tuple[Path, Path]] = []
         with Progress() as progress:
-            strat_task = progress.add_task(
-                "CV strategy", total=len(strategies)
-            )
+            strat_task = progress.add_task("CV strategy", total=len(strategies))
             for strat in strategies:
                 stype = strat.get("type", "").lower()
-                progress.update(
-                    strat_task, description=f"Strategy: {stype}"
-                )
+                progress.update(strat_task, description=f"Strategy: {stype}")
                 if stype == "kfold":
                     n_repeats = strat.get("n_repeats", 1)
                     for k in strat.get("n_splits", [5]):
@@ -897,7 +889,9 @@ def run_multiple_eval(
                     sub = out_dir / "holdout"
                     sub.mkdir(parents=True, exist_ok=True)
                     test_size = float(strat.get("test_size", 0.3))
-                    _run_holdout(cfg, sub, test_size, random_state, interactive=interactive)
+                    _run_holdout(
+                        cfg, sub, test_size, random_state, interactive=interactive
+                    )
                     metrics = sub / "metrics.json"
                     figs = sub / "figures"
                     with open(metrics) as f:
@@ -946,6 +940,7 @@ def train_and_save(
     mlflow_cm = nullcontext()
     if mlflow_uri:
         import mlflow
+
         mlflow.set_tracking_uri(mlflow_uri)
         mlflow_cm = mlflow.start_run(run_name="train")
     with mlflow_cm:
@@ -953,6 +948,7 @@ def train_and_save(
             load_task = progress.add_task("Carregando dados", total=None)
             _validate_cfg(cfg, need_data=True, need_models=True)
             ds_list = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+            _maybe_run_qc(cfg, ds_list, out_dir)
             ds = ds_list[0]
             summary = summarize_dataset(ds_list)
             X, y = ds["X"], ds["Y"]
@@ -994,7 +990,9 @@ def train_and_save(
                 cv = spxy_split(X.values, y_enc, 5)
             elif cv_method == "group":
                 if groups is None:
-                    raise DataError("group_col deve ser informado para cv_method 'group'")
+                    raise DataError(
+                        "group_col deve ser informado para cv_method 'group'"
+                    )
                 cv = GroupKFold(n_splits=5)
                 fit_kwargs["groups"] = groups
             else:
@@ -1156,6 +1154,7 @@ def evaluate_saved_model(model_path: Path, data_path: Path) -> None:
     yhat = est.predict(X.values)
     print(pd.crosstab(pd.Series(y, name="true"), pd.Series(yhat, name="pred")))
 
+
 def predict_with_model(model_path: Path, data_path: Path, out_dir: Path) -> None:
     try:
         est = load(model_path)
@@ -1196,6 +1195,8 @@ def predict_with_model(model_path: Path, data_path: Path, out_dir: Path) -> None
             df.insert(0, "y_true", y)
         df.to_csv(out_dir / "predictions.csv", index=False)
         progress.update(save_task, completed=1)
+
+
 def explain_model(model_path: Path, data_path: Path, out_dir: Path):
     """Generate SHAP explanations for a saved model and dataset.
 
@@ -1249,5 +1250,7 @@ def explain_model(model_path: Path, data_path: Path, out_dir: Path):
     mean_abs = np.abs(values).mean(axis=0)
     top_idx = int(mean_abs.argmax())
     shap.dependence_plot(top_idx, values, X, show=False)
-    plt.savefig(out_dir / f"shap_dependence_{X.columns[top_idx]}.png", bbox_inches="tight")
+    plt.savefig(
+        out_dir / f"shap_dependence_{X.columns[top_idx]}.png", bbox_inches="tight"
+    )
     plt.close()
