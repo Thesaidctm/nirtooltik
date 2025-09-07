@@ -370,6 +370,9 @@ validação/teste. As métricas de treino recebem o prefixo `train_` e podem inc
 `accuracy`, `f1_macro`, `balanced_accuracy`, `brier_score` e o erro de calibração
 esperado (`ece`). A comparação entre `train_` e métricas sem prefixo ajuda a
 avaliar overfitting e o desempenho em dados não vistos.
+Sempre que a diferença entre `train_BalancedAcc_mean` e `BalancedAcc_mean`
+ultrapassa 0.05, a ferramenta marca `overfit_warning = True` em `metrics.json`
+e no relatório científico, sinalizando possível sobreajuste.
 
 ## Teste Y-scrambling
 

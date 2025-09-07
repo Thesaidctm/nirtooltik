@@ -274,6 +274,7 @@ def _save_metrics(
 
     for row in rows:
         row["preprocess_steps"] = list(preprocess_steps)
+        row.setdefault("overfit_warning", False)
     df = pd.DataFrame(rows)
 
     id_cols = ["file", "target", "model", "preprocess_steps", "calibrated"]
@@ -711,6 +712,8 @@ def _run_holdout(
                 "train_BalancedAcc_mean": float(balanced_accuracy_score(ytr, yhat_tr)),
                 "train_Accuracy_mean": float(accuracy_score(ytr, yhat_tr)),
             }
+            diff = row["train_BalancedAcc_mean"] - row["BalancedAcc_mean"]
+            row["overfit_warning"] = diff > 0.05
             row["n_components"] = n_comp
             proba_fn = getattr(best, "predict_proba", None)
             proba = None
