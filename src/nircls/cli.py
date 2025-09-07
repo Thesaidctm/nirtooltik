@@ -411,6 +411,9 @@ def main(argv=None):
             _print_metrics_table(metrics_path)
         if figs_dir:
             _print_confusion_paths(figs_dir)
+        report_path = out_dir / "report.md"
+        if report_path.exists():
+            print(t("full_report", path=report_path))
         if args.astm:
             _print_astm_report(out_dir / "astm_classification.json")
         print(t("results_in", path=out_dir))
@@ -450,6 +453,9 @@ def main(argv=None):
             print(f"== {metrics_path.parent.name} ==")
             _print_metrics_table(metrics_path)
             _print_confusion_paths(figs_dir)
+            rpt = metrics_path.parent / "report.md"
+            if rpt.exists():
+                print(t("full_report", path=rpt))
             if args.astm:
                 _print_astm_report(metrics_path.parent / "astm_classification.json")
         print(t("results_in", path=out_dir))

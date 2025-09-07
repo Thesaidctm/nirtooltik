@@ -137,6 +137,13 @@ def generate_report(
 def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
     """Build a concise scientific report in Markdown.
 
+    The function selects the best model based on F1 score, accuracy or R², then
+    summarises the dataset, preprocessing steps and tested algorithms. A table
+    with the main metrics is included as well as links to figures stored in the
+    ``figures`` subdirectory. The report is written to ``report.md`` and, when
+    optional PDF tooling (``pandoc`` or ``weasyprint``/``pdfkit``) is available,
+    also exported to ``report.pdf``.
+
     Parameters
     ----------
     metrics:
