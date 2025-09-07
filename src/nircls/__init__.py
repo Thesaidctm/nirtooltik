@@ -12,9 +12,14 @@ try:  # pragma: no cover - runtime convenience
 except DistributionNotFound:  # pragma: no cover - development fallback
     __version__ = "0.1.0"
 
-from .pipeline import build_pipeline_from_config, train_and_save
+from .pipeline import build_pipeline_from_config, train_and_save, run_experiment
 
 DEFAULT_RESULTS_DIR = Path.home() / "nircls_results"
 
-__all__ = ["build_pipeline_from_config", "train_and_save", "DEFAULT_RESULTS_DIR"]
+__all__ = [
+    "build_pipeline_from_config",
+    "train_and_save",
+    "run_experiment",
+    "DEFAULT_RESULTS_DIR",
+]
 
