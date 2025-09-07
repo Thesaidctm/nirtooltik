@@ -6,7 +6,9 @@ Autor: Thalles Loiola Dias, Discente da UFLA
 Toolkit em Python para classificação de espécies a partir de espectroscopia no
 infravermelho próximo (NIR). O pacote oferece uma interface de linha de comando
 e utilidades para criação de pipelines de pré‑processamento, seleção de modelos
-e geração de relatórios completos de avaliação.
+e geração de relatórios completos de avaliação. Consulte o notebook
+[examples/quickstart.ipynb](examples/quickstart.ipynb) para um exemplo rápido
+de uso da API.
 
 ## Sumário
 

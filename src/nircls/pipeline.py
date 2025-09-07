@@ -913,6 +913,54 @@ def train_and_save(
         )
         progress.update(save_task, completed=1)
     return out_dir / "metrics.json", out_dir / "figures"
+
+
+def run_experiment(
+    cfg: Dict[str, Any],
+    out_dir: Path,
+    *,
+    interactive: bool = False,
+    random_state: int = 42,
+) -> Tuple[Tuple[Path, Path], List[Tuple[Path, Path]]]:
+    """Execute um experimento completo usando a API de alto nível.
+
+    A função prepara os dados de entrada, treina o melhor modelo em todo o
+    conjunto e executa as estratégias de validação cruzada definidas.
+
+    Parameters
+    ----------
+    cfg:
+        Configuração completa do experimento.
+    out_dir:
+        Diretório base para os resultados.
+    interactive:
+        Se ``True``, gera também gráficos interativos.
+    random_state:
+        Semente aleatória utilizada nas rotinas de treino e validação.
+
+    Returns
+    -------
+    tuple
+        ``(train_outputs, cv_outputs)`` conforme retornado por
+        :func:`train_and_save` e :func:`run_multiple_eval`.
+    """
+
+    _validate_cfg(cfg, need_data=True, need_models=True, need_cv=True)
+    prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+
+    train_dir = out_dir / "train"
+    train_outputs = train_and_save(
+        cfg, train_dir, random_state=random_state, interactive=interactive
+    )
+
+    cv_dir = out_dir / "cv"
+    cv_outputs = run_multiple_eval(
+        cfg, cv_dir, random_state=random_state, interactive=interactive
+    )
+
+    return train_outputs, cv_outputs
+
+
 def evaluate_saved_model(model_path: Path, data_path: Path) -> None:
     try:
         est = load(model_path)
