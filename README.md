@@ -149,9 +149,12 @@ Cada item da lista define um estimador:
 
 ## Interface de linha de comando
 
-O comando principal é `nircls` e suporta várias sub‑rotinas:
+O comando principal é `nircls` e suporta várias sub‑rotinas. Para usuários leigos, basta executar `nircls run-all` para processar dados em `data/RAW`, treinar e avaliar modelos com parâmetros padrão:
 
 ```bash
+# Execução completa com parâmetros padrão
+nircls run-all
+
 # Verificar a versão instalada
 nircls --version
 

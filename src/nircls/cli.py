@@ -115,6 +115,17 @@ def _parse_params(s: str) -> dict[str, Any]:
             params[k.strip()] = yaml.safe_load(v.strip())
     return params
 
+
+def _deep_update(base: dict, updates: dict) -> dict:
+    """Recursively update ``base`` with ``updates``."""
+
+    for k, v in updates.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            _deep_update(base[k], v)
+        else:
+            base[k] = v
+    return base
+
 def main(argv=None):
     """Run the ``nircls`` command-line interface.
 
@@ -166,6 +177,8 @@ def main(argv=None):
         help="Gerar arquivos HTML com gráficos Plotly interativos",
     )
     p_demo = sp.add_parser("demo")
+    p_all = sp.add_parser("run-all")
+    p_all.add_argument("--config")
     p_wz = sp.add_parser("wizard")
     p_ev = sp.add_parser("evaluate")
     p_ev.add_argument("--model", required=True)
@@ -329,6 +342,67 @@ def main(argv=None):
             _print_metrics_table(metrics_path)
             _print_confusion_paths(figs_dir)
         print(f"Resultados em: {out_dir}")
+    elif args.cmd == "run-all":
+        default_cfg = {
+            "data": {"input_path": "data/RAW", "out_dir": "results"},
+            "models": [{"name": "PLSDA"}],
+            "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
+        }
+        if args.config:
+            try:
+                with open(args.config) as f:
+                    user_cfg = yaml.safe_load(f) or {}
+            except FileNotFoundError:
+                print(
+                    "Arquivo de configuração não encontrado. Verifique o caminho informado.",
+                    file=sys.stderr,
+                )
+                return 1
+            _deep_update(default_cfg, user_cfg)
+        run_id = make_run_id("run")
+        base_dir = Path(default_cfg["data"].get("out_dir", "results")) / run_id
+        ensure_dirs(base_dir)
+        default_cfg["data"]["out_dir"] = str(base_dir)
+        try:
+            ds_list = prepare_inputs(default_cfg["data"], use_cache=default_cfg.get("use_cache", True))
+        except DataError as e:
+            print(f"Dados inválidos: {e}", file=sys.stderr)
+            return 1
+        summary = summarize_dataset(ds_list)
+        if not summary.empty:
+            print(summary.to_string(index=False))
+        if args.run == "one" and ds_list:
+            default_cfg["data"]["target_cols"] = ds_list[0]["target"]
+        train_dir = base_dir / "train"
+        cv_dir = base_dir / "cv"
+        ensure_dirs(train_dir, cv_dir)
+        try:
+            metrics_path, figs_dir = train_and_save(
+                default_cfg,
+                train_dir,
+                random_state=args.seed,
+            )
+        except (DataError, ModelError) as e:
+            print(str(e), file=sys.stderr)
+            return 1
+        if metrics_path:
+            _print_metrics_table(metrics_path)
+        if figs_dir:
+            _print_confusion_paths(figs_dir)
+        try:
+            outputs = run_multiple_eval(
+                default_cfg,
+                cv_dir,
+                random_state=args.seed,
+            )
+        except (DataError, ModelError) as e:
+            print(str(e), file=sys.stderr)
+            return 1
+        for metrics_path, figs_dir in outputs:
+            print(f"== {metrics_path.parent.name} ==")
+            _print_metrics_table(metrics_path)
+            _print_confusion_paths(figs_dir)
+        print(f"Resultados em: {base_dir}")
     elif args.cmd == "demo":
         demo_cfg = Path(__file__).resolve().parents[2] / "configs" / "demo.yaml"
         with open(demo_cfg) as f:
