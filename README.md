@@ -21,6 +21,12 @@ simplesmente rodar:
 nircls run-all
 ```
 
+Para treinar todos os modelos disponíveis (pode exigir dependências opcionais), utilize:
+
+```bash
+nircls run-all --all-models
+```
+
 ## Sumário
 
 1. [Introdução](#introducao)
@@ -186,11 +192,14 @@ Cada item da lista define um estimador:
 
 ## Interface de linha de comando
 
-O comando principal é `nircls` e suporta várias sub‑rotinas. As mensagens da CLI podem ser exibidas em português (`--lang pt`) ou inglês (`--lang en`, padrão). Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar modelos com parâmetros padrão:
+O comando principal é `nircls` e suporta várias sub‑rotinas. As mensagens da CLI podem ser exibidas em português (`--lang pt`) ou inglês (`--lang en`, padrão). Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar o modelo padrão PLSDA. Para tentar todos os modelos disponíveis (requer dependências opcionais como `xgboost`, `lightgbm`, `catboost` e `torch`), utilize a flag `--all-models`:
 
 ```bash
-# Execução completa com parâmetros padrão
+# Execução completa com parâmetros padrão (PLSDA)
 nircls run-all
+
+# Todos os modelos disponíveis (requer dependências opcionais)
+nircls run-all --all-models
 
 # Mensagens em português
 nircls run-all --lang pt
@@ -361,7 +370,7 @@ Pré-processadores disponíveis:
 * `EPO` – External Parameter Orthogonalization
 * `SCALE` – padronização com `StandardScaler`
 
-Modelos implementados:
+Modelos implementados (modelos que dependem de pacotes extras são ignorados se as bibliotecas não estiverem instaladas):
 
 * `PLSDA` – usa regressão de mínimos quadrados parciais para discriminação,
   adequada a dados de alta dimensionalidade com colinearidade
@@ -381,14 +390,14 @@ Modelos implementados:
   dispensando fase de treinamento explícita
 * `ExtraTrees` (Extremely Randomized Trees) – florestas com divisões totalmente aleatórias,
   indicadas para reduzir variância em dados ruidosos
-* `AdaBoost`, `XGBoost`, `LightGBM`, `CatBoost` – métodos de boosting robusto que capturam
+* `AdaBoost`, `XGBoost` (`xgboost`), `LightGBM` (`lightgbm`), `CatBoost` (`catboost`) – métodos de boosting robusto que capturam
   relações complexas e lidam bem com grandes conjuntos de dados
 * `QDA` (Quadratic Discriminant Analysis) – adequado quando cada classe tem matrizes de
   covariância distintas
 * `Naive Bayes` – assume independência condicional entre atributos, servindo como baseline
   rápido em alta dimensionalidade
 * `CNN 1D` e `LSTM 1D` – redes neurais para séries 1D; convoluções extraem padrões locais
-  enquanto LSTMs modelam dependências de longo prazo
+  enquanto LSTMs modelam dependências de longo prazo (dependem de `torch`)
 
 ## Treinar modelo final e predições
 
