@@ -63,8 +63,8 @@ Para utilizar o toolkit em modo de desenvolvimento instale no ambiente atual:
 pip install -e .
 ```
 
-Para habilitar os _hooks_ de formatação e lint antes de cada commit, instale o
-[pre-commit](https://pre-commit.com):
+Para habilitar os _hooks_ de formatação (`black` e `isort`) e lint (`flake8`) antes de cada commit,
+instale o [pre-commit](https://pre-commit.com):
 
 ```bash
 pre-commit install
