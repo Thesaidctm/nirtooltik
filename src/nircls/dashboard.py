@@ -14,9 +14,9 @@ import plotly.io as pio
 import plotly.express as px
 import plotly.graph_objects as go
 
-from .io import prepare_inputs, summarize_dataset
-from .utils.misc import RESULTS_DIR
-from .utils.summarize import summarize_runs
+from nircls.io import prepare_inputs, summarize_dataset
+from nircls.utils.misc import RESULTS_DIR
+from nircls.utils.summarize import summarize_runs
 
 
 def _figure_caption(stem: str) -> str:
