@@ -20,7 +20,8 @@ ambiente virtual:
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Unix/macOS
-# No Windows use: .venv\Scripts\activate
+# No Windows use:
+.venv\Scripts\activate
 ```
 
 Com o ambiente virtual ativo, usuários iniciantes podem executar um pipeline
