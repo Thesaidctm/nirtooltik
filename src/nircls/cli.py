@@ -68,6 +68,107 @@ PREPROCESS_DESCRIPTIONS = {
     "SCALE": "Standard Scaling",
 }
 
+STRINGS = {
+    "en": {
+        "prog_desc": "NIR Species Classification Toolkit",
+        "lang_help": "Interface language (pt or en)",
+        "run_help": "Run only one or all analyses",
+        "seed_help": "Seed for reproducibility",
+        "mlflow_help": "MLflow server URI for tracking",
+        "interactive_help": "Generate HTML files with interactive Plotly graphs",
+        "astm_help": "Check ASTM classification criteria",
+        "run_all_help": "Process raw data and run training + evaluation with defaults",
+        "run_all_config_help": "Configuration file to override defaults",
+        "dashboard_results_help": "Folder with results",
+        "mlflow_not_installed": "'mlflow' is not installed. Install with `pip install mlflow`.",
+        "config_not_found": "Configuration file not found. Check the provided path.",
+        "invalid_config": "Invalid configuration: {err}. Review required fields.",
+        "config_invalid_data_section": "Invalid configuration: 'data' section is required",
+        "config_invalid_data_models_sections": "Invalid configuration: 'data' and 'models' sections are required",
+        "config_invalid_data_models_cv_sections": "Invalid configuration: 'data', 'models' and 'cv' sections are required",
+        "invalid_data": "Invalid data: {err}",
+        "invalid_model": "Invalid model: {err}",
+        "results_in": "Results in: {path}",
+        "confusion_raw": "Confusion matrix (raw): {path}",
+        "confusion_norm": "Confusion matrix (normalized): {path}",
+        "astm_min_samples": "≥ 30 samples",
+        "astm_min_per_class": "≥ 10 per class",
+        "astm_external_validation": "External validation",
+        "full_report": "Full report: {path}",
+        "model_saved": "Model saved: {path}",
+        "final_model": "== Final model ==",
+        "data_prepared_in": "Prepared data in: {file}",
+        "model_trained_in": "Model trained in: {path}",
+        "cv_results_in": "Cross-val results in: {path}",
+        "wizard_data_path": "Data path:",
+        "wizard_target_col": "Target column:",
+        "wizard_target_required": "Provide target column",
+        "wizard_file_not_found": "File not found",
+        "wizard_models": "Models:",
+        "wizard_models_select": "Select at least one model",
+        "wizard_models_params": "Parameters for {name} (k=v, comma separated, optional):",
+        "wizard_preprocessors": "Preprocessors:",
+        "wizard_out_dir_prompt": "Directory to save config.yaml (default: .):",
+        "wizard_config_saved": "Configuration saved at: {file}",
+        "wizard_run_now": "Start training and evaluation now?",
+        "wizard_train_in": "Training in: {path}",
+        "wizard_eval_in": "Evaluation in: {path}",
+        "questionary_not_installed": "'questionary' is not installed. Install with `pip install questionary`.",
+    },
+    "pt": {
+        "prog_desc": "NIR Species Classification Toolkit",
+        "lang_help": "Idioma da interface (pt ou en)",
+        "run_help": "Rodar somente uma ou todas as análises",
+        "seed_help": "Semente para reprodutibilidade",
+        "mlflow_help": "URI do servidor MLflow para rastreamento",
+        "interactive_help": "Gerar arquivos HTML com gráficos Plotly interativos",
+        "astm_help": "Verificar critérios ASTM para classificação",
+        "run_all_help": "Processa dados brutos e executa treino+avaliação com padrões",
+        "run_all_config_help": "Arquivo de configuração para sobrescrever parâmetros padrão",
+        "dashboard_results_help": "Pasta com resultados",
+        "mlflow_not_installed": "'mlflow' não está instalado. Instale com `pip install mlflow`.",
+        "config_not_found": "Arquivo de configuração não encontrado. Verifique o caminho informado.",
+        "invalid_config": "Configuração inválida: {err}. Revise os campos obrigatórios.",
+        "config_invalid_data_section": "Configuração inválida: seção 'data' é obrigatória",
+        "config_invalid_data_models_sections": "Configuração inválida: seções 'data' e 'models' são obrigatórias",
+        "config_invalid_data_models_cv_sections": "Configuração inválida: seções 'data', 'models' e 'cv' são obrigatórias",
+        "invalid_data": "Dados inválidos: {err}",
+        "invalid_model": "Modelo inválido: {err}",
+        "results_in": "Resultados em: {path}",
+        "confusion_raw": "Matriz de confusão (bruta): {path}",
+        "confusion_norm": "Matriz de confusão (normalizada): {path}",
+        "astm_min_samples": "≥ 30 amostras",
+        "astm_min_per_class": "≥ 10 por classe",
+        "astm_external_validation": "Validação externa",
+        "full_report": "Relatório completo: {path}",
+        "model_saved": "Modelo salvo: {path}",
+        "final_model": "== Modelo final ==",
+        "data_prepared_in": "Dados preparados em: {file}",
+        "model_trained_in": "Modelo treinado em: {path}",
+        "cv_results_in": "Resultados de cross-val em: {path}",
+        "wizard_data_path": "Caminho dos dados:",
+        "wizard_target_col": "Coluna alvo:",
+        "wizard_target_required": "Informe a coluna alvo",
+        "wizard_file_not_found": "Arquivo não encontrado",
+        "wizard_models": "Modelos:",
+        "wizard_models_select": "Selecione pelo menos um modelo",
+        "wizard_models_params": "Parâmetros para {name} (k=v, separados por vírgula, opcional):",
+        "wizard_preprocessors": "Pré-processadores:",
+        "wizard_out_dir_prompt": "Diretório para salvar config.yaml (padrão: .):",
+        "wizard_config_saved": "Configuração salva em: {file}",
+        "wizard_run_now": "Iniciar treino e avaliação agora?",
+        "wizard_train_in": "Treino em: {path}",
+        "wizard_eval_in": "Avaliação em: {path}",
+        "questionary_not_installed": "'questionary' não está instalado. Instale com `pip install questionary`.",
+    },
+}
+
+LANG = "en"
+
+
+def t(key: str, **kwargs: Any) -> str:
+    return STRINGS.get(LANG, STRINGS["en"]).get(key, key).format(**kwargs)
+
 
 def _print_metrics_table(metrics_json: Path) -> None:
     """Print a compact table with mean ± std metrics."""
@@ -102,9 +203,9 @@ def _print_confusion_paths(fig_dir: Path) -> None:
     if not fig_dir or not fig_dir.exists():
         return
     for p in sorted(fig_dir.glob("*confusion_raw.png")):
-        print(f"Matriz de confusão (bruta): {p}")
+        print(t("confusion_raw", path=p))
     for p in sorted(fig_dir.glob("*confusion_norm.png")):
-        print(f"Matriz de confusão (normalizada): {p}")
+        print(t("confusion_norm", path=p))
 
 
 def _print_astm_report(astm_json: Path) -> None:
@@ -117,9 +218,9 @@ def _print_astm_report(astm_json: Path) -> None:
     except Exception:
         return
     labels = {
-        "min_samples": "≥ 30 amostras",
-        "min_per_class": "≥ 10 por classe",
-        "external_validation": "Validação externa",
+        "min_samples": t("astm_min_samples"),
+        "min_per_class": t("astm_min_per_class"),
+        "external_validation": t("astm_external_validation"),
     }
     for key, label in labels.items():
         val = flags.get(key)
@@ -158,25 +259,29 @@ def main(argv=None):
     """
 
     argv = argv or sys.argv[1:]
-    parser = argparse.ArgumentParser(
-        prog="nircls", description="NIR Species Classification Toolkit"
-    )
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--lang", choices=["pt", "en"], default="en")
+    ns, argv = pre.parse_known_args(argv)
+    global LANG
+    LANG = ns.lang
+    parser = argparse.ArgumentParser(prog="nircls", description=t("prog_desc"))
     parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument("--lang", choices=["pt", "en"], default=LANG, help=t("lang_help"))
     parser.add_argument(
         "--run",
         choices=["one", "all"],
         default="all",
-        help="Rodar somente uma ou todas as análises",
+        help=t("run_help"),
     )
     parser.add_argument(
         "--seed",
         type=int,
         default=42,
-        help="Semente para reprodutibilidade",
+        help=t("seed_help"),
     )
     parser.add_argument(
         "--mlflow",
-        help="URI do servidor MLflow para rastreamento",
+        help=t("mlflow_help"),
     )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
@@ -187,12 +292,12 @@ def main(argv=None):
     p_tr.add_argument(
         "--interactive",
         action="store_true",
-        help="Gerar arquivos HTML com gráficos Plotly interativos",
+        help=t("interactive_help"),
     )
     p_tr.add_argument(
         "--astm",
         action="store_true",
-        help="Verificar critérios ASTM para classificação",
+        help=t("astm_help"),
     )
     p_cv = sp.add_parser("crossval")
     p_cv.add_argument("--config", required=True)
@@ -200,22 +305,16 @@ def main(argv=None):
     p_cv.add_argument(
         "--interactive",
         action="store_true",
-        help="Gerar arquivos HTML com gráficos Plotly interativos",
+        help=t("interactive_help"),
     )
     p_cv.add_argument(
         "--astm",
         action="store_true",
-        help="Verificar critérios ASTM para classificação",
+        help=t("astm_help"),
     )
     p_demo = sp.add_parser("demo")
-    p_all = sp.add_parser(
-        "run-all",
-        help="Processa dados brutos e executa treino+avaliação com padrões",
-    )
-    p_all.add_argument(
-        "--config",
-        help="Arquivo de configuração para sobrescrever parâmetros padrão",
-    )
+    p_all = sp.add_parser("run-all", help=t("run_all_help"))
+    p_all.add_argument("--config", help=t("run_all_config_help"))
     p_wz = sp.add_parser("wizard")
     p_ev = sp.add_parser("evaluate")
     p_ev.add_argument("--model", required=True)
@@ -229,7 +328,7 @@ def main(argv=None):
     p_ex.add_argument("--data", required=True)
     p_ex.add_argument("--output", default=str(RESULTS_DIR))
     p_db = sp.add_parser("dashboard")
-    p_db.add_argument("--results", required=True, help="Pasta com resultados")
+    p_db.add_argument("--results", required=True, help=t("dashboard_results_help"))
     args = parser.parse_args(argv)
     set_seed(args.seed)
     setup_logging()
@@ -239,10 +338,7 @@ def main(argv=None):
         try:
             import mlflow
         except Exception:
-            print(
-                "'mlflow' não está instalado. Instale com `pip install mlflow`.",
-                file=sys.stderr,
-            )
+            print(t("mlflow_not_installed"), file=sys.stderr)
             return 1
         mlflow.set_tracking_uri(mlflow_uri)
     if args.cmd in {"prepare-data", "train", "crossval"}:
@@ -250,23 +346,17 @@ def main(argv=None):
             with open(args.config) as f:
                 raw = yaml.safe_load(f)
         except FileNotFoundError:
-            print(
-                "Arquivo de configuração não encontrado. Verifique o caminho informado.",
-                file=sys.stderr,
-            )
+            print(t("config_not_found"), file=sys.stderr)
             return 1
         try:
             cfg = ConfigModel(**raw)
         except ValidationError as e:  # pragma: no cover - user feedback
-            print(
-                f"Configuração inválida: {e}. Revise os campos obrigatórios.",
-                file=sys.stderr,
-            )
+            print(t("invalid_config", err=e), file=sys.stderr)
             return 1
 
     if args.cmd == "prepare-data":
         if cfg.data is None:
-            print("Configuração inválida: seção 'data' é obrigatória", file=sys.stderr)
+            print(t("config_invalid_data_section"), file=sys.stderr)
             return 1
         run_id = make_run_id("prepare")
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
@@ -274,7 +364,7 @@ def main(argv=None):
         try:
             ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         summary = summarize_dataset(ds_list)
         if not summary.empty:
@@ -292,10 +382,7 @@ def main(argv=None):
             )
     elif args.cmd == "train":
         if cfg.data is None or not cfg.models:
-            print(
-                "Configuração inválida: seções 'data' e 'models' são obrigatórias",
-                file=sys.stderr,
-            )
+            print(t("config_invalid_data_models_sections"), file=sys.stderr)
             return 1
         cfg.astm = args.astm
         run_id = make_run_id("train")
@@ -304,7 +391,7 @@ def main(argv=None):
         try:
             ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         summary = summarize_dataset(ds_list)
         if not summary.empty:
@@ -318,10 +405,10 @@ def main(argv=None):
                 mlflow_uri=mlflow_uri,
             )
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         except ModelError as e:
-            print(f"Modelo inválido: {e}", file=sys.stderr)
+            print(t("invalid_model", err=e), file=sys.stderr)
             return 1
         if metrics_path:
             _print_metrics_table(metrics_path)
@@ -331,18 +418,15 @@ def main(argv=None):
             _print_astm_report(out_dir / "astm_classification.json")
         if args.report_pdf and metrics_path and figs_dir:
             generate_report(metrics_path, figs_dir, Path(args.report_pdf))
-        print(f"Resultados em: {out_dir}")
+        print(t("results_in", path=out_dir))
     elif args.cmd == "crossval":
         if cfg.data is None or not cfg.models or cfg.cv is None:
-            print(
-                "Configuração inválida: seções 'data', 'models' e 'cv' são obrigatórias",
-                file=sys.stderr,
-            )
+            print(t("config_invalid_data_models_cv_sections"), file=sys.stderr)
             return 1
         try:
             ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         summary = summarize_dataset(ds_list)
         if not summary.empty:
@@ -362,10 +446,10 @@ def main(argv=None):
                 mlflow_uri=mlflow_uri,
             )
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         except ModelError as e:
-            print(f"Modelo inválido: {e}", file=sys.stderr)
+            print(t("invalid_model", err=e), file=sys.stderr)
             return 1
         if args.report_pdf:
             pdf_path = Path(args.report_pdf)
@@ -384,7 +468,7 @@ def main(argv=None):
             _print_confusion_paths(figs_dir)
             if args.astm:
                 _print_astm_report(metrics_path.parent / "astm_classification.json")
-        print(f"Resultados em: {out_dir}")
+        print(t("results_in", path=out_dir))
     elif args.cmd == "run-all":
         default_cfg = {
             "data": {"input_path": str(RAW_DIR), "out_dir": str(RESULTS_DIR)},
@@ -396,10 +480,7 @@ def main(argv=None):
                 with open(args.config) as f:
                     user_cfg = yaml.safe_load(f) or {}
             except FileNotFoundError:
-                print(
-                    "Arquivo de configuração não encontrado. Verifique o caminho informado.",
-                    file=sys.stderr,
-                )
+                print(t("config_not_found"), file=sys.stderr)
                 return 1
             _deep_update(default_cfg, user_cfg)
         run_id = now_ts()
@@ -409,7 +490,7 @@ def main(argv=None):
         try:
             ds_list = prepare_inputs(default_cfg["data"], use_cache=default_cfg.get("use_cache", True))
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         summary = summarize_dataset(ds_list)
         if not summary.empty:
@@ -447,16 +528,16 @@ def main(argv=None):
             _print_confusion_paths(cv_figs)
             rpt = cv_metrics.parent / "report.md"
             if rpt.exists():
-                print(f"Relatório completo: {rpt}")
+                print(t("full_report", path=rpt))
         if train_metrics:
-            print("== Modelo final ==")
+            print(t("final_model"))
             _print_metrics_table(train_metrics)
             _print_confusion_paths(train_figs)
             if report_path.exists():
-                print(f"Relatório completo: {report_path}")
+                print(t("full_report", path=report_path))
             if model_path.exists():
-                print(f"Modelo salvo: {model_path}")
-        print(f"Resultados em: {base_dir}")
+                print(t("model_saved", path=model_path))
+        print(t("results_in", path=base_dir))
         return str(base_dir)
     elif args.cmd == "demo":
         demo_cfg = Path(__file__).resolve().parents[2] / "configs" / "demo.yaml"
@@ -468,7 +549,7 @@ def main(argv=None):
         try:
             cfg = ConfigModel(**raw)
         except ValidationError as e:  # pragma: no cover - user feedback
-            print(f"Configuração inválida: {e}", file=sys.stderr)
+            print(t("demo_config_invalid", err=e), file=sys.stderr)
             return 1
         run_id = make_run_id("demo")
         base_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
@@ -477,7 +558,7 @@ def main(argv=None):
         try:
             ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
         if ds_list:
             first = ds_list[0]
             prep_file = base_dir / f"prepared_{first['target']}.xlsx"
@@ -488,7 +569,7 @@ def main(argv=None):
                 cfg.data.x_sheet or "X",
                 cfg.data.y_sheet or "Y",
             )
-            print(f"Dados preparados em: {prep_file}")
+            print(t("data_prepared_in", file=prep_file))
         train_dir = base_dir / "train"
         ensure_dirs(train_dir)
         try:
@@ -499,11 +580,11 @@ def main(argv=None):
                 _print_metrics_table(metrics_path)
             if figs_dir:
                 _print_confusion_paths(figs_dir)
-            print(f"Modelo treinado em: {train_dir}")
+            print(t("model_trained_in", path=train_dir))
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
         except ModelError as e:
-            print(f"Modelo inválido: {e}", file=sys.stderr)
+            print(t("invalid_model", err=e), file=sys.stderr)
         cv_dir = base_dir / "cv"
         ensure_dirs(cv_dir)
         try:
@@ -513,32 +594,29 @@ def main(argv=None):
             for metrics_path, figs_dir in outputs:
                 _print_metrics_table(metrics_path)
                 _print_confusion_paths(figs_dir)
-            print(f"Resultados de cross-val em: {cv_dir}")
+            print(t("cv_results_in", path=cv_dir))
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
         except ModelError as e:
-            print(f"Modelo inválido: {e}", file=sys.stderr)
+            print(t("invalid_model", err=e), file=sys.stderr)
     elif args.cmd == "wizard":
         try:  # pragma: no cover - interactive session
             import questionary
             from questionary import Choice
         except Exception:  # pragma: no cover - missing optional dependency
-            print(
-                "'questionary' não está instalado. Instale com `pip install questionary`.",
-                file=sys.stderr,
-            )
+            print(t("questionary_not_installed"), file=sys.stderr)
             return 1
 
         from typing import Union
 
         def _validate_path(p: str) -> Union[bool, str]:
-            return Path(p).exists() or "Arquivo não encontrado"
+            return Path(p).exists() or t("wizard_file_not_found")
 
         input_path = questionary.text(
-            "Caminho dos dados:", validate=_validate_path
+            t("wizard_data_path"), validate=_validate_path
         ).ask()
         target = questionary.text(
-            "Coluna alvo:", validate=lambda t: bool(t) or "Informe a coluna alvo"
+            t("wizard_target_col"), validate=lambda t: bool(t) or t("wizard_target_required")
         ).ask()
 
         from .models.factory import MODEL_BUILDERS
@@ -548,15 +626,15 @@ def main(argv=None):
             for k in MODEL_BUILDERS.keys()
         ]
         selected_models = questionary.checkbox(
-            "Modelos:",
+            t("wizard_models"),
             choices=model_choices,
-            validate=lambda m: bool(m) or "Selecione pelo menos um modelo",
+            validate=lambda m: bool(m) or t("wizard_models_select"),
         ).ask()
 
         models_cfg = []
         for name in selected_models:
             params_raw = questionary.text(
-                f"Parâmetros para {name} (k=v, separados por vírgula, opcional):"
+                t("wizard_models_params", name=name)
             ).ask()
             model_entry: dict[str, Any] = {"name": name}
             if params_raw:
@@ -569,12 +647,12 @@ def main(argv=None):
             Choice(title=f"{k} - {v}", value=k) for k, v in PREPROCESS_DESCRIPTIONS.items()
         ]
         preprocess_steps = questionary.checkbox(
-            "Pré-processadores:", choices=pre_choices
+            t("wizard_preprocessors"), choices=pre_choices
         ).ask()
 
         out_dir_str = (
             questionary.text(
-                "Diretório para salvar config.yaml (padrão: .):", default="."
+                t("wizard_out_dir_prompt"), default="."
             ).ask()
             or "."
         )
@@ -590,9 +668,9 @@ def main(argv=None):
         cfg_file = out_path / "config.yaml"
         with open(cfg_file, "w") as f:
             yaml.safe_dump(cfg_dict, f)
-        print(f"Configuração salva em: {cfg_file}")
+        print(t("wizard_config_saved", file=cfg_file))
         run_now = questionary.confirm(
-            "Iniciar treino e avaliação agora?"
+            t("wizard_run_now")
         ).ask()
         if run_now:
             cfg_obj = ConfigModel(**cfg_dict)
@@ -609,7 +687,7 @@ def main(argv=None):
                     _print_metrics_table(metrics_path)
                 if figs_dir:
                     _print_confusion_paths(figs_dir)
-                print(f"Treino em: {train_dir}")
+                print(t("wizard_train_in", path=train_dir))
                 cv_dir = base_dir / "cv"
                 ensure_dirs(cv_dir)
                 outputs = run_multiple_eval(
@@ -618,25 +696,25 @@ def main(argv=None):
                 for metrics_path, figs_dir in outputs:
                     _print_metrics_table(metrics_path)
                     _print_confusion_paths(figs_dir)
-                print(f"Avaliação em: {cv_dir}")
+                print(t("wizard_eval_in", path=cv_dir))
             except DataError as e:
-                print(f"Dados inválidos: {e}", file=sys.stderr)
+                print(t("invalid_data", err=e), file=sys.stderr)
             except ModelError as e:
-                print(f"Modelo inválido: {e}", file=sys.stderr)
+                print(t("invalid_model", err=e), file=sys.stderr)
     elif args.cmd == "evaluate":
         try:
             evaluate_saved_model(Path(args.model), Path(args.data))
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
         except ModelError as e:
-            print(f"Modelo inválido: {e}", file=sys.stderr)
+            print(t("invalid_model", err=e), file=sys.stderr)
     elif args.cmd == "predict":
         try:
             predict_with_model(Path(args.model), Path(args.data), Path(args.output))
         except DataError as e:
-            print(f"Dados inválidos: {e}", file=sys.stderr)
+            print(t("invalid_data", err=e), file=sys.stderr)
         except ModelError as e:
-            print(f"Modelo inválido: {e}", file=sys.stderr)
+            print(t("invalid_model", err=e), file=sys.stderr)
     elif args.cmd == "explain":
         explain_model(Path(args.model), Path(args.data), Path(args.output))
     elif args.cmd == "dashboard":

@@ -160,11 +160,14 @@ Cada item da lista define um estimador:
 
 ## Interface de linha de comando
 
-O comando principal é `nircls` e suporta várias sub‑rotinas. Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar modelos com parâmetros padrão:
+O comando principal é `nircls` e suporta várias sub‑rotinas. As mensagens da CLI podem ser exibidas em português (`--lang pt`) ou inglês (`--lang en`, padrão). Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar modelos com parâmetros padrão:
 
 ```bash
 # Execução completa com parâmetros padrão
 nircls run-all
+
+# Mensagens em português
+nircls run-all --lang pt
 
 # Verificar a versão instalada
 nircls --version
