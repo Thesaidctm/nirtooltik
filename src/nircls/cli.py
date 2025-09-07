@@ -383,7 +383,7 @@ def main(argv=None):
         cv_dir = base_dir / "cv"
         ensure_dirs(train_dir, cv_dir)
         try:
-            metrics_path, figs_dir = train_and_save(
+            train_metrics, train_figs = train_and_save(
                 default_cfg,
                 train_dir,
                 random_state=args.seed,
@@ -392,10 +392,8 @@ def main(argv=None):
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)
             return 1
-        if metrics_path:
-            _print_metrics_table(metrics_path)
-        if figs_dir:
-            _print_confusion_paths(figs_dir)
+        model_path = train_dir / "model.joblib"
+        report_path = train_dir / "report.md"
         try:
             outputs = run_multiple_eval(
                 default_cfg,
@@ -406,10 +404,21 @@ def main(argv=None):
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)
             return 1
-        for metrics_path, figs_dir in outputs:
-            print(f"== {metrics_path.parent.name} ==")
-            _print_metrics_table(metrics_path)
-            _print_confusion_paths(figs_dir)
+        for cv_metrics, cv_figs in outputs:
+            print(f"== {cv_metrics.parent.name} ==")
+            _print_metrics_table(cv_metrics)
+            _print_confusion_paths(cv_figs)
+            rpt = cv_metrics.parent / "report.md"
+            if rpt.exists():
+                print(f"Relatório completo: {rpt}")
+        if train_metrics:
+            print("== Modelo final ==")
+            _print_metrics_table(train_metrics)
+            _print_confusion_paths(train_figs)
+            if report_path.exists():
+                print(f"Relatório completo: {report_path}")
+            if model_path.exists():
+                print(f"Modelo salvo: {model_path}")
         print(f"Resultados em: {base_dir}")
     elif args.cmd == "demo":
         demo_cfg = Path(__file__).resolve().parents[2] / "configs" / "demo.yaml"
