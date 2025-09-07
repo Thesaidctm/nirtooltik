@@ -235,7 +235,17 @@ def _render_dashboard(results_dir: Path) -> None:
                                 with metrics_path.open() as f:
                                     metrics = json.load(f)
                                 if metrics:
-                                    st.dataframe(pd.DataFrame(metrics))
+                                    df = pd.DataFrame(metrics)
+                                    if "n_components" in df.columns:
+                                        df["n_components"] = df["n_components"].astype("Int64")
+                                        cols = df.columns.tolist()
+                                        if "model" in cols:
+                                            cols.insert(
+                                                cols.index("model") + 1,
+                                                cols.pop(cols.index("n_components")),
+                                            )
+                                        df = df[cols]
+                                    st.dataframe(df)
                             except Exception as exc:  # pragma: no cover - display error
                                 st.error(f"Erro ao carregar métricas: {exc}")
                             fig_dir = strat_dir / "figures"
@@ -293,7 +303,17 @@ def _render_dashboard(results_dir: Path) -> None:
                                 with metrics_path.open() as f:
                                     metrics = json.load(f)
                                 if metrics:
-                                    st.dataframe(pd.DataFrame(metrics))
+                                    df = pd.DataFrame(metrics)
+                                    if "n_components" in df.columns:
+                                        df["n_components"] = df["n_components"].astype("Int64")
+                                        cols = df.columns.tolist()
+                                        if "model" in cols:
+                                            cols.insert(
+                                                cols.index("model") + 1,
+                                                cols.pop(cols.index("n_components")),
+                                            )
+                                        df = df[cols]
+                                    st.dataframe(df)
                             except Exception as exc:  # pragma: no cover
                                 st.error(f"Erro ao carregar métricas: {exc}")
                             fig_dir = strat_dir / "figures"
