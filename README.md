@@ -252,6 +252,8 @@ produzidos:
 * `figures/` – gráficos de curva ROC, matriz de confusão e confiabilidade,
   além de `*.confusion.csv` com a matriz em formato tabular para análises
   externas.
+* `metadata.json` – informações de rastreabilidade como hashes dos arquivos de
+  entrada, versões das dependências e semente aleatória.
 
 O relatório é gerado inteiramente de forma local, sem qualquer integração com
 serviços externos ou APIs.
