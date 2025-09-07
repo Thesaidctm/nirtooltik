@@ -8,31 +8,31 @@ models, making predictions and generating explanations.
 from __future__ import annotations
 
 import argparse
-import sys
 import json
-import yaml  # type: ignore[import-untyped]
+import sys
 from pathlib import Path
-from typing import Any, Sequence, Dict, cast
+from typing import Any, Dict, Sequence, cast
 
 import pandas as pd
+import yaml  # type: ignore[import-untyped]
 
 from . import __version__
+from .config_schema import ConfigModel, ValidationError
+from .dashboard import run_dashboard
 from .io import export_xy_xlsx, summarize_dataset
+from .models.factory import get_model_builders, get_model_descriptions
 from .pipeline import (
+    evaluate_saved_model,
+    explain_model,
+    predict_with_model,
+    prepare_inputs,
     run_multiple_eval,
     train_and_save,
-    evaluate_saved_model,
-    predict_with_model,
-    explain_model,
-    prepare_inputs,
 )
-from .dashboard import run_dashboard
-from .utils.summarize import summarize_runs
-from .utils.logging import setup_logging, log_versions
-from .utils.misc import ensure_dirs, make_run_id, set_seed, RAW_DIR, RESULTS_DIR, now_ts
-from .config_schema import ConfigModel, ValidationError
 from .utils.errors import DataError, ModelError
-from .models.factory import get_model_builders, get_model_descriptions
+from .utils.logging import log_versions, setup_logging
+from .utils.misc import RAW_DIR, RESULTS_DIR, ensure_dirs, make_run_id, now_ts, set_seed
+from .utils.summarize import summarize_runs
 
 # Human-friendly names for interactive wizard choices
 MODEL_DESCRIPTIONS = get_model_descriptions()
@@ -58,14 +58,16 @@ STRINGS = {
         "astm_help": "Check ASTM classification criteria",
         "run_all_help": "Process raw data and run training + evaluation with defaults",
         "run_all_config_help": "Configuration file to override defaults",
+        "run_all_models_help": "Use all available models (requires optional dependencies)",
         "dashboard_results_help": "Folder with results",
         "models_help": "List available model builders",
         "mlflow_not_installed": "'mlflow' is not installed. Install with `pip install mlflow`.",
+        "model_dep_missing": "Skipping {name}: {err}",
         "config_not_found": "Configuration file not found. Check the provided path.",
         "invalid_config": "Invalid configuration: {err}. Review required fields.",
         "config_invalid_data_section": "Invalid configuration: 'data' section is required",
         "config_invalid_data_models_sections": "Invalid configuration: 'data' and 'models' sections are required",
-        "config_invalid_data_models_cv_sections": "Invalid configuration: 'data', 'models' and 'cv' sections are required",
+        "config_invalid_data_models_cv_sections": "Invalid configuration: 'data', 'models' and 'cv' sections are required",  # noqa: E501
         "invalid_data": "Invalid data: {err}",
         "invalid_model": "Invalid model: {err}",
         "results_in": "Results in: {path}",
@@ -105,14 +107,16 @@ STRINGS = {
         "astm_help": "Verificar critérios ASTM para classificação",
         "run_all_help": "Processa dados brutos e executa treino+avaliação com padrões",
         "run_all_config_help": "Arquivo de configuração para sobrescrever parâmetros padrão",
+        "run_all_models_help": "Usar todos os modelos disponíveis (requer dependências opcionais)",
         "dashboard_results_help": "Pasta com resultados",
         "models_help": "Listar modelos disponíveis",
         "mlflow_not_installed": "'mlflow' não está instalado. Instale com `pip install mlflow`.",
+        "model_dep_missing": "Ignorando {name}: {err}",
         "config_not_found": "Arquivo de configuração não encontrado. Verifique o caminho informado.",
         "invalid_config": "Configuração inválida: {err}. Revise os campos obrigatórios.",
         "config_invalid_data_section": "Configuração inválida: seção 'data' é obrigatória",
         "config_invalid_data_models_sections": "Configuração inválida: seções 'data' e 'models' são obrigatórias",
-        "config_invalid_data_models_cv_sections": "Configuração inválida: seções 'data', 'models' e 'cv' são obrigatórias",
+        "config_invalid_data_models_cv_sections": "Configuração inválida: seções 'data', 'models' e 'cv' são obrigatórias",  # noqa: E501
         "invalid_data": "Dados inválidos: {err}",
         "invalid_model": "Modelo inválido: {err}",
         "results_in": "Resultados em: {path}",
@@ -169,9 +173,7 @@ def _print_metrics_table(metrics_json: Path) -> None:
         base = col[:-5]
         std_col = f"{base}_std"
         if std_col in df.columns:
-            df[base] = df.apply(
-                lambda r: f"{r[col]:.3f} ± {r[std_col]:.3f}", axis=1
-            )
+            df[base] = df.apply(lambda r: f"{r[col]:.3f} ± {r[std_col]:.3f}", axis=1)
         else:
             df[base] = df[col].map(lambda x: f"{x:.3f}")
     display_cols = id_cols + [c[:-5] for c in metrics_cols]
@@ -229,6 +231,7 @@ def _deep_update(base: dict, updates: dict) -> dict:
             base[k] = v
     return base
 
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the ``nircls`` command-line interface.
 
@@ -247,7 +250,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     LANG = ns.lang
     parser = argparse.ArgumentParser(prog="nircls", description=t("prog_desc"))
     parser.add_argument("--version", action="version", version=__version__)
-    parser.add_argument("--lang", choices=["pt", "en"], default=LANG, help=t("lang_help"))
+    parser.add_argument(
+        "--lang", choices=["pt", "en"], default=LANG, help=t("lang_help")
+    )
     parser.add_argument(
         "--run",
         choices=["one", "all"],
@@ -291,11 +296,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help=t("astm_help"),
     )
-    p_demo = sp.add_parser("demo")
+    sp.add_parser("demo")
     sp.add_parser("list-models", help=t("models_help"))
     p_all = sp.add_parser("run-all", help=t("run_all_help"))
     p_all.add_argument("--config", help=t("run_all_config_help"))
-    p_wz = sp.add_parser("wizard")
+    p_all.add_argument(
+        "--all-models",
+        action="store_true",
+        help=t("run_all_models_help"),
+    )
+    sp.add_parser("wizard")
     p_ev = sp.add_parser("evaluate")
     p_ev.add_argument("--model", required=True)
     p_ev.add_argument("--data", required=True)
@@ -451,9 +461,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _print_astm_report(metrics_path.parent / "astm_classification.json")
         print(t("results_in", path=out_dir))
     elif args.cmd == "run-all":
+        builders = get_model_builders()
+        models_cfg: list[dict[str, Any]] = [{"name": "PLSDA"}]
+        if args.all_models:
+            models_cfg = []
+            for name, builder in builders.items():
+                try:
+                    builder({})
+                except ImportError as e:
+                    print(t("model_dep_missing", name=name, err=e), file=sys.stderr)
+                    continue
+                models_cfg.append({"name": name})
         default_cfg: Dict[str, Any] = {
             "data": {"input_path": str(RAW_DIR), "out_dir": str(RESULTS_DIR)},
-            "models": [{"name": "PLSDA"}],
+            "models": models_cfg,
             "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
         }
         if args.config:
@@ -470,7 +491,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(base_dir)
         data_cfg["out_dir"] = str(base_dir)
         try:
-            ds_list = prepare_inputs(data_cfg, use_cache=bool(default_cfg.get("use_cache", True)))
+            ds_list = prepare_inputs(
+                data_cfg, use_cache=bool(default_cfg.get("use_cache", True))
+            )
         except DataError as e:
             print(t("invalid_data", err=e), file=sys.stderr)
             return 1
@@ -598,7 +621,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             t("wizard_data_path"), validate=_validate_path
         ).ask()
         target = questionary.text(
-            t("wizard_target_col"), validate=lambda t: bool(t) or t("wizard_target_required")
+            t("wizard_target_col"),
+            validate=lambda t: bool(t) or t("wizard_target_required"),
         ).ask()
 
         builders = get_model_builders()
@@ -614,9 +638,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         models_cfg = []
         for name in selected_models:
-            params_raw = questionary.text(
-                t("wizard_models_params", name=name)
-            ).ask()
+            params_raw = questionary.text(t("wizard_models_params", name=name)).ask()
             model_entry: dict[str, Any] = {"name": name}
             if params_raw:
                 params = _parse_params(params_raw)
@@ -625,17 +647,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             models_cfg.append(model_entry)
 
         pre_choices = [
-            Choice(title=f"{k} - {v}", value=k) for k, v in PREPROCESS_DESCRIPTIONS.items()
+            Choice(title=f"{k} - {v}", value=k)
+            for k, v in PREPROCESS_DESCRIPTIONS.items()
         ]
         preprocess_steps = questionary.checkbox(
             t("wizard_preprocessors"), choices=pre_choices
         ).ask()
 
         out_dir_str = (
-            questionary.text(
-                t("wizard_out_dir_prompt"), default="."
-            ).ask()
-            or "."
+            questionary.text(t("wizard_out_dir_prompt"), default=".").ask() or "."
         )
         out_path = Path(out_dir_str)
         out_path.mkdir(parents=True, exist_ok=True)
@@ -650,9 +670,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         with open(cfg_file, "w") as f:
             yaml.safe_dump(cfg_dict, f)
         print(t("wizard_config_saved", file=cfg_file))
-        run_now = questionary.confirm(
-            t("wizard_run_now")
-        ).ask()
+        run_now = questionary.confirm(t("wizard_run_now")).ask()
         if run_now:
             cfg_obj = ConfigModel(**cfg_dict)
             run_id = make_run_id("wizard")
@@ -662,7 +680,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             ensure_dirs(train_dir)
             try:
                 metrics_path, figs_dir = train_and_save(
-                    cfg_obj.dict(), train_dir, random_state=args.seed, mlflow_uri=mlflow_uri
+                    cfg_obj.dict(),
+                    train_dir,
+                    random_state=args.seed,
+                    mlflow_uri=mlflow_uri,
                 )
                 if metrics_path:
                     _print_metrics_table(metrics_path)
@@ -672,7 +693,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cv_dir = base_dir / "cv"
                 ensure_dirs(cv_dir)
                 outputs = run_multiple_eval(
-                    cfg_obj.dict(), cv_dir, random_state=args.seed, mlflow_uri=mlflow_uri
+                    cfg_obj.dict(),
+                    cv_dir,
+                    random_state=args.seed,
+                    mlflow_uri=mlflow_uri,
                 )
                 for metrics_path, figs_dir in outputs:
                     _print_metrics_table(metrics_path)
