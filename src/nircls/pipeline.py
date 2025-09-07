@@ -4,8 +4,11 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
 import warnings
 import json
+import sys
+from glob import glob
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from rich.progress import Progress
@@ -44,9 +47,10 @@ from .utils.plots import (
     plot_reliability,
 )
 from .report import generate_report
-from .utils.logging import logger
+from .utils.logging import logger, log_versions
 from .utils.errors import DataError, ModelError
 from .utils.split import spxy_split
+from .utils.misc import file_hash
 
 warnings.filterwarnings(
     "ignore",
@@ -618,6 +622,25 @@ def run_multiple_eval(
     strategies = cfg.get("cv", {}).get("strategies", [])
     random_state = cfg.get("cv", {}).get("random_state", random_state)
     cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # log and persist environment metadata for reproducibility
+    log_versions()
+    files = [Path(p) for p in glob(cfg["data"]["input_path"])]
+    input_hashes = {f.as_posix(): file_hash(f) for f in files}
+    metadata = {
+        "sys_version": sys.version,
+        "versions": {
+            "numpy": np.__version__,
+            "pandas": pd.__version__,
+            "sklearn": sklearn.__version__,
+        },
+        "seed": random_state,
+        "input_hashes": input_hashes,
+    }
+    with open(out_dir / "metadata.json", "w") as f:
+        json.dump(metadata, f, indent=2)
+
     outputs: List[Tuple[Path, Path]] = []
     with Progress() as progress:
         strat_task = progress.add_task(
@@ -712,6 +735,24 @@ def train_and_save(
         with open(out_dir / "classes.json", "w") as f:
             json.dump(le.classes_.tolist(), f)
         progress.update(load_task, completed=1)
+
+        # log and persist environment metadata
+        log_versions()
+        input_hashes = {}
+        if Path(ds["file"]).exists():
+            input_hashes[ds["file"]] = file_hash(ds["file"])
+        metadata = {
+            "sys_version": sys.version,
+            "versions": {
+                "numpy": np.__version__,
+                "pandas": pd.__version__,
+                "sklearn": sklearn.__version__,
+            },
+            "seed": random_state,
+            "input_hashes": input_hashes,
+        }
+        with open(out_dir / "metadata.json", "w") as f:
+            json.dump(metadata, f, indent=2)
 
         name, pipe, grid = build_pipeline_from_config(cfg)[0]
         model_cfg = cfg.get("models", [])[0] if cfg.get("models") else {}

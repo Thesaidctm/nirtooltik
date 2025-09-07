@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import os
 import random
+import hashlib
 
 import numpy as np
 
@@ -33,3 +34,24 @@ def set_seed(seed: int = 42) -> None:
     random.seed(seed)
     np.random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
+
+
+def file_hash(path: Path | str) -> str:
+    """Return SHA256 hash of file at ``path``.
+
+    Parameters
+    ----------
+    path:
+        Path to the file.
+
+    Returns
+    -------
+    str
+        Hexadecimal representation of the file's SHA256 hash.
+    """
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
