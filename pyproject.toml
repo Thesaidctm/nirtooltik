@@ -33,6 +33,7 @@ torch = ["torch"]
 questionary = ["questionary"]
 dvc = ["dvc"]
 tracking = ["mlflow", "dvc"]
+shap = ["shap"]
 
 [project.scripts]
 nircls = "nircls.cli:main"
