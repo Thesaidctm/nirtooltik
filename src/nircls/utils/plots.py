@@ -26,12 +26,11 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
     """
 
     out_base.parent.mkdir(parents=True, exist_ok=True)
-    for ext in (".png", ".jpg", ".svg"):
-        out = out_base.with_suffix(ext)
-        try:
-            fig.write_image(out)
-        except Exception:
-            out.touch()
+    out = out_base.with_suffix(".png")
+    try:
+        fig.write_image(out)
+    except Exception:
+        out.touch()
     if interactive:
         try:
             fig.write_html(out_base.with_suffix(".html"), include_plotlyjs="cdn")
@@ -49,58 +48,48 @@ def plot_confusion(
     *,
     colorscale: Any = [[0, "white"], [1, "#0d47a1"]],
 ) -> None:
-    """Plot and export confusion matrices in raw and normalised forms.
+    """Plot and export a confusion matrix with raw counts.
 
-    The generated heatmaps include labels showing both the percentage and raw
-    count for each cell (``"{percent:.1%}\n(n={count})"``) and are saved with
-    ``*_raw`` and ``*_norm`` suffixes.
+    The heatmap displays only the number of samples per cell and a CSV file is
+    also generated including an additional column with the per-class accuracy
+    percentage.
 
     Parameters
     ----------
     cm, classes, out_base, interactive:
         See original function.
     colorscale:
-        Plotly colorscale applied to both heatmaps. Defaults to a white-to-blue
+        Plotly colorscale applied to the heatmap. Defaults to a white-to-blue
         palette.
     """
 
     cm = np.asarray(cm)
-    cm_percent = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-12)
-    labels = np.vectorize(lambda p, c: f"{p:.1%}\n(n={c})")(cm_percent, cm)
-
-    def _single(z, title, suffix, colorbar_title, zmax):
-        heatmap = go.Heatmap(
-            z=z,
-            x=classes,
-            y=classes,
-            text=labels,
-            texttemplate="%{text}",
-            colorscale=colorscale,
-            zmin=0,
-            zmax=zmax,
-            colorbar=dict(title=colorbar_title),
-        )
-        fig = go.Figure(data=[heatmap])
-        fig.update_xaxes(tickangle=45)
-        fig.update_layout(
-            title=title,
-            xaxis_title="Pred",
-            yaxis_title="True",
-        )
-        _export(fig, out_base.with_name(out_base.name + suffix), interactive)
-
-    _single(
-        cm_percent,
-        "Confusion Matrix (normalized)",
-        "_norm",
-        "Taxa de acerto normalizada",
-        1,
+    labels = cm.astype(str)
+    heatmap = go.Heatmap(
+        z=cm,
+        x=classes,
+        y=classes,
+        text=labels,
+        texttemplate="%{text}",
+        colorscale=colorscale,
+        zmin=0,
+        zmax=cm.max(),
+        colorbar=dict(title="Número de indivíduos"),
     )
-    _single(cm, "Confusion Matrix", "_raw", "Número de indivíduos", cm.max())
+    fig = go.Figure(data=[heatmap])
+    fig.update_xaxes(tickangle=45)
+    fig.update_layout(title="Confusion Matrix", xaxis_title="Pred", yaxis_title="True")
+    _export(fig, out_base, interactive)
 
-    pd.DataFrame(cm, index=classes, columns=classes).to_csv(
-        out_base.with_suffix(".csv")
+    acc = np.divide(
+        np.diag(cm),
+        cm.sum(axis=1),
+        out=np.zeros(cm.shape[0], dtype=float),
+        where=cm.sum(axis=1) != 0,
     )
+    df = pd.DataFrame(cm, index=classes, columns=classes)
+    df["accuracy_percent"] = acc * 100
+    df.to_csv(out_base.with_suffix(".csv"))
 
 
 def plot_roc_ovr(

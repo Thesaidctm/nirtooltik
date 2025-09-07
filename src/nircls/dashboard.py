@@ -24,8 +24,7 @@ def _figure_caption(stem: str) -> str:
 
     suffix = stem.split("__")[-1]
     return {
-        "confusion_raw": "Matriz de Confusão (Bruta)",
-        "confusion_norm": "Matriz de Confusão (Normalizada)",
+        "confusion": "Matriz de Confusão",
         "roc": "Curva ROC",
         "reliability": "Diagrama de Confiabilidade",
     }.get(suffix, stem)

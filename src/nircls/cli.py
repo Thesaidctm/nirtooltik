@@ -72,8 +72,7 @@ STRINGS = {
         "invalid_data": "Invalid data: {err}",
         "invalid_model": "Invalid model: {err}",
         "results_in": "Results in: {path}",
-        "confusion_raw": "Confusion matrix (raw): {path}",
-        "confusion_norm": "Confusion matrix (normalized): {path}",
+        "confusion": "Confusion matrix: {path}",
         "astm_min_samples": "≥ 30 samples",
         "astm_min_per_class": "≥ 10 per class",
         "astm_external_validation": "External validation",
@@ -125,8 +124,7 @@ STRINGS = {
         "invalid_data": "Dados inválidos: {err}",
         "invalid_model": "Modelo inválido: {err}",
         "results_in": "Resultados em: {path}",
-        "confusion_raw": "Matriz de confusão (bruta): {path}",
-        "confusion_norm": "Matriz de confusão (normalizada): {path}",
+        "confusion": "Matriz de confusão: {path}",
         "astm_min_samples": "≥ 30 amostras",
         "astm_min_per_class": "≥ 10 por classe",
         "astm_external_validation": "Validação externa",
@@ -190,10 +188,8 @@ def _print_confusion_paths(fig_dir: Path) -> None:
 
     if not fig_dir or not fig_dir.exists():
         return
-    for p in sorted(fig_dir.glob("*confusion_raw.png")):
-        print(t("confusion_raw", path=p))
-    for p in sorted(fig_dir.glob("*confusion_norm.png")):
-        print(t("confusion_norm", path=p))
+    for p in sorted(fig_dir.glob("*confusion.png")):
+        print(t("confusion", path=p))
 
 
 def _print_astm_report(astm_json: Path) -> None:
