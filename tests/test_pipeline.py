@@ -281,7 +281,7 @@ def _dummy_cfg():
 def test_train_and_save_file_not_found(monkeypatch, tmp_path):
     cfg = _dummy_cfg()
 
-    def raise_data_error(_):
+    def raise_data_error(_, **kwargs):
         raise DataError("Arquivo de dados não encontrado")
 
     monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_data_error)
@@ -292,7 +292,7 @@ def test_train_and_save_file_not_found(monkeypatch, tmp_path):
 def test_train_and_save_missing_data_error(monkeypatch, tmp_path):
     cfg = _dummy_cfg()
 
-    def raise_data_error(_):
+    def raise_data_error(_, **kwargs):
         raise DataError("dados inexistentes na planilha")
 
     monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_data_error)
@@ -303,7 +303,7 @@ def test_train_and_save_missing_data_error(monkeypatch, tmp_path):
 def test_train_and_save_model_incompatible(monkeypatch, tmp_path):
     cfg = _dummy_cfg()
 
-    def dummy_prepare(_):
+    def dummy_prepare(_, **kwargs):
         return [{"X": pd.DataFrame([[0]]), "Y": pd.Series([0]), "file": "f", "target": "t"}]
 
     def raise_model_error(_):
