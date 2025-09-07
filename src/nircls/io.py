@@ -60,12 +60,12 @@ def read_xlsx_xy(
     for col in target_cols:
         if col not in Ydf.columns:
             raise DataError(f"Coluna alvo {col} não encontrada em {path}")
-        out.append((col, Ydf[col].astype(str)))
+        out.append((col, Ydf[col].astype("category")))
     groups = None
     if group_col:
         if group_col not in Ydf.columns:
             raise DataError(f"Coluna de grupos {group_col} não encontrada em {path}")
-        groups = Ydf[group_col].astype(str)
+        groups = Ydf[group_col].astype("category")
     X = X.select_dtypes(include=[np.number])
     if any(len(X) != len(y) for _, y in out) or (
         groups is not None and len(X) != len(groups)
@@ -89,12 +89,12 @@ def read_tabular(
     for col in target_cols:
         if col not in df.columns:
             raise DataError(f"Coluna alvo {col} não encontrada em {path}")
-        y_list.append((col, df[col].astype(str)))
+        y_list.append((col, df[col].astype("category")))
     groups = None
     if group_col:
         if group_col not in df.columns:
             raise DataError(f"Coluna de grupos {group_col} não encontrada em {path}")
-        groups = df[group_col].astype(str)
+        groups = df[group_col].astype("category")
     drop_cols = list(target_cols)
     if group_col:
         drop_cols.append(group_col)

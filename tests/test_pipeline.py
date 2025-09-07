@@ -144,6 +144,7 @@ def test_prepare_inputs_with_multiple_targets(tmp_path):
     ds_list = prepare_inputs(cfg)
     assert len(ds_list) == 2
     assert {d["target"] for d in ds_list} == {"t1", "t2"}
+    assert all(ds["Y"].dtype.name == "category" for ds in ds_list)
 
 
 def test_summarize_dataset_columns(tmp_path):
@@ -157,6 +158,7 @@ def test_summarize_dataset_columns(tmp_path):
     df.to_csv(data_file, index=False)
     cfg = {"input_path": str(data_file), "target_cols": ["target"]}
     ds_list = prepare_inputs(cfg)
+    assert ds_list[0]["Y"].dtype.name == "category"
     summary = summarize_dataset(ds_list)
     assert set(summary.columns) == {
         "target",
