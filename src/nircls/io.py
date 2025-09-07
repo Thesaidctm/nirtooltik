@@ -53,6 +53,8 @@ def read_xlsx_xy(
     try:
         X = pd.read_excel(path, sheet_name=x_sheet)
         Ydf = pd.read_excel(path, sheet_name=y_sheet)
+    except (FileNotFoundError, PermissionError) as e:
+        raise DataError(str(e)) from e
     except ValueError as e:
         raise DataError(str(e)) from e
     if target_cols in [None, "all"]:
@@ -140,6 +142,7 @@ def prepare_inputs(
     containing missing values are dropped in a leakage-free manner.
     """
     files = [Path(p) for p in glob(data_cfg["input_path"])]
+    files = [p for p in files if not p.name.startswith("~$")]
     if not files:
         raise DataError("Nenhum arquivo encontrado para o padrão informado")
     invalid = [p for p in files if not p.is_file()]
