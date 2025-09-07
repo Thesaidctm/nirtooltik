@@ -37,6 +37,7 @@ questionary = ["questionary"]
 dvc = ["dvc"]
 tracking = ["mlflow", "dvc"]
 shap = ["shap"]
+dev = ["mypy"]
 
 [project.scripts]
 nircls = "nircls.cli:main"

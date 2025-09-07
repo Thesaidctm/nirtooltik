@@ -488,6 +488,16 @@ Para rodar a suíte de testes utilize o [pytest](https://pytest.org):
 pytest
 ```
 
+Para validar as anotações de tipo estático, execute o
+[mypy](https://mypy-lang.org/):
+
+```bash
+mypy .
+```
+
+Se nenhum erro for exibido, todas as verificações passaram. Mensagens
+apontam os arquivos e linhas que precisam de correção.
+
 
 
 ## Docker

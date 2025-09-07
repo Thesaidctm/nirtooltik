@@ -10,9 +10,9 @@ from __future__ import annotations
 import argparse
 import sys
 import json
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence, Dict, cast
 
 import pandas as pd
 
@@ -229,7 +229,7 @@ def _deep_update(base: dict, updates: dict) -> dict:
             base[k] = v
     return base
 
-def main(argv=None):
+def main(argv: Sequence[str] | None = None) -> int:
     """Run the ``nircls`` command-line interface.
 
     Parameters
@@ -239,7 +239,7 @@ def main(argv=None):
         used.
     """
 
-    argv = argv or sys.argv[1:]
+    argv = list(argv) if argv is not None else sys.argv[1:]
     pre = argparse.ArgumentParser(add_help=False)
     pre.add_argument("--lang", choices=["pt", "en"], default="en")
     ns, argv = pre.parse_known_args(argv)
@@ -451,7 +451,7 @@ def main(argv=None):
                 _print_astm_report(metrics_path.parent / "astm_classification.json")
         print(t("results_in", path=out_dir))
     elif args.cmd == "run-all":
-        default_cfg = {
+        default_cfg: Dict[str, Any] = {
             "data": {"input_path": str(RAW_DIR), "out_dir": str(RESULTS_DIR)},
             "models": [{"name": "PLSDA"}],
             "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
@@ -459,17 +459,18 @@ def main(argv=None):
         if args.config:
             try:
                 with open(args.config) as f:
-                    user_cfg = yaml.safe_load(f) or {}
+                    user_cfg = cast(Dict[str, Any], yaml.safe_load(f) or {})
             except FileNotFoundError:
                 print(t("config_not_found"), file=sys.stderr)
                 return 1
             _deep_update(default_cfg, user_cfg)
         run_id = now_ts()
-        base_dir = Path(default_cfg["data"].get("out_dir", RESULTS_DIR)) / run_id
+        data_cfg = cast(Dict[str, Any], default_cfg["data"])
+        base_dir = Path(data_cfg.get("out_dir", RESULTS_DIR)) / run_id
         ensure_dirs(base_dir)
-        default_cfg["data"]["out_dir"] = str(base_dir)
+        data_cfg["out_dir"] = str(base_dir)
         try:
-            ds_list = prepare_inputs(default_cfg["data"], use_cache=default_cfg.get("use_cache", True))
+            ds_list = prepare_inputs(data_cfg, use_cache=bool(default_cfg.get("use_cache", True)))
         except DataError as e:
             print(t("invalid_data", err=e), file=sys.stderr)
             return 1
@@ -477,7 +478,7 @@ def main(argv=None):
         if not summary.empty:
             print(summary.to_string(index=False))
         if args.run == "one" and ds_list:
-            default_cfg["data"]["target_cols"] = ds_list[0]["target"]
+            data_cfg["target_cols"] = ds_list[0]["target"]
         train_dir = base_dir / "train"
         cv_dir = base_dir / "cv"
         ensure_dirs(train_dir, cv_dir)
@@ -519,7 +520,7 @@ def main(argv=None):
             if model_path.exists():
                 print(t("model_saved", path=model_path))
         print(t("results_in", path=base_dir))
-        return str(base_dir)
+        return 0
     elif args.cmd == "demo":
         demo_cfg = Path(__file__).resolve().parents[2] / "configs" / "demo.yaml"
         with open(demo_cfg) as f:
@@ -703,6 +704,8 @@ def main(argv=None):
             print(df.to_string(index=False))
     elif args.cmd == "dashboard":
         run_dashboard(Path(args.results))
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
