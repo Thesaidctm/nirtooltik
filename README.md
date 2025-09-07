@@ -1,5 +1,5 @@
 # nircls — NIR Species Classification Toolkit
-Autor: Thalles Loiola Dias, Discente da UFLA
+Autor: Thalles Loiola Dias | PPGCTM | UFLA |
 
 ## Introdução
 
