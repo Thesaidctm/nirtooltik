@@ -214,6 +214,31 @@ def _render_dashboard(results_dir: Path) -> None:
                 fig_dir = strat_dir / "figures"
                 if fig_dir.exists():
                     _display_figures(fig_dir)
+                qc_path = strat_dir / "qc_report.json"
+                if qc_path.exists():
+                    try:
+                        with qc_path.open() as f:
+                            qc = json.load(f)
+                        for item in qc:
+                            st.markdown(f"#### QC: {item['target']}")
+                            df_qc = pd.DataFrame.from_dict(
+                                item["pca_outliers"], orient="index"
+                            )
+                            t2_lim = df_qc["T2"].quantile(0.95)
+                            q_lim = df_qc["Q_residuals"].quantile(0.95)
+                            df_qc["outlier"] = (df_qc["T2"] > t2_lim) | (
+                                df_qc["Q_residuals"] > q_lim
+                            )
+                            fig = px.scatter(
+                                df_qc,
+                                x="PC1",
+                                y="PC2",
+                                color="outlier",
+                                color_discrete_map={True: "red", False: "blue"},
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                    except Exception as exc:  # pragma: no cover - display error
+                        st.error(f"Erro ao carregar relatório QC: {exc}")
 
     with results_tab:
         if not run_dirs:
