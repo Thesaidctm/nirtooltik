@@ -1,67 +1,62 @@
 from __future__ import annotations
-from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional, Sequence
-from contextlib import nullcontext
-import warnings
+
 import json
-import sys
 import subprocess
+import sys
+import warnings
+from contextlib import nullcontext
 from glob import glob
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
 import numpy as np
 import pandas as pd
 import sklearn
 import yaml  # type: ignore[import-untyped]
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from joblib import dump, load
 from rich.progress import Progress
-from sklearn.model_selection import (
-    GridSearchCV,
-    RepeatedStratifiedKFold,
-    StratifiedKFold,
-    GroupKFold,
-    LeaveOneOut,
-    train_test_split,
-)
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    brier_score_loss,
     confusion_matrix,
     f1_score,
-    balanced_accuracy_score,
-    accuracy_score,
-    brier_score_loss,
 )
-from sklearn.calibration import CalibratedClassifierCV
-from joblib import dump, load
-from .io import (
-    prepare_inputs as _prepare_inputs,
-    export_xy_xlsx,
-    read_xlsx_xy,
-    read_tabular,
-    summarize_dataset,
+from sklearn.model_selection import (
+    GridSearchCV,
+    GroupKFold,
+    LeaveOneOut,
+    RepeatedStratifiedKFold,
+    StratifiedKFold,
+    train_test_split,
 )
-from .utils.misc import RESULTS_DIR
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+
+from .config_schema import ConfigModel, ValidationError
+from .io import export_xy_xlsx
+from .io import prepare_inputs as _prepare_inputs
+from .io import read_tabular, read_xlsx_xy, summarize_dataset
+from .metrics.calibration import expected_calibration_error
+from .models.factory import make_models_from_config
 from .preprocessors.spectro import (
-    SNV,
-    MSC,
-    Detrend,
-    SavitzkyGolayTransformer,
     EMSC,
     EPO,
-)
-from .models.factory import make_models_from_config
-from .config_schema import ConfigModel, ValidationError
-from .metrics.calibration import expected_calibration_error
-from .utils.plots import (
-    plot_confusion,
-    plot_roc_ovr,
-    plot_reliability,
+    MSC,
+    SNV,
+    Detrend,
+    SavitzkyGolayTransformer,
 )
 from .report import generate_scientific_report
-from .utils.logging import logger, log_versions
-from .utils.errors import DataError, ModelError
-from .utils.split import spxy_split
-from .utils.misc import file_hash
 from .utils.compliance import check_astm_classification
-from .utils.qc import find_duplicates, detect_identical_spectra, pca_outliers
+from .utils.errors import DataError, ModelError
+from .utils.logging import log_versions, logger
+from .utils.misc import RESULTS_DIR, file_hash
+from .utils.plots import plot_confusion, plot_reliability, plot_roc_ovr
+from .utils.qc import detect_identical_spectra, find_duplicates, pca_outliers
+from .utils.split import spxy_split
+from .utils.y_scramble import y_scramble_scores
 
 warnings.filterwarnings(
     "ignore",
@@ -552,6 +547,32 @@ def _run_cv(
                 row.setdefault(f"{m}_std", None)
                 row.setdefault(f"train_{m}_mean", None)
                 row.setdefault(f"train_{m}_std", None)
+            if m_cfg.get("overfit_check"):
+                cv_scramble = outer
+                if cv_method == "spxy":
+                    cv_scramble = StratifiedKFold(
+                        n_splits=inner_folds,
+                        shuffle=True,
+                        random_state=random_state,
+                    )
+                elif cv_method == "group":
+                    cv_scramble = GroupKFold(n_splits=inner_folds)
+                scramble_scores = y_scramble_scores(
+                    best,
+                    X.values,
+                    y_enc,
+                    cv=cv_scramble,
+                    scoring="balanced_accuracy",
+                    n_iter=20,
+                    random_state=random_state,
+                    groups=groups.values if groups is not None else None,
+                )
+                if scramble_scores.size:
+                    row["Yscramble_mean"] = float(np.mean(scramble_scores))
+                    row["Yscramble_p95"] = float(np.percentile(scramble_scores, 95))
+                else:
+                    row["Yscramble_mean"] = None
+                    row["Yscramble_p95"] = None
             rows.append(row)
             y_true = np.concatenate(y_true_all)
             y_pred = np.concatenate(y_pred_all)
@@ -692,6 +713,27 @@ def _run_holdout(
             for m in ["Brier", "ECE"]:
                 row.setdefault(f"{m}_mean", None)
                 row.setdefault(f"train_{m}_mean", None)
+            if m_cfg.get("overfit_check"):
+                cv_scramble = StratifiedKFold(
+                    n_splits=inner_folds,
+                    shuffle=True,
+                    random_state=random_state,
+                )
+                scramble_scores = y_scramble_scores(
+                    best,
+                    X.values,
+                    y_enc,
+                    cv=cv_scramble,
+                    scoring="balanced_accuracy",
+                    n_iter=20,
+                    random_state=random_state,
+                )
+                if scramble_scores.size:
+                    row["Yscramble_mean"] = float(np.mean(scramble_scores))
+                    row["Yscramble_p95"] = float(np.percentile(scramble_scores, 95))
+                else:
+                    row["Yscramble_mean"] = None
+                    row["Yscramble_p95"] = None
             rows.append(row)
             _save_plots(
                 ds["file"],
@@ -1254,10 +1296,10 @@ def explain_model(model_path: Path, data_path: Path, out_dir: Path) -> None:
 
     # Dependence plot for the most important feature
     shap.plots.scatter(shap_values[:, top_idx], color=shap_values, show=False)
-    shap.save_html(out_dir / f"shap_dependence_{feature_name}.html", shap_values[:, top_idx])
-    plt.savefig(
-        out_dir / f"shap_dependence_{feature_name}.png", bbox_inches="tight"
+    shap.save_html(
+        out_dir / f"shap_dependence_{feature_name}.html", shap_values[:, top_idx]
     )
+    plt.savefig(out_dir / f"shap_dependence_{feature_name}.png", bbox_inches="tight")
     plt.close()
 
     # Waterfall plot for first sample

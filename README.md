@@ -349,6 +349,28 @@ validação/teste. As métricas de treino recebem o prefixo `train_` e podem inc
 esperado (`ece`). A comparação entre `train_` e métricas sem prefixo ajuda a
 avaliar overfitting e o desempenho em dados não vistos.
 
+## Teste Y-scrambling
+
+Para verificar se um modelo está capturando apenas ruído, é possível executar o
+teste de *Y-scrambling*. Nesse procedimento os rótulos são embaralhados várias
+vezes, o modelo é re‑treinado e avaliado a cada permutação, produzindo uma
+distribuição de desempenhos ao acaso.
+
+Habilite o teste em um modelo específico adicionando `overfit_check: true` à
+configuração:
+
+```yaml
+models:
+  - name: PLSDA
+    grid: {n_components: [2]}
+    overfit_check: true
+```
+
+Os valores médio e percentil 95% dessa distribuição são registrados em
+`metrics_summary.xlsx` e `metrics.json` nas colunas `Yscramble_mean` e
+`Yscramble_p95`. Se o desempenho real do modelo não superar esses valores de
+forma consistente, há forte indício de overfitting.
+
 ## Pré-processadores e modelos suportados
 
 Pré-processadores disponíveis:

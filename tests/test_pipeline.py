@@ -1,24 +1,25 @@
-import sys
+import json
 import pathlib
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.model_selection import StratifiedKFold, GridSearchCV
-from sklearn.linear_model import LogisticRegression
-from sklearn.cross_decomposition import PLSRegression
 from joblib import dump
-import json
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
 
-sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
-from nircls.pipeline import (
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))  # noqa: E402
+from nircls.feature_selection.vip import compute_vip  # noqa: E402
+from nircls.io import prepare_inputs, summarize_dataset  # noqa: E402
+from nircls.pipeline import (  # noqa: E402
     build_pipeline_from_config,
+    predict_with_model,
     run_multiple_eval,
     train_and_save,
-    predict_with_model,
 )
-from nircls.io import prepare_inputs, summarize_dataset
-from nircls.feature_selection.vip import compute_vip
-from nircls.utils.errors import DataError, ModelError
+from nircls.utils.errors import DataError, ModelError  # noqa: E402
 
 
 def test_pipeline_fit_predict_with_cv_and_windows():
@@ -29,13 +30,16 @@ def test_pipeline_fit_predict_with_cv_and_windows():
             "steps": ["SNV", "SG"],
             "sg": {"window": [5, 7], "polyorder": 2, "deriv": 1},
         },
-        "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
+        "models": [
+            {"name": "PLSDA", "grid": {"n_components": [2]}, "overfit_check": True}
+        ],
     }
     name, pipe, grid = build_pipeline_from_config(cfg)[0]
     assert "sg__window_length" in grid
     cv = StratifiedKFold(n_splits=3)
     gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy")
     gs.fit(X, y)
+
 
 def test_end_to_end_cv_and_export(tmp_path):
     rng = np.random.RandomState(1)
@@ -49,7 +53,9 @@ def test_end_to_end_cv_and_export(tmp_path):
     cfg = {
         "data": {"input_path": str(data_file), "target_cols": ["target"]},
         "preprocess": {"steps": ["SNV"]},
-        "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
+        "models": [
+            {"name": "PLSDA", "grid": {"n_components": [2]}, "overfit_check": True}
+        ],
         "cv": {
             "random_state": 0,
             "strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}],
@@ -64,9 +70,14 @@ def test_end_to_end_cv_and_export(tmp_path):
     assert metrics_path.exists()
     xls = pd.ExcelFile(metrics_path)
     assert set(xls.sheet_names) == {"validation", "calibration"}
+    val_df = xls.parse("validation")
+    assert {"Yscramble_mean", "Yscramble_p95"}.issubset(val_df.columns)
     assert any((strat_dir / "figures").glob("*.png"))
     assert (strat_dir / "report.md").exists()
     assert (strat_dir / "astm_classification.json").exists()
+    with open(strat_dir / "metrics.json") as f:
+        metrics_json = json.load(f)
+    assert "Yscramble_mean" in metrics_json[0]
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
@@ -209,9 +220,7 @@ def test_nested_crossval_report(tmp_path):
         "cv": {
             "inner_folds": 2,
             "random_state": 0,
-            "strategies": [
-                {"type": "kfold", "n_splits": [2], "n_repeats": 1}
-            ],
+            "strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}],
         },
     }
 
@@ -225,10 +234,11 @@ def test_nested_crossval_report(tmp_path):
     assert any((strat_dir / "figures").glob("*.png"))
     assert (strat_dir / "report.md").exists()
 
+
 def test_predict_with_model_outputs_y_pred_only_when_y_missing(tmp_path):
     rng = np.random.RandomState(0)
     X = rng.rand(10, 4)
-    y = (np.arange(10) % 2)
+    y = np.arange(10) % 2
     model = LogisticRegression(max_iter=50).fit(X, y)
     model_path = tmp_path / "model.joblib"
     dump(model, model_path)
@@ -333,7 +343,9 @@ def test_train_and_save_model_incompatible(monkeypatch, tmp_path):
     cfg = _dummy_cfg()
 
     def dummy_prepare(_, **kwargs):
-        return [{"X": pd.DataFrame([[0]]), "Y": pd.Series([0]), "file": "f", "target": "t"}]
+        return [
+            {"X": pd.DataFrame([[0]]), "Y": pd.Series([0]), "file": "f", "target": "t"}
+        ]
 
     def raise_model_error(_):
         raise ModelError("modelo incompatível")
