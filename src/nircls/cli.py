@@ -28,7 +28,7 @@ from .pipeline import (
 from .report import generate_report
 from .dashboard import run_dashboard
 from .utils.logging import setup_logging, log_versions
-from .utils.misc import ensure_dirs, make_run_id, set_seed, RAW_DIR, RESULTS_DIR
+from .utils.misc import ensure_dirs, make_run_id, set_seed, RAW_DIR, RESULTS_DIR, now_ts
 from .config_schema import ConfigModel, ValidationError
 from .utils.errors import DataError, ModelError
 
@@ -365,7 +365,7 @@ def main(argv=None):
                 )
                 return 1
             _deep_update(default_cfg, user_cfg)
-        run_id = make_run_id("run")
+        run_id = now_ts()
         base_dir = Path(default_cfg["data"].get("out_dir", RESULTS_DIR)) / run_id
         ensure_dirs(base_dir)
         default_cfg["data"]["out_dir"] = str(base_dir)
@@ -420,6 +420,7 @@ def main(argv=None):
             if model_path.exists():
                 print(f"Modelo salvo: {model_path}")
         print(f"Resultados em: {base_dir}")
+        return str(base_dir)
     elif args.cmd == "demo":
         demo_cfg = Path(__file__).resolve().parents[2] / "configs" / "demo.yaml"
         with open(demo_cfg) as f:
