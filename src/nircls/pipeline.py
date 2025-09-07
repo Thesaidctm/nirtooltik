@@ -31,7 +31,13 @@ from sklearn.metrics import (
 from sklearn.calibration import CalibratedClassifierCV
 from joblib import dump, load
 from glob import glob
-from .io import prepare_inputs as _prepare_inputs, export_xy_xlsx, read_xlsx_xy, read_tabular
+from .io import (
+    prepare_inputs as _prepare_inputs,
+    export_xy_xlsx,
+    read_xlsx_xy,
+    read_tabular,
+    summarize_dataset,
+)
 from .utils.misc import RESULTS_DIR
 from .preprocessors.spectro import (
     SNV,
@@ -54,6 +60,7 @@ from .utils.logging import logger, log_versions
 from .utils.errors import DataError, ModelError
 from .utils.split import spxy_split
 from .utils.misc import file_hash
+from .utils.compliance import check_astm_classification
 
 warnings.filterwarnings(
     "ignore",
@@ -328,6 +335,7 @@ def _run_cv(
         raise DataError(
             "Arquivo de dados não encontrado. Verifique o caminho informado."
         ) from e
+    summary = summarize_dataset(data)
     rows: List[Dict[str, Any]] = []
     tgt_task = progress.add_task("Target", total=len(data))
     for ds in data:
@@ -526,6 +534,12 @@ def _run_cv(
             progress.advance(model_task)
         progress.advance(tgt_task)
     _save_metrics(rows, out_dir)
+    if cfg.get("astm"):
+        flags = check_astm_classification(
+            summary, {"external_validation": isinstance(outer, LeaveOneOut)}
+        )
+        with open(out_dir / "astm_classification.json", "w") as f:
+            json.dump(flags, f, indent=2)
 
 
 def _run_holdout(
@@ -558,6 +572,7 @@ def _run_holdout(
         raise DataError(
             "Arquivo de dados não encontrado. Verifique o caminho informado."
         ) from e
+    summary = summarize_dataset(data)
     rows: List[Dict[str, Any]] = []
     for ds in data:
         X, y = ds["X"], ds["Y"]
@@ -665,6 +680,10 @@ def _run_holdout(
                 interactive=interactive,
             )
     _save_metrics(rows, out_dir)
+    if cfg.get("astm"):
+        flags = check_astm_classification(summary, {"external_validation": True})
+        with open(out_dir / "astm_classification.json", "w") as f:
+            json.dump(flags, f, indent=2)
 
 
 def run_multiple_eval(
@@ -885,7 +904,9 @@ def train_and_save(
         with Progress() as progress:
             load_task = progress.add_task("Carregando dados", total=None)
             _validate_cfg(cfg, need_data=True, need_models=True)
-            ds = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))[0]
+            ds_list = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+            ds = ds_list[0]
+            summary = summarize_dataset(ds_list)
             X, y = ds["X"], ds["Y"]
             groups = ds.get("groups")
             le = LabelEncoder().fit(y)
@@ -984,6 +1005,12 @@ def train_and_save(
                     expected_calibration_error(y_enc, proba, n_bins=15)
                 )
             _save_metrics([row], out_dir)
+            if cfg.get("astm"):
+                flags = check_astm_classification(
+                    summary, {"external_validation": False}
+                )
+                with open(out_dir / "astm_classification.json", "w") as f:
+                    json.dump(flags, f, indent=2)
             _save_plots(
                 ds["file"],
                 ds["target"],

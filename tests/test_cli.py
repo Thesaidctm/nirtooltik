@@ -60,6 +60,7 @@ def test_train_cli_with_config_creates_artifacts(tmp_path: pathlib.Path) -> None
             "train",
             "--config",
             str(cfg_dst),
+            "--astm",
         ],
         cwd=tmp_path,
         env=env,
@@ -71,3 +72,4 @@ def test_train_cli_with_config_creates_artifacts(tmp_path: pathlib.Path) -> None
     assert metrics_files
     figures_dir = metrics_files[0].parent / "figures"
     assert figures_dir.is_dir()
+    assert (metrics_files[0].parent / "astm_classification.json").exists()

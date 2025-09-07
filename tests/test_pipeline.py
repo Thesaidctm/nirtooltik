@@ -54,6 +54,7 @@ def test_end_to_end_cv_and_export(tmp_path):
             "random_state": 0,
             "strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}],
         },
+        "astm": True,
     }
 
     out_dir = tmp_path / "cv_run"
@@ -65,6 +66,7 @@ def test_end_to_end_cv_and_export(tmp_path):
     assert set(xls.sheet_names) == {"validation", "calibration"}
     assert any((strat_dir / "figures").glob("*.png"))
     assert (strat_dir / "report.md").exists()
+    assert (strat_dir / "astm_classification.json").exists()
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
@@ -73,6 +75,7 @@ def test_end_to_end_cv_and_export(tmp_path):
     assert (train_dir / "prepared_XY.xlsx").exists()
     assert (train_dir / "model_card.md").exists()
     assert (train_dir / "classes.json").exists()
+    assert (train_dir / "astm_classification.json").exists()
 
 
 def test_pipeline_runs_with_spxy_cv_method(tmp_path):
