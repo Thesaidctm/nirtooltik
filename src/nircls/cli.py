@@ -462,19 +462,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(t("results_in", path=out_dir))
     elif args.cmd == "run-all":
         builders = get_model_builders()
-        models_cfg: list[dict[str, Any]] = [{"name": "PLSDA"}]
-        if args.all_models:
-            models_cfg = []
-            for name, builder in builders.items():
-                try:
-                    builder({})
-                except ImportError as e:
-                    print(t("model_dep_missing", name=name, err=e), file=sys.stderr)
-                    continue
-                models_cfg.append({"name": name})
         default_cfg: Dict[str, Any] = {
             "data": {"input_path": str(RAW_DIR), "out_dir": str(RESULTS_DIR)},
-            "models": models_cfg,
+            "models": [{"name": "PLSDA"}],
             "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
         }
         if args.config:
@@ -485,6 +475,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(t("config_not_found"), file=sys.stderr)
                 return 1
             _deep_update(default_cfg, user_cfg)
+        if args.all_models:
+            models_cfg: list[dict[str, Any]] = []
+            for name, builder in builders.items():
+                try:
+                    builder({})
+                except ImportError as e:
+                    print(t("model_dep_missing", name=name, err=e), file=sys.stderr)
+                    continue
+                models_cfg.append({"name": name})
+            default_cfg["models"] = models_cfg
         run_id = now_ts()
         data_cfg = cast(Dict[str, Any], default_cfg["data"])
         base_dir = Path(data_cfg.get("out_dir", RESULTS_DIR)) / run_id

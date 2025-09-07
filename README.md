@@ -205,7 +205,7 @@ Cada item da lista define um estimador:
 
 ## Interface de linha de comando
 
-O comando principal é `nircls` e suporta várias sub‑rotinas. As mensagens da CLI podem ser exibidas em português (`--lang pt`) ou inglês (`--lang en`, padrão). Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar o modelo padrão PLSDA. Para tentar todos os modelos disponíveis (requer dependências opcionais como `xgboost`, `lightgbm`, `catboost` e `torch`), utilize a flag `--all-models`:
+O comando principal é `nircls` e suporta várias sub‑rotinas. As mensagens da CLI podem ser exibidas em português (`--lang pt`) ou inglês (`--lang en`, padrão). Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar o modelo padrão PLSDA. Para tentar todos os modelos disponíveis (requer dependências opcionais como `xgboost`, `lightgbm`, `catboost` e `torch`), utilize a flag `--all-models`. Essa opção ignora qualquer lista `models:` definida no arquivo de configuração e treina todos os modelos suportados:
 
 ```bash
 # Execução completa com parâmetros padrão (PLSDA)
