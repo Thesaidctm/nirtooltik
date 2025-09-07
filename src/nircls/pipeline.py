@@ -367,6 +367,18 @@ def _save_plots(
         )
 
 
+def _get_n_components(best_params: Dict[str, Any]) -> Optional[int]:
+    """Return the best ``n_components`` value from GridSearchCV parameters."""
+
+    for k, v in best_params.items():
+        if k.endswith("n_components"):
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
 def _run_cv(
     cfg: Dict[str, Any],
     out_dir: Path,
@@ -435,6 +447,7 @@ def _run_cv(
             y_true_all: List[np.ndarray] = []
             y_pred_all: List[np.ndarray] = []
             y_proba_all: List[np.ndarray] = []
+            n_comp_list: List[int] = []
             if cv_method == "spxy":
                 outer_splits = spxy_split(X.values, y_enc, outer.get_n_splits(X, y_enc))
             elif cv_method == "group":
@@ -465,6 +478,9 @@ def _run_cv(
                 gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
                 gs.fit(Xtr, ytr, **fit_kwargs)
 
+                n_comp = _get_n_components(gs.best_params_)
+                if n_comp is not None:
+                    n_comp_list.append(n_comp)
                 best = gs.best_estimator_
                 calib_cfg = m_cfg.get("calibration")
                 if calib_cfg:
@@ -552,6 +568,8 @@ def _run_cv(
                 row.setdefault(f"{m}_std", None)
                 row.setdefault(f"train_{m}_mean", None)
                 row.setdefault(f"train_{m}_std", None)
+            if n_comp_list:
+                row["n_components"] = int(np.median(n_comp_list))
             rows.append(row)
             y_true = np.concatenate(y_true_all)
             y_pred = np.concatenate(y_pred_all)
@@ -641,6 +659,7 @@ def _run_holdout(
                 )
             gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
             gs.fit(Xtr, ytr)
+            n_comp = _get_n_components(gs.best_params_)
             best = gs.best_estimator_
             calib_cfg = m_cfg.get("calibration")
             if calib_cfg:
@@ -664,6 +683,7 @@ def _run_holdout(
                 "train_BalancedAcc_mean": float(balanced_accuracy_score(ytr, yhat_tr)),
                 "train_Accuracy_mean": float(accuracy_score(ytr, yhat_tr)),
             }
+            row["n_components"] = n_comp
             proba_fn = getattr(best, "predict_proba", None)
             proba = None
             if proba_fn is not None:
@@ -1009,6 +1029,7 @@ def train_and_save(
             gs.fit(X.values, y_enc, **fit_kwargs)
             progress.update(train_task, completed=1)
 
+            n_comp = _get_n_components(gs.best_params_)
             best = gs.best_estimator_
             calib_cfg = model_cfg.get("calibration") if model_cfg else None
             if calib_cfg:
@@ -1036,6 +1057,7 @@ def train_and_save(
                 "BalancedAcc_mean": float(balanced_accuracy_score(y_enc, yhat)),
                 "Accuracy_mean": float(accuracy_score(y_enc, yhat)),
             }
+            row["n_components"] = n_comp
             proba_fn = getattr(best, "predict_proba", None)
             proba = None
             if proba_fn is not None:
