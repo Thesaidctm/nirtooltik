@@ -142,6 +142,8 @@ def prepare_inputs(data_cfg: Dict, *, use_cache: bool = True):
         else:
             X, y_list, groups = read_tabular(f, tgt, grp)
         X = _filter_range(X, sp)
+        if X.empty:
+            raise DataError("Intervalo espectral fora da faixa disponível")
         X = X.replace([np.inf, -np.inf], np.nan)
         n_nans = int(X.isna().any(axis=1).sum())
         X = X.dropna(axis=0)

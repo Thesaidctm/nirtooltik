@@ -135,7 +135,7 @@ def test_pipeline_runs_with_group_cv_method(tmp_path):
 def test_prepare_inputs_with_multiple_targets(tmp_path):
     rng = np.random.RandomState(0)
     X = rng.rand(10, 4)
-    df = pd.DataFrame(X, columns=[f"f{i}" for i in range(4)])
+    df = pd.DataFrame(X, columns=[str(i) for i in range(4)])
     df["t1"] = ["A"] * 10
     df["t2"] = ["B"] * 10
     data_file = tmp_path / "multi.csv"
@@ -145,6 +145,22 @@ def test_prepare_inputs_with_multiple_targets(tmp_path):
     assert len(ds_list) == 2
     assert {d["target"] for d in ds_list} == {"t1", "t2"}
     assert all(ds["Y"].dtype.name == "category" for ds in ds_list)
+
+
+def test_prepare_inputs_raises_when_range_unavailable(tmp_path):
+    rng = np.random.RandomState(0)
+    X = rng.rand(5, 3)
+    df = pd.DataFrame(X, columns=[str(i) for i in range(3)])
+    df["target"] = ["A"] * 5
+    data_file = tmp_path / "data.csv"
+    df.to_csv(data_file, index=False)
+    cfg = {
+        "input_path": str(data_file),
+        "target_cols": ["target"],
+        "spectral_range": (10, 20),
+    }
+    with pytest.raises(DataError, match="Intervalo espectral fora da faixa disponível"):
+        prepare_inputs(cfg)
 
 
 def test_summarize_dataset_columns(tmp_path):
