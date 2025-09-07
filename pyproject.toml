@@ -7,6 +7,9 @@ name = "nircls"
 version = "0.1.0"
 description = "NIR Species Classification Toolkit (CLI + pipelines + reports)"
 readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Thalles Loiola Dias"}]
+urls = {"Homepage" = "https://github.com/Thesaidctm/nirtooltik"}
 requires-python = ">=3.9"
 dependencies = [
   "numpy",
