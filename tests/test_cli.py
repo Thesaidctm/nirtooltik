@@ -3,6 +3,10 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import json
+import io
+
+import pandas as pd
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 import nircls
@@ -73,3 +77,34 @@ def test_train_cli_with_config_creates_artifacts(tmp_path: pathlib.Path) -> None
     figures_dir = metrics_files[0].parent / "figures"
     assert figures_dir.is_dir()
     assert (metrics_files[0].parent / "astm_classification.json").exists()
+
+
+def test_summary_cli_aggregates_results(tmp_path: pathlib.Path) -> None:
+    env = _base_env()
+    run1 = tmp_path / "run1"
+    run2 = tmp_path / "run2"
+    run1.mkdir()
+    run2.mkdir()
+    (run1 / "metrics.json").write_text(
+        json.dumps([{"target": "t", "model": "M", "accuracy_mean": 0.9}])
+    )
+    (run2 / "metrics.json").write_text(
+        json.dumps([{"target": "t", "model": "M", "accuracy_mean": 0.8}])
+    )
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nircls.cli",
+            "summary",
+            "--results",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 0
+    df = pd.read_fwf(io.StringIO(proc.stdout))
+    assert len(df) == 2
+    assert set(df["run"]) == {"run1", "run2"}
