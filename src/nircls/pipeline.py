@@ -696,78 +696,118 @@ def run_multiple_eval(
     random_state = cfg.get("cv", {}).get("random_state", random_state)
     cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
     mlflow_enabled = bool(mlflow_uri)
+    mlflow_cm = nullcontext()
     if mlflow_enabled:
         import mlflow
         mlflow.set_tracking_uri(mlflow_uri)
+        mlflow_cm = mlflow.start_run(run_name="crossval")
     model_names = [m.get("name", "") for m in cfg.get("models", [])]
     steps_cfg = cfg.get("preprocess", {}).get("steps", [])
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # log and persist environment metadata for reproducibility
-    log_versions()
-    files = [Path(p) for p in glob(cfg["data"]["input_path"])]
-    input_hashes = {f.as_posix(): file_hash(f) for f in files}
-    metadata = {
-        "sys_version": sys.version,
-        "versions": {
-            "numpy": np.__version__,
-            "pandas": pd.__version__,
-            "sklearn": sklearn.__version__,
-        },
-        "seed": random_state,
-        "input_hashes": input_hashes,
-    }
-    with open(out_dir / "metadata.json", "w") as f:
-        json.dump(metadata, f, indent=2)
-
-    outputs: List[Tuple[Path, Path]] = []
-    with Progress() as progress:
-        strat_task = progress.add_task(
-            "CV strategy", total=len(strategies)
-        )
-        for strat in strategies:
-            stype = strat.get("type", "").lower()
-            progress.update(
-                strat_task, description=f"Strategy: {stype}"
+    with mlflow_cm:
+        if mlflow_enabled:
+            mlflow.log_params(
+                {
+                    "models": ",".join(model_names),
+                    "preprocess_steps": ",".join(steps_cfg),
+                    "cv_method": cv_method,
+                }
             )
-            if stype == "kfold":
-                n_repeats = strat.get("n_repeats", 1)
-                for k in strat.get("n_splits", [5]):
-                    if cv_method == "group":
-                        if n_repeats > 1:
-                            raise ModelError(
-                                "cv_method 'group' não suporta repetições"
-                            )
-                        outer = GroupKFold(n_splits=int(k))
-                    else:
-                        if n_repeats > 1:
-                            outer = RepeatedStratifiedKFold(
-                                n_splits=int(k),
-                                n_repeats=int(n_repeats),
-                                random_state=random_state,
-                            )
+
+        # log and persist environment metadata for reproducibility
+        log_versions()
+        files = [Path(p) for p in glob(cfg["data"]["input_path"])]
+        input_hashes = {f.as_posix(): file_hash(f) for f in files}
+        metadata = {
+            "sys_version": sys.version,
+            "versions": {
+                "numpy": np.__version__,
+                "pandas": pd.__version__,
+                "sklearn": sklearn.__version__,
+            },
+            "seed": random_state,
+            "input_hashes": input_hashes,
+        }
+        with open(out_dir / "metadata.json", "w") as f:
+            json.dump(metadata, f, indent=2)
+
+        outputs: List[Tuple[Path, Path]] = []
+        with Progress() as progress:
+            strat_task = progress.add_task(
+                "CV strategy", total=len(strategies)
+            )
+            for strat in strategies:
+                stype = strat.get("type", "").lower()
+                progress.update(
+                    strat_task, description=f"Strategy: {stype}"
+                )
+                if stype == "kfold":
+                    n_repeats = strat.get("n_repeats", 1)
+                    for k in strat.get("n_splits", [5]):
+                        if cv_method == "group":
+                            if n_repeats > 1:
+                                raise ModelError(
+                                    "cv_method 'group' não suporta repetições"
+                                )
+                            outer = GroupKFold(n_splits=int(k))
                         else:
-                            outer = StratifiedKFold(
-                                n_splits=int(k),
-                                shuffle=True,
-                                random_state=random_state,
-                            )
-                    sub = out_dir / f"kfold_{k}"
+                            if n_repeats > 1:
+                                outer = RepeatedStratifiedKFold(
+                                    n_splits=int(k),
+                                    n_repeats=int(n_repeats),
+                                    random_state=random_state,
+                                )
+                            else:
+                                outer = StratifiedKFold(
+                                    n_splits=int(k),
+                                    shuffle=True,
+                                    random_state=random_state,
+                                )
+                        sub = out_dir / f"kfold_{k}"
+                        sub.mkdir(parents=True, exist_ok=True)
+                        _run_cv(cfg, sub, outer, progress, interactive=interactive)
+                        metrics = sub / "metrics.json"
+                        figs = sub / "figures"
+                        generate_report(metrics, figs, sub / "report.md")
+                        outputs.append((metrics, figs))
+                        if mlflow_enabled:
+                            params = {
+                                "strategy": "kfold",
+                                "n_splits": int(k),
+                                "n_repeats": int(n_repeats),
+                            }
+                            with mlflow.start_run(run_name=sub.name, nested=True):
+                                mlflow.log_params(params)
+                                try:
+                                    df = pd.read_json(metrics)
+                                    if not df.empty:
+                                        mlflow.log_metrics(
+                                            {
+                                                k: float(v)
+                                                for k, v in df.iloc[0].items()
+                                                if isinstance(v, (int, float))
+                                            }
+                                        )
+                                except Exception:
+                                    pass
+                                mlflow.log_artifact(metrics)
+                                mlflow.log_artifacts(figs, artifact_path="figures")
+                elif stype == "loo":
+                    if cv_method == "group":
+                        raise ModelError(
+                            "cv_method 'group' não suportado com estratégia LOO"
+                        )
+                    sub = out_dir / "loo"
                     sub.mkdir(parents=True, exist_ok=True)
-                    _run_cv(cfg, sub, outer, progress, interactive=interactive)
+                    _run_cv(cfg, sub, LeaveOneOut(), progress, interactive=interactive)
                     metrics = sub / "metrics.json"
                     figs = sub / "figures"
                     generate_report(metrics, figs, sub / "report.md")
                     outputs.append((metrics, figs))
                     if mlflow_enabled:
-                        params = {
-                            "strategy": "kfold",
-                            "n_splits": int(k),
-                            "n_repeats": int(n_repeats),
-                            "models": ",".join(model_names),
-                            "preprocess_steps": ",".join(steps_cfg),
-                        }
-                        with mlflow.start_run(run_name=sub.name):
+                        params = {"strategy": "loo"}
+                        with mlflow.start_run(run_name=sub.name, nested=True):
                             mlflow.log_params(params)
                             try:
                                 df = pd.read_json(metrics)
@@ -783,81 +823,45 @@ def run_multiple_eval(
                                 pass
                             mlflow.log_artifact(metrics)
                             mlflow.log_artifacts(figs, artifact_path="figures")
-            elif stype == "loo":
-                if cv_method == "group":
+                elif stype == "holdout":
+                    if cv_method == "group":
+                        raise ModelError(
+                            "cv_method 'group' não suportado com estratégia holdout"
+                        )
+                    sub = out_dir / "holdout"
+                    sub.mkdir(parents=True, exist_ok=True)
+                    test_size = float(strat.get("test_size", 0.3))
+                    _run_holdout(cfg, sub, test_size, random_state, interactive=interactive)
+                    metrics = sub / "metrics.json"
+                    figs = sub / "figures"
+                    generate_report(metrics, figs, sub / "report.md")
+                    outputs.append((metrics, figs))
+                    if mlflow_enabled:
+                        params = {
+                            "strategy": "holdout",
+                            "test_size": float(test_size),
+                        }
+                        with mlflow.start_run(run_name=sub.name, nested=True):
+                            mlflow.log_params(params)
+                            try:
+                                df = pd.read_json(metrics)
+                                if not df.empty:
+                                    mlflow.log_metrics(
+                                        {
+                                            k: float(v)
+                                            for k, v in df.iloc[0].items()
+                                            if isinstance(v, (int, float))
+                                        }
+                                    )
+                            except Exception:
+                                pass
+                            mlflow.log_artifact(metrics)
+                            mlflow.log_artifacts(figs, artifact_path="figures")
+                else:
                     raise ModelError(
-                        "cv_method 'group' não suportado com estratégia LOO"
+                        f"Estratégia de validação desconhecida: {stype}. Use 'kfold', 'loo' ou 'holdout'."
                     )
-                sub = out_dir / "loo"
-                sub.mkdir(parents=True, exist_ok=True)
-                _run_cv(cfg, sub, LeaveOneOut(), progress, interactive=interactive)
-                metrics = sub / "metrics.json"
-                figs = sub / "figures"
-                generate_report(metrics, figs, sub / "report.md")
-                outputs.append((metrics, figs))
-                if mlflow_enabled:
-                    params = {
-                        "strategy": "loo",
-                        "models": ",".join(model_names),
-                        "preprocess_steps": ",".join(steps_cfg),
-                    }
-                    with mlflow.start_run(run_name=sub.name):
-                        mlflow.log_params(params)
-                        try:
-                            df = pd.read_json(metrics)
-                            if not df.empty:
-                                mlflow.log_metrics(
-                                    {
-                                        k: float(v)
-                                        for k, v in df.iloc[0].items()
-                                        if isinstance(v, (int, float))
-                                    }
-                                )
-                        except Exception:
-                            pass
-                        mlflow.log_artifact(metrics)
-                        mlflow.log_artifacts(figs, artifact_path="figures")
-            elif stype == "holdout":
-                if cv_method == "group":
-                    raise ModelError(
-                        "cv_method 'group' não suportado com estratégia holdout"
-                    )
-                sub = out_dir / "holdout"
-                sub.mkdir(parents=True, exist_ok=True)
-                test_size = float(strat.get("test_size", 0.3))
-                _run_holdout(cfg, sub, test_size, random_state, interactive=interactive)
-                metrics = sub / "metrics.json"
-                figs = sub / "figures"
-                generate_report(metrics, figs, sub / "report.md")
-                outputs.append((metrics, figs))
-                if mlflow_enabled:
-                    params = {
-                        "strategy": "holdout",
-                        "test_size": float(test_size),
-                        "models": ",".join(model_names),
-                        "preprocess_steps": ",".join(steps_cfg),
-                    }
-                    with mlflow.start_run(run_name=sub.name):
-                        mlflow.log_params(params)
-                        try:
-                            df = pd.read_json(metrics)
-                            if not df.empty:
-                                mlflow.log_metrics(
-                                    {
-                                        k: float(v)
-                                        for k, v in df.iloc[0].items()
-                                        if isinstance(v, (int, float))
-                                    }
-                                )
-                        except Exception:
-                            pass
-                        mlflow.log_artifact(metrics)
-                        mlflow.log_artifacts(figs, artifact_path="figures")
-            else:
-                raise ModelError(
-                    f"Estratégia de validação desconhecida: {stype}. Use 'kfold', 'loo' ou 'holdout'."
-                )
-            progress.advance(strat_task)
+                progress.advance(strat_task)
     return outputs
 
 
@@ -1001,6 +1005,7 @@ def train_and_save(
                     "preprocess_steps": ",".join(steps_cfg),
                     "cv_method": cv_method,
                 }
+                params.update({f"best_{k}": v for k, v in gs.best_params_.items()})
                 mlflow.log_params(params)
                 mlflow.log_metrics(row)
                 mlflow.log_artifact(out_dir / "model.joblib")
