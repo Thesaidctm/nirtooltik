@@ -10,6 +10,13 @@ e geração de relatórios completos de avaliação. Consulte o notebook
 [examples/quickstart.ipynb](examples/quickstart.ipynb) para um exemplo rápido
 de uso da API.
 
+Para uma execução completa com parâmetros padrão, usuários iniciantes podem
+simplesmente rodar:
+
+```bash
+nircls run-all
+```
+
 ## Sumário
 
 1. [Introdução](#introducao)
