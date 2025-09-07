@@ -59,6 +59,7 @@ STRINGS = {
         "run_all_help": "Process raw data and run training + evaluation with defaults",
         "run_all_config_help": "Configuration file to override defaults",
         "run_all_models_help": "Use all available models (requires optional dependencies)",
+        "run_all_preprocess_help": "Apply all preprocessing steps (SNV, MSC, DETREND, SG, EMSC, EPO, SCALE)",
         "dashboard_results_help": "Folder with results",
         "models_help": "List available model builders",
         "mlflow_not_installed": "'mlflow' is not installed. Install with `pip install mlflow`.",
@@ -108,6 +109,10 @@ STRINGS = {
         "run_all_help": "Processa dados brutos e executa treino+avaliação com padrões",
         "run_all_config_help": "Arquivo de configuração para sobrescrever parâmetros padrão",
         "run_all_models_help": "Usar todos os modelos disponíveis (requer dependências opcionais)",
+        "run_all_preprocess_help": (
+            "Aplicar todos os pré-processamentos disponíveis (SNV, MSC, DETREND, SG, "
+            "EMSC, EPO, SCALE)"
+        ),
         "dashboard_results_help": "Pasta com resultados",
         "models_help": "Listar modelos disponíveis",
         "mlflow_not_installed": "'mlflow' não está instalado. Instale com `pip install mlflow`.",
@@ -301,6 +306,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_all = sp.add_parser("run-all", help=t("run_all_help"))
     p_all.add_argument("--config", help=t("run_all_config_help"))
     p_all.add_argument(
+        "--all-preprocess",
+        action="store_true",
+        help=t("run_all_preprocess_help"),
+    )
+    p_all.add_argument(
         "--all-models",
         action="store_true",
         help=t("run_all_models_help"),
@@ -475,6 +485,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(t("config_not_found"), file=sys.stderr)
                 return 1
             _deep_update(default_cfg, user_cfg)
+        if args.all_preprocess:
+            default_cfg["preprocess"] = {"steps": list(PREPROCESS_DESCRIPTIONS)}
         if args.all_models:
             models_cfg: list[dict[str, Any]] = []
             for name, builder in builders.items():
