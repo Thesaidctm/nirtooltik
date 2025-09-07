@@ -213,6 +213,8 @@ Cada item da lista define um estimador:
 
 O comando principal é `nircls` e suporta várias sub‑rotinas. As mensagens da CLI podem ser exibidas em português (`--lang pt`) ou inglês (`--lang en`, padrão). Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar o modelo padrão PLSDA. Para tentar todos os modelos disponíveis (requer dependências opcionais como `xgboost`, `lightgbm`, `catboost` e `torch`), utilize a flag `--all-models`. Essa opção ignora qualquer lista `models:` definida no arquivo de configuração e treina todos os modelos suportados. Para aplicar todos os tratamentos de pré-processamento (`SNV`, `MSC`, `DETREND`, `SG`, `EMSC`, `EPO`, `SCALE`), utilize `--all-preprocess`:
 
+Antes de rodar qualquer comando `nircls`, crie e ative um ambiente virtual. Em sistemas Unix/macOS, utilize `python -m venv .venv` seguido de `source .venv/bin/activate`; no Windows, use `.venv\Scripts\activate`. Todos os comandos a seguir devem ser executados com o ambiente virtual ativo.
+
 ```bash
 # Execução completa com parâmetros padrão (PLSDA)
 nircls run-all
