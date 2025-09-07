@@ -313,6 +313,7 @@ def _run_cv(
     outer,
     progress: Progress,
     *,
+    random_state: int,
     interactive: bool = False,
 ) -> None:
     """Run cross-validation for configured datasets and models.
@@ -327,6 +328,8 @@ def _run_cv(
         External cross-validation splitter.
     progress:
         Progress bar instance for user feedback.
+    random_state:
+        Seed applied to inner cross-validation splits.
     """
 
     try:
@@ -397,7 +400,7 @@ def _run_cv(
                     inner = StratifiedKFold(
                         n_splits=inner_folds,
                         shuffle=True,
-                        random_state=123,
+                        random_state=random_state,
                     )
                 gs = GridSearchCV(
                     pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1
@@ -561,7 +564,7 @@ def _run_holdout(
     test_size:
         Proportion of the dataset used for testing.
     random_state:
-        Seed applied to the train/test split.
+        Seed applied to the train/test split and inner cross-validation.
     interactive:
         If ``True``, also generate interactive Plotly HTML figures.
     """
@@ -596,7 +599,9 @@ def _run_holdout(
                 inner = spxy_split(Xtr, ytr, inner_folds)
             else:
                 inner = StratifiedKFold(
-                    n_splits=inner_folds, shuffle=True, random_state=123
+                    n_splits=inner_folds,
+                    shuffle=True,
+                    random_state=random_state,
                 )
             gs = GridSearchCV(
                 pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1
@@ -786,7 +791,14 @@ def run_multiple_eval(
                                 )
                         sub = out_dir / f"kfold_{k}"
                         sub.mkdir(parents=True, exist_ok=True)
-                        _run_cv(cfg, sub, outer, progress, interactive=interactive)
+                        _run_cv(
+                            cfg,
+                            sub,
+                            outer,
+                            progress,
+                            random_state=random_state,
+                            interactive=interactive,
+                        )
                         metrics = sub / "metrics.json"
                         figs = sub / "figures"
                         generate_report(metrics, figs, sub / "report.md")
@@ -820,7 +832,14 @@ def run_multiple_eval(
                         )
                     sub = out_dir / "loo"
                     sub.mkdir(parents=True, exist_ok=True)
-                    _run_cv(cfg, sub, LeaveOneOut(), progress, interactive=interactive)
+                    _run_cv(
+                        cfg,
+                        sub,
+                        LeaveOneOut(),
+                        progress,
+                        random_state=random_state,
+                        interactive=interactive,
+                    )
                     metrics = sub / "metrics.json"
                     figs = sub / "figures"
                     generate_report(metrics, figs, sub / "report.md")
