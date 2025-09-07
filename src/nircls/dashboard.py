@@ -112,8 +112,8 @@ def _render_dashboard(results_dir: Path) -> None:
                         mime="image/png",
                     )
 
-    prep_tab, exec_tab, results_tab = st.tabs(
-        ["Preparar Dados", "Execução", "Resultados"]
+    prep_tab, exec_tab, results_tab, summary_tab = st.tabs(
+        ["Preparar Dados", "Execução", "Resultados", "Resumo"]
     )
 
     with prep_tab:
@@ -196,60 +196,66 @@ def _render_dashboard(results_dir: Path) -> None:
         if not run_dirs:
             st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
         else:
-            selected_run = st.selectbox(
-                "Selecione uma execução",
+            selected = st.multiselect(
+                "Selecione execuções",
                 run_dirs,
                 format_func=lambda p: p.name,
             )
-            for metrics_path in sorted(selected_run.rglob("metrics.json")):
-                strat_dir = metrics_path.parent
-                st.subheader(strat_dir.relative_to(selected_run).as_posix())
-                try:
-                    with metrics_path.open() as f:
-                        metrics = json.load(f)
-                    if metrics:
-                        st.dataframe(pd.DataFrame(metrics))
-                except Exception as exc:  # pragma: no cover - display error
-                    st.error(f"Erro ao carregar métricas: {exc}")
-                fig_dir = strat_dir / "figures"
-                if fig_dir.exists():
-                    _display_figures(fig_dir)
-                qc_path = strat_dir / "qc_report.json"
-                if qc_path.exists():
-                    try:
-                        with qc_path.open() as f:
-                            qc = json.load(f)
-                        for item in qc:
-                            st.markdown(f"#### QC: {item['target']}")
-                            df_qc = pd.DataFrame.from_dict(
-                                item["pca_outliers"], orient="index"
-                            )
-                            t2_lim = df_qc["T2"].quantile(0.95)
-                            q_lim = df_qc["Q_residuals"].quantile(0.95)
-                            df_qc["outlier"] = (df_qc["T2"] > t2_lim) | (
-                                df_qc["Q_residuals"] > q_lim
-                            )
-                            fig = px.scatter(
-                                df_qc,
-                                x="PC1",
-                                y="PC2",
-                                color="outlier",
-                                color_discrete_map={True: "red", False: "blue"},
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-                    except Exception as exc:  # pragma: no cover - display error
-                        st.error(f"Erro ao carregar relatório QC: {exc}")
+            if not selected:
+                st.info("Selecione uma ou mais execuções.")
+            else:
+                cols = st.columns(len(selected))
+                for col, run in zip(cols, selected):
+                    with col:
+                        st.markdown(f"### {run.name}")
+                        for metrics_path in sorted(run.rglob("metrics.json")):
+                            strat_dir = metrics_path.parent
+                            st.subheader(strat_dir.relative_to(run).as_posix())
+                            try:
+                                with metrics_path.open() as f:
+                                    metrics = json.load(f)
+                                if metrics:
+                                    st.dataframe(pd.DataFrame(metrics))
+                            except Exception as exc:  # pragma: no cover - display error
+                                st.error(f"Erro ao carregar métricas: {exc}")
+                            fig_dir = strat_dir / "figures"
+                            if fig_dir.exists():
+                                _display_figures(fig_dir)
+                            qc_path = strat_dir / "qc_report.json"
+                            if qc_path.exists():
+                                try:
+                                    with qc_path.open() as f:
+                                        qc = json.load(f)
+                                    for item in qc:
+                                        st.markdown(f"#### QC: {item['target']}")
+                                        df_qc = pd.DataFrame.from_dict(
+                                            item["pca_outliers"], orient="index"
+                                        )
+                                        t2_lim = df_qc["T2"].quantile(0.95)
+                                        q_lim = df_qc["Q_residuals"].quantile(0.95)
+                                        df_qc["outlier"] = (df_qc["T2"] > t2_lim) | (
+                                            df_qc["Q_residuals"] > q_lim
+                                        )
+                                        fig = px.scatter(
+                                            df_qc,
+                                            x="PC1",
+                                            y="PC2",
+                                            color="outlier",
+                                            color_discrete_map={
+                                                True: "red",
+                                                False: "blue",
+                                            },
+                                        )
+                                        st.plotly_chart(fig, use_container_width=True)
+                                except (
+                                    Exception
+                                ) as exc:  # pragma: no cover - display error
+                                    st.error(f"Erro ao carregar relatório QC: {exc}")
 
     with results_tab:
         if not run_dirs:
             st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
         else:
-            summary = summarize_runs(results_dir)
-            if summary.empty:
-                st.warning("Nenhuma métrica agregada encontrada.")
-            else:
-                st.dataframe(summary)
-
             compare_runs = st.multiselect(
                 "Selecione execuções para comparar",
                 run_dirs,
@@ -275,6 +281,42 @@ def _render_dashboard(results_dir: Path) -> None:
                                 _display_figures(fig_dir)
             elif compare_runs:
                 st.warning("Selecione ao menos duas execuções para comparar.")
+
+    with summary_tab:
+        if not run_dirs:
+            st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
+        else:
+            summary = summarize_runs(results_dir)
+            if summary.empty:
+                st.warning("Nenhuma métrica agregada encontrada.")
+            else:
+                summary["run"] = summary["run"].str.split("/").str[0]
+                num_cols = summary.select_dtypes("number").columns
+                grouped_mean = summary.groupby("run")[num_cols].mean()
+                grouped_std = summary.groupby("run")[num_cols].std().fillna(0)
+                display_df = pd.DataFrame(
+                    {
+                        c: grouped_mean[c].map("{:.3f}".format)
+                        + " ± "
+                        + grouped_std[c].map("{:.3f}".format)
+                        for c in grouped_mean.columns
+                    }
+                )
+
+                def _highlight_best(col: pd.Series) -> list[str]:
+                    cname = col.name.lower()
+                    best = (
+                        grouped_mean[col.name].idxmin()
+                        if any(k in cname for k in ["loss", "erro", "rmse"])
+                        else grouped_mean[col.name].idxmax()
+                    )
+                    return [
+                        "background-color: #dff0d8" if idx == best else ""
+                        for idx in grouped_mean.index
+                    ]
+
+                styled = display_df.style.apply(_highlight_best, axis=0)
+                st.dataframe(styled, use_container_width=True)
 
 
 if __name__ == "__main__":
