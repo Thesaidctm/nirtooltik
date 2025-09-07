@@ -32,7 +32,6 @@ from sklearn.metrics import (
 )
 from sklearn.calibration import CalibratedClassifierCV
 from joblib import dump, load
-from glob import glob
 from .io import (
     prepare_inputs as _prepare_inputs,
     export_xy_xlsx,
