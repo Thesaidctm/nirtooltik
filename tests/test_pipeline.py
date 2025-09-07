@@ -163,6 +163,14 @@ def test_prepare_inputs_raises_when_range_unavailable(tmp_path):
         prepare_inputs(cfg)
 
 
+def test_prepare_inputs_raises_on_invalid_path(tmp_path):
+    bad_dir = tmp_path / "data_dir"
+    bad_dir.mkdir()
+    cfg = {"input_path": str(bad_dir)}
+    with pytest.raises(DataError, match="inválido"):
+        prepare_inputs(cfg)
+
+
 def test_summarize_dataset_columns(tmp_path):
     rng = np.random.RandomState(0)
     X = rng.rand(5, 3)

@@ -129,6 +129,11 @@ def prepare_inputs(
     files = [Path(p) for p in glob(data_cfg["input_path"])]
     if not files:
         raise DataError("Nenhum arquivo encontrado para o padrão informado")
+    invalid = [p for p in files if not p.is_file()]
+    files = [p for p in files if p.is_file()]
+    if invalid:
+        invalid_str = ", ".join(str(p) for p in invalid)
+        raise DataError(f"Caminho(s) inválido(s): {invalid_str}")
     sp = data_cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
     out_dir = Path(data_cfg.get("out_dir", RESULTS_DIR))
