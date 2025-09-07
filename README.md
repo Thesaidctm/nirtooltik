@@ -23,17 +23,21 @@ source .venv/bin/activate  # Unix/macOS
 # No Windows use: .venv\Scripts\activate
 ```
 
-Com o ambiente virtual ativo, usuários iniciantes podem realizar uma execução
-completa com parâmetros padrão executando:
+Com o ambiente virtual ativo, usuários iniciantes podem executar um pipeline
+completo a partir de um arquivo YAML de configuração, que define os caminhos
+dos dados e demais opções do experimento. Exemplo:
 
 ```bash
-nircls run-all
+nircls run-all --config configs/eucalipto_spxy.yaml
 ```
+
+O comando exige um arquivo de configuração YAML que informe os caminhos dos
+dados e as opções do experimento.
 
 Para treinar todos os modelos disponíveis (pode exigir dependências opcionais), utilize:
 
 ```bash
-nircls run-all --all-models
+nircls run-all --config configs/eucalipto_spxy.yaml --all-models
 ```
 
 ## Sumário
