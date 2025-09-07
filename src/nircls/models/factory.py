@@ -1,19 +1,24 @@
 
 from __future__ import annotations
-from typing import List, Dict, Any
-from sklearn.linear_model import LogisticRegression
+
+from importlib.metadata import entry_points
+from typing import Any, Dict, List
+
+import numpy as np
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.cross_decomposition import PLSRegression
 from sklearn.discriminant_analysis import (
     LinearDiscriminantAnalysis,
     QuadraticDiscriminantAnalysis,
 )
-from sklearn.ensemble import GradientBoostingClassifier, AdaBoostClassifier
+from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import BernoulliNB, GaussianNB, MultinomialNB
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.cross_decomposition import PLSRegression
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB
-import numpy as np
+
+from .base import BaseModelBuilder
 
 # Helpers for model construction with optional class weighting
 from .builders import _build_svm, _build_rf, _build_etc, _build_logreg
@@ -126,6 +131,35 @@ def _lstm_builder():  # pragma: no cover - lazy import
     return SpectralLSTM()
 
 
+# Mapping from model identifier to human readable description. This dictionary
+# is also populated by third-party plugins registered via entry points.
+MODEL_DESCRIPTIONS: Dict[str, str] = {
+    "PLSDA": "Partial Least Squares Discriminant Analysis",
+    "SVM_RBF": "Support Vector Machine (RBF)",
+    "SVM_LINEAR": "Support Vector Machine (Linear)",
+    "RF": "Random Forest",
+    "GB": "Gradient Boosting",
+    "ET": "Extra Trees",
+    "ADABOOST": "AdaBoost",
+    "LOGREG": "Logistic Regression",
+    "QDA": "Quadratic Discriminant Analysis",
+    "XGBOOST": "XGBoost",
+    "LGBM": "LightGBM",
+    "CATBOOST": "CatBoost",
+    "MLP": "Multilayer Perceptron",
+    "DT": "Decision Tree",
+    "KNN": "k-Nearest Neighbors",
+    "CNN1D": "1D Convolutional Neural Network",
+    "LSTM1D": "1D LSTM Network",
+    "GAUSSIANNB": "Gaussian Naive Bayes",
+    "NB": "Gaussian Naive Bayes",
+    "MULTINB": "Multinomial Naive Bayes",
+    "BERNOULLINB": "Bernoulli Naive Bayes",
+}
+
+_ENTRYPOINT_GROUP = "nircls.model_builders"
+
+
 MODEL_BUILDERS = {
     "PLSDA": lambda grid: PLSDA(),
     "SVM_RBF": lambda grid: _build_svm(grid, kernel="rbf"),
@@ -179,13 +213,61 @@ DEFAULT_GRIDS = {
     "BERNOULLINB": {"alpha": [1.0]},
 }
 
+
+_EP_LOADED = False
+
+
+def _load_entry_point_builders() -> None:  # pragma: no cover - simple metadata loader
+    """Populate builder mappings from third-party entry points."""
+
+    global _EP_LOADED
+    if _EP_LOADED:
+        return
+    eps = entry_points()
+    if hasattr(eps, "select"):
+        group_eps = eps.select(group=_ENTRYPOINT_GROUP)
+    else:  # Python<3.10
+        group_eps = eps.get(_ENTRYPOINT_GROUP, [])
+    for ep in group_eps:
+        builder_cls = ep.load()
+        try:
+            builder: BaseModelBuilder = builder_cls()  # type: ignore[assignment]
+        except Exception:  # pragma: no cover - defensive
+            continue
+        name = builder.name.upper()
+        MODEL_BUILDERS[name] = lambda grid, b=builder: b.build(grid)
+        grid = builder.default_grid() or {}
+        if grid:
+            DEFAULT_GRIDS[name] = grid
+        if getattr(builder, "description", ""):
+            MODEL_DESCRIPTIONS[name] = builder.description
+    _EP_LOADED = True
+
+
+def get_model_builders() -> Dict[str, Any]:
+    """Return mapping of available model builders.
+
+    Third-party plugins are loaded lazily on first call.
+    """
+
+    _load_entry_point_builders()
+    return MODEL_BUILDERS
+
+
+def get_model_descriptions() -> Dict[str, str]:
+    """Return mapping from model identifier to human readable description."""
+
+    _load_entry_point_builders()
+    return MODEL_DESCRIPTIONS
+
 def make_models_from_config(models_cfg: List[Dict[str, Any]]):
+    builders = get_model_builders()
     out = []
     for m in models_cfg:
         name = m["name"]
         upper = name.upper()
 
-        builder = MODEL_BUILDERS.get(upper)
+        builder = builders.get(upper)
         if builder is None:
             raise ValueError(f"Modelo não suportado: {name}")
 

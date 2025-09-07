@@ -409,6 +409,40 @@ podem ser adicionados implementando classes compatíveis com `scikit-learn` e
 registrando‑as nos módulos apropriados. Contribuições são bem‑vindas via pull
 requests.
 
+### Plugins de modelos
+
+Desde a versão atual, modelos podem ser fornecidos por pacotes externos usando
+``entry_points`` do Python. Basta criar uma classe que implemente
+``BaseModelBuilder`` e registrá‑la em ``pyproject.toml``:
+
+```python
+# my_plugin/builder.py
+from nircls.models.base import BaseModelBuilder
+from sklearn.dummy import DummyClassifier
+
+class DummyBuilder(BaseModelBuilder):
+    name = "DUMMY"
+    description = "Dummy classifier"
+
+    def build(self, grid):
+        return DummyClassifier()
+
+    def default_grid(self):
+        return {}
+```
+
+No arquivo ``pyproject.toml`` do plugin, exponha a classe no grupo
+``nircls.model_builders``:
+
+```toml
+[project.entry-points."nircls.model_builders"]
+dummy = "my_plugin.builder:DummyBuilder"
+```
+
+Após instalar o pacote, o comando ``nircls list-models`` mostrará o novo modelo
+e ele poderá ser referenciado nas configurações YAML ou no assistente
+``nircls wizard``.
+
 Os resultados serão salvos em `results/<run_id>/<estratégia>/`. Cada pasta de
 estratégia contém as métricas (`metrics.json`, `metrics_summary.xlsx`), as figuras
 geradas e um relatório final em Markdown (`report.md`).
