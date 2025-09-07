@@ -12,7 +12,7 @@ import webbrowser
 import pandas as pd
 import plotly.graph_objects as go
 
-from . import DEFAULT_RESULTS_DIR
+from .utils.misc import RESULTS_DIR
 
 
 def _load_plotly_html(path: Path) -> go.Figure | None:
@@ -81,7 +81,7 @@ def run_dashboard(results_dir: str | Path) -> int:
 
 def main() -> int:
     """Entry point used by the ``nircls-dashboard`` console script."""
-    return run_dashboard(DEFAULT_RESULTS_DIR)
+    return run_dashboard(RESULTS_DIR)
 
 
 def _render_dashboard(results_dir: Path) -> None:
@@ -101,7 +101,7 @@ def _render_dashboard(results_dir: Path) -> None:
         if p.is_dir() and any(p.glob("**/metrics.json"))
     ]
     if not run_dirs:
-        st.warning("Nenhuma execução encontrada em results/.")
+        st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
         return
 
     selected_run = st.selectbox(

@@ -28,7 +28,7 @@ from .pipeline import (
 from .report import generate_report
 from .dashboard import run_dashboard
 from .utils.logging import setup_logging, log_versions
-from .utils.misc import ensure_dirs, make_run_id, set_seed
+from .utils.misc import ensure_dirs, make_run_id, set_seed, RAW_DIR, RESULTS_DIR
 from .config_schema import ConfigModel, ValidationError
 from .utils.errors import DataError, ModelError
 
@@ -192,11 +192,11 @@ def main(argv=None):
     p_pd = sp.add_parser("predict")
     p_pd.add_argument("--model", required=True)
     p_pd.add_argument("--data", required=True)
-    p_pd.add_argument("--output", default="results")
+    p_pd.add_argument("--output", default=str(RESULTS_DIR))
     p_ex = sp.add_parser("explain")
     p_ex.add_argument("--model", required=True)
     p_ex.add_argument("--data", required=True)
-    p_ex.add_argument("--output", default="results")
+    p_ex.add_argument("--output", default=str(RESULTS_DIR))
     p_db = sp.add_parser("dashboard")
     p_db.add_argument("--results", required=True, help="Pasta com resultados")
     args = parser.parse_args(argv)
@@ -238,7 +238,7 @@ def main(argv=None):
             print("Configuração inválida: seção 'data' é obrigatória", file=sys.stderr)
             return 1
         run_id = make_run_id("prepare")
-        out_dir = Path(cfg.data.out_dir or "results") / run_id
+        out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
         try:
             ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
@@ -267,7 +267,7 @@ def main(argv=None):
             )
             return 1
         run_id = make_run_id("train")
-        out_dir = Path(cfg.data.out_dir or "results") / run_id
+        out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
         try:
             ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
@@ -316,7 +316,7 @@ def main(argv=None):
         if args.run == "one" and ds_list:
             cfg.data.target_cols = ds_list[0]["target"]
         run_id = make_run_id("cv")
-        out_dir = Path(cfg.data.out_dir or "results") / run_id
+        out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
         try:
             outputs = run_multiple_eval(
@@ -350,7 +350,7 @@ def main(argv=None):
         print(f"Resultados em: {out_dir}")
     elif args.cmd == "run-all":
         default_cfg = {
-            "data": {"input_path": "data/RAW", "out_dir": "results"},
+            "data": {"input_path": str(RAW_DIR), "out_dir": str(RESULTS_DIR)},
             "models": [{"name": "PLSDA"}],
             "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
         }
@@ -366,7 +366,7 @@ def main(argv=None):
                 return 1
             _deep_update(default_cfg, user_cfg)
         run_id = make_run_id("run")
-        base_dir = Path(default_cfg["data"].get("out_dir", "results")) / run_id
+        base_dir = Path(default_cfg["data"].get("out_dir", RESULTS_DIR)) / run_id
         ensure_dirs(base_dir)
         default_cfg["data"]["out_dir"] = str(base_dir)
         try:
@@ -424,7 +424,7 @@ def main(argv=None):
             print(f"Configuração inválida: {e}", file=sys.stderr)
             return 1
         run_id = make_run_id("demo")
-        base_dir = Path(cfg.data.out_dir or "results") / run_id
+        base_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(base_dir)
         ds_list = []
         try:
@@ -550,7 +550,7 @@ def main(argv=None):
         if run_now:
             cfg_obj = ConfigModel(**cfg_dict)
             run_id = make_run_id("wizard")
-            base_dir = Path(cfg_obj.data.out_dir or "results") / run_id
+            base_dir = Path(cfg_obj.data.out_dir or RESULTS_DIR) / run_id
             ensure_dirs(base_dir)
             train_dir = base_dir / "train"
             ensure_dirs(train_dir)

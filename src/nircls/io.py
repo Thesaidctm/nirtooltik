@@ -6,6 +6,8 @@ import numpy as np, pandas as pd
 from glob import glob
 from joblib import dump
 
+from .utils.misc import RESULTS_DIR
+
 from .utils.errors import DataError
 
 def _normalize_columns_to_float(df: pd.DataFrame) -> pd.DataFrame:
@@ -121,7 +123,7 @@ def prepare_inputs(data_cfg: Dict, *, use_cache: bool = True):
         raise DataError("Nenhum arquivo encontrado para o padrão informado")
     sp = data_cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
-    out_dir = Path(data_cfg.get("out_dir", "results"))
+    out_dir = Path(data_cfg.get("out_dir", RESULTS_DIR))
     cache_dir = out_dir / "cache"
     tgt = data_cfg.get("target_cols")
     if tgt is None and "target_col" in data_cfg:
