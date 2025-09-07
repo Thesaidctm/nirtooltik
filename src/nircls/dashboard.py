@@ -12,6 +12,8 @@ import pandas as pd
 import plotly.io as pio
 
 from .utils.misc import RESULTS_DIR
+from .utils.summarize import summarize_runs
+
 
 def _figure_caption(stem: str) -> str:
     """Map figure filename stems to human-friendly captions."""
@@ -23,6 +25,7 @@ def _figure_caption(stem: str) -> str:
         "roc": "Curva ROC",
         "reliability": "Diagrama de Confiabilidade",
     }.get(suffix, stem)
+
 
 def run_dashboard(results_dir: str | Path) -> int:
     """Launch the Streamlit dashboard.
@@ -77,12 +80,6 @@ def _render_dashboard(results_dir: Path) -> None:
         st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
         return
 
-    selected_run = st.selectbox(
-        "Selecione uma execução",
-        run_dirs,
-        format_func=lambda p: p.name,
-    )
-
     def _display_figures(fig_dir: Path) -> None:
         bases = {
             p.with_suffix("")
@@ -114,19 +111,60 @@ def _render_dashboard(results_dir: Path) -> None:
                         mime="image/png",
                     )
 
-    for metrics_path in sorted(selected_run.rglob("metrics.json")):
-        strat_dir = metrics_path.parent
-        st.subheader(strat_dir.relative_to(selected_run).as_posix())
-        try:
-            with metrics_path.open() as f:
-                metrics = json.load(f)
-            if metrics:
-                st.dataframe(pd.DataFrame(metrics))
-        except Exception as exc:  # pragma: no cover - display error
-            st.error(f"Erro ao carregar métricas: {exc}")
-        fig_dir = strat_dir / "figures"
-        if fig_dir.exists():
-            _display_figures(fig_dir)
+    exec_tab, results_tab = st.tabs(["Execução", "Resultados"])
+
+    with exec_tab:
+        selected_run = st.selectbox(
+            "Selecione uma execução",
+            run_dirs,
+            format_func=lambda p: p.name,
+        )
+        for metrics_path in sorted(selected_run.rglob("metrics.json")):
+            strat_dir = metrics_path.parent
+            st.subheader(strat_dir.relative_to(selected_run).as_posix())
+            try:
+                with metrics_path.open() as f:
+                    metrics = json.load(f)
+                if metrics:
+                    st.dataframe(pd.DataFrame(metrics))
+            except Exception as exc:  # pragma: no cover - display error
+                st.error(f"Erro ao carregar métricas: {exc}")
+            fig_dir = strat_dir / "figures"
+            if fig_dir.exists():
+                _display_figures(fig_dir)
+
+    with results_tab:
+        summary = summarize_runs(results_dir)
+        if summary.empty:
+            st.warning("Nenhuma métrica agregada encontrada.")
+        else:
+            st.dataframe(summary)
+
+        compare_runs = st.multiselect(
+            "Selecione execuções para comparar",
+            run_dirs,
+            format_func=lambda p: p.name,
+        )
+        if len(compare_runs) >= 2:
+            cols = st.columns(len(compare_runs))
+            for col, run in zip(cols, compare_runs):
+                with col:
+                    st.markdown(f"### {run.name}")
+                    for metrics_path in sorted(run.rglob("metrics.json")):
+                        strat_dir = metrics_path.parent
+                        st.caption(strat_dir.relative_to(run).as_posix())
+                        try:
+                            with metrics_path.open() as f:
+                                metrics = json.load(f)
+                            if metrics:
+                                st.dataframe(pd.DataFrame(metrics))
+                        except Exception as exc:  # pragma: no cover
+                            st.error(f"Erro ao carregar métricas: {exc}")
+                        fig_dir = strat_dir / "figures"
+                        if fig_dir.exists():
+                            _display_figures(fig_dir)
+        elif compare_runs:
+            st.warning("Selecione ao menos duas execuções para comparar.")
 
 
 if __name__ == "__main__":
