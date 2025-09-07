@@ -113,6 +113,7 @@ class ConfigModel(BaseModel):
     preprocess: Optional[PreprocessConfig] = None
     cv: Optional[CVConfig] = None
     models: Optional[List[ModelConfig]] = None
+    use_cache: bool = True
 
     class Config:
         extra = "forbid"

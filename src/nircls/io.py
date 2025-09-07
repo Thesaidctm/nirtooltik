@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Sequence, Any
 import numpy as np, pandas as pd
 from glob import glob
+from joblib import dump
 
 from .utils.errors import DataError
 
@@ -108,7 +109,7 @@ def export_xy_xlsx(path: Path, X: pd.DataFrame, y: pd.Series, x_sheet="X", y_she
         X.to_excel(w, index=False, sheet_name=x_sheet)
         y.to_frame(name=y.name or "target").to_excel(w, index=False, sheet_name=y_sheet)
 
-def prepare_inputs(data_cfg: Dict):
+def prepare_inputs(data_cfg: Dict, *, use_cache: bool = True):
     """Load and clean spectral datasets specified in configuration.
 
     Column names are normalised to floats (nanometers) and filtered by the
@@ -120,6 +121,8 @@ def prepare_inputs(data_cfg: Dict):
         raise DataError("Nenhum arquivo encontrado para o padrão informado")
     sp = data_cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
+    out_dir = Path(data_cfg.get("out_dir", "results"))
+    cache_dir = out_dir / "cache"
     tgt = data_cfg.get("target_cols")
     if tgt is None and "target_col" in data_cfg:
         tgt = data_cfg["target_col"]
@@ -140,19 +143,36 @@ def prepare_inputs(data_cfg: Dict):
         X = X.replace([np.inf, -np.inf], np.nan)
         n_nans = int(X.isna().any(axis=1).sum())
         X = X.dropna(axis=0)
+        keep_idx = X.index
         if groups is not None:
-            groups = groups.loc[X.index]
+            groups = groups.loc[keep_idx]
+        X_reset = X.reset_index(drop=True)
+        groups_reset = groups.reset_index(drop=True) if groups is not None else None
+
+        if use_cache:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            fingerprint = {"mtime": f.stat().st_mtime, "spectral_range": sp}
+            dump(
+                {
+                    "fingerprint": fingerprint,
+                    "X": X_reset,
+                    "keep_idx": keep_idx.tolist(),
+                    "n_nans": n_nans,
+                },
+                cache_dir / f"{f.stem}.joblib",
+            )
+
         for name, y in y_list:
-            y = y.loc[X.index]
+            y = y.loc[keep_idx]
             ds = {
                 "file": f.as_posix(),
                 "target": name,
-                "X": X.reset_index(drop=True),
+                "X": X_reset,
                 "Y": y.reset_index(drop=True),
                 "n_nans": n_nans,
             }
-            if groups is not None:
-                ds["groups"] = groups.reset_index(drop=True)
+            if groups_reset is not None:
+                ds["groups"] = groups_reset
             out.append(ds)
     return out
 

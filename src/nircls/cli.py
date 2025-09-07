@@ -16,13 +16,14 @@ from typing import Any
 import pandas as pd
 
 from . import __version__
-from .io import prepare_inputs, export_xy_xlsx, summarize_dataset
+from .io import export_xy_xlsx, summarize_dataset
 from .pipeline import (
     run_multiple_eval,
     train_and_save,
     evaluate_saved_model,
     predict_with_model,
     explain_model,
+    prepare_inputs,
 )
 from .report import generate_report
 from .dashboard import run_dashboard
@@ -206,7 +207,7 @@ def main(argv=None):
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
         try:
-            ds_list = prepare_inputs(cfg.data.dict())
+            ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
         except DataError as e:
             print(f"Dados inválidos: {e}", file=sys.stderr)
             return 1
@@ -235,7 +236,7 @@ def main(argv=None):
         out_dir = Path(cfg.data.out_dir or "results") / run_id
         ensure_dirs(out_dir)
         try:
-            ds_list = prepare_inputs(cfg.data.dict())
+            ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
         except DataError as e:
             print(f"Dados inválidos: {e}", file=sys.stderr)
             return 1
@@ -270,7 +271,7 @@ def main(argv=None):
             )
             return 1
         try:
-            ds_list = prepare_inputs(cfg.data.dict())
+            ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
         except DataError as e:
             print(f"Dados inválidos: {e}", file=sys.stderr)
             return 1
@@ -328,7 +329,7 @@ def main(argv=None):
         ensure_dirs(base_dir)
         ds_list = []
         try:
-            ds_list = prepare_inputs(cfg.data.dict())
+            ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
         except DataError as e:
             print(f"Dados inválidos: {e}", file=sys.stderr)
         if ds_list:

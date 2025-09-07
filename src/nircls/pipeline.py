@@ -26,7 +26,8 @@ from sklearn.metrics import (
 )
 from sklearn.calibration import CalibratedClassifierCV
 from joblib import dump, load
-from .io import prepare_inputs, export_xy_xlsx, read_xlsx_xy, read_tabular
+from glob import glob
+from .io import prepare_inputs as _prepare_inputs, export_xy_xlsx, read_xlsx_xy, read_tabular
 from .preprocessors.spectro import (
     SNV,
     MSC,
@@ -80,6 +81,76 @@ def _validate_cfg(
             "Seção 'cv' é obrigatória. Defina ao menos uma estratégia de validação."
         )
     return model
+
+
+def prepare_inputs(cfg: Dict[str, Any], *, use_cache: bool = True) -> List[Dict[str, Any]]:
+    """Load datasets, using cached features when available."""
+
+    if not use_cache:
+        return _prepare_inputs(cfg, use_cache=False)
+
+    files = [Path(p) for p in glob(cfg["input_path"])]
+    sp = cfg.get("spectral_range", None)
+    sp = (float(sp[0]), float(sp[1])) if sp else None
+    out_dir = Path(cfg.get("out_dir", "results"))
+    cache_dir = out_dir / "cache"
+
+    cached_items: List[Tuple[Path, Dict[str, Any]]] = []
+    for f in files:
+        cpath = cache_dir / f"{f.stem}.joblib"
+        fingerprint = {"mtime": f.stat().st_mtime, "spectral_range": sp}
+        if not cpath.exists():
+            cached_items = []
+            break
+        try:
+            cached = load(cpath)
+        except Exception:
+            cached_items = []
+            break
+        if cached.get("fingerprint") != fingerprint:
+            cached_items = []
+            break
+        cached_items.append((f, cached))
+
+    if not cached_items:
+        return _prepare_inputs(cfg, use_cache=use_cache)
+
+    tgt = cfg.get("target_cols")
+    if tgt is None and "target_col" in cfg:
+        tgt = cfg["target_col"]
+    grp = cfg.get("group_col")
+
+    out: List[Dict[str, Any]] = []
+    for f, cached in cached_items:
+        keep_idx = cached["keep_idx"]
+        X = cached["X"]
+        n_nans = cached.get("n_nans", 0)
+        if f.suffix.lower() in [".xlsx", ".xls"] and ("x_sheet" in cfg or "y_sheet" in cfg):
+            _, y_list, groups = read_xlsx_xy(
+                f,
+                cfg.get("x_sheet", "X"),
+                cfg.get("y_sheet", "Y"),
+                tgt,
+                grp,
+            )
+        else:
+            _, y_list, groups = read_tabular(f, tgt, grp)
+        groups_reset = None
+        if groups is not None:
+            groups_reset = groups.loc[keep_idx].reset_index(drop=True)
+        for name, y in y_list:
+            y = y.loc[keep_idx].reset_index(drop=True)
+            ds = {
+                "file": f.as_posix(),
+                "target": name,
+                "X": X,
+                "Y": y,
+                "n_nans": n_nans,
+            }
+            if groups_reset is not None:
+                ds["groups"] = groups_reset
+            out.append(ds)
+    return out
 def _make_preprocess(steps_cfg, cfg):
     """Create preprocessing steps and optional parameter grid.
 
@@ -246,7 +317,7 @@ def _run_cv(
     """
 
     try:
-        data = prepare_inputs(cfg["data"])
+        data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
     except DataError as e:
         raise DataError(
             "Arquivo de dados não encontrado. Verifique o caminho informado."
@@ -476,7 +547,7 @@ def _run_holdout(
     """
 
     try:
-        data = prepare_inputs(cfg["data"])
+        data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
     except DataError as e:
         raise DataError(
             "Arquivo de dados não encontrado. Verifique o caminho informado."
@@ -702,7 +773,7 @@ def train_and_save(
     with Progress() as progress:
         load_task = progress.add_task("Carregando dados", total=None)
         _validate_cfg(cfg, need_data=True, need_models=True)
-        ds = prepare_inputs(cfg["data"])[0]
+        ds = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))[0]
         X, y = ds["X"], ds["Y"]
         groups = ds.get("groups")
         le = LabelEncoder().fit(y)
