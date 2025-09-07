@@ -213,12 +213,20 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
         lines.append(
             f"**Best model**: {best_model}{steps_str} ({metric_name}: {best_score:.3f})"
         )
+    if "overfit_warning" in df.columns and df["overfit_warning"].any():
+        flagged = df.loc[df["overfit_warning"], "model"].astype(str).tolist()
+        lines.append(
+            "**Warning**: potential overfitting detected for models: "
+            + ", ".join(flagged)
+        )
 
     lines.append("")
     summary_md = "\n".join(lines)
 
     # Metrics table
-    table_cols = [c for c in ["file", "model", "preprocess_steps"] if c in df.columns]
+    table_cols = [
+        c for c in ["file", "model", "preprocess_steps", "overfit_warning"] if c in df.columns
+    ]
     table_df = df[table_cols].copy()
     if "preprocess_steps" in table_df.columns:
         table_df["preprocess_steps"] = table_df["preprocess_steps"].apply(
