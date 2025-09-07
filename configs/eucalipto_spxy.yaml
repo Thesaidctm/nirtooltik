@@ -9,7 +9,7 @@ data:
   out_dir: results
 
 preprocess:
-  steps: [SNV, SG, SCALE]
+  steps: [SNV, MSC, DETREND, SG, EMSC, EPO, SCALE]
   sg:
     window: [3,5,7,9,11,13,15,17,21,23,25]
     polyorder: 2
