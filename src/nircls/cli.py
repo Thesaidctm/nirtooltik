@@ -177,8 +177,14 @@ def main(argv=None):
         help="Gerar arquivos HTML com gráficos Plotly interativos",
     )
     p_demo = sp.add_parser("demo")
-    p_all = sp.add_parser("run-all")
-    p_all.add_argument("--config")
+    p_all = sp.add_parser(
+        "run-all",
+        help="Processa dados brutos e executa treino+avaliação com padrões",
+    )
+    p_all.add_argument(
+        "--config",
+        help="Arquivo de configuração para sobrescrever parâmetros padrão",
+    )
     p_wz = sp.add_parser("wizard")
     p_ev = sp.add_parser("evaluate")
     p_ev.add_argument("--model", required=True)
@@ -381,6 +387,7 @@ def main(argv=None):
                 default_cfg,
                 train_dir,
                 random_state=args.seed,
+                mlflow_uri=mlflow_uri,
             )
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)
@@ -394,6 +401,7 @@ def main(argv=None):
                 default_cfg,
                 cv_dir,
                 random_state=args.seed,
+                mlflow_uri=mlflow_uri,
             )
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)
