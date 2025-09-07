@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -40,27 +41,43 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
             out_base.with_suffix(".json").write_text("")
 
 
-
-def plot_confusion(cm, classes, out_base: Path, interactive: bool = False) -> None:
+def plot_confusion(
+    cm,
+    classes,
+    out_base: Path,
+    interactive: bool = False,
+    *,
+    colorscale: Any = [[0, "white"], [1, "#0d47a1"]],
+) -> None:
     """Plot and export confusion matrices in raw and normalised forms.
 
     The generated heatmaps include labels showing both the percentage and raw
     count for each cell (``"{percent:.1%}\n(n={count})"``) and are saved with
     ``*_raw`` and ``*_norm`` suffixes.
+
+    Parameters
+    ----------
+    cm, classes, out_base, interactive:
+        See original function.
+    colorscale:
+        Plotly colorscale applied to both heatmaps. Defaults to a white-to-blue
+        palette.
     """
 
     cm = np.asarray(cm)
     cm_percent = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-12)
     labels = np.vectorize(lambda p, c: f"{p:.1%}\n(n={c})")(cm_percent, cm)
 
-    def _single(z, title, suffix, colorbar_title):
+    def _single(z, title, suffix, colorbar_title, zmax):
         heatmap = go.Heatmap(
             z=z,
             x=classes,
             y=classes,
             text=labels,
             texttemplate="%{text}",
-            colorscale="Viridis",
+            colorscale=colorscale,
+            zmin=0,
+            zmax=zmax,
             colorbar=dict(title=colorbar_title),
         )
         fig = go.Figure(data=[heatmap])
@@ -77,8 +94,9 @@ def plot_confusion(cm, classes, out_base: Path, interactive: bool = False) -> No
         "Confusion Matrix (normalized)",
         "_norm",
         "Taxa de acerto normalizada",
+        1,
     )
-    _single(cm, "Confusion Matrix", "_raw", "Número de indivíduos")
+    _single(cm, "Confusion Matrix", "_raw", "Número de indivíduos", cm.max())
 
     pd.DataFrame(cm, index=classes, columns=classes).to_csv(
         out_base.with_suffix(".csv")
@@ -101,9 +119,7 @@ def plot_roc_ovr(
         y_bin = label_binarize(y_true, classes=list(range(n_classes)))
         for i in range(n_classes):
             fpr, tpr, _ = roc_curve(y_bin[:, i], y_proba[:, i])
-            fig.add_trace(
-                go.Scatter(x=fpr, y=tpr, mode="lines", name=str(classes[i]))
-            )
+            fig.add_trace(go.Scatter(x=fpr, y=tpr, mode="lines", name=str(classes[i])))
     fig.add_trace(
         go.Scatter(
             x=[0, 1],
@@ -150,9 +166,7 @@ def plot_reliability(
         )
     )
     if mids:
-        fig.add_trace(
-            go.Scatter(x=mids, y=accs, mode="lines+markers", name="Model")
-        )
+        fig.add_trace(go.Scatter(x=mids, y=accs, mode="lines+markers", name="Model"))
     fig.update_layout(
         xaxis_title="Confidence",
         yaxis_title="Accuracy",
@@ -161,4 +175,3 @@ def plot_reliability(
         yaxis=dict(range=[0, 1]),
     )
     _export(fig, out_base, interactive)
-
