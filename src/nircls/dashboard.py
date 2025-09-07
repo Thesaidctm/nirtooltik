@@ -7,10 +7,14 @@ import sys
 import argparse
 import json
 import webbrowser
+import tempfile
 
 import pandas as pd
 import plotly.io as pio
+import plotly.express as px
+import plotly.graph_objects as go
 
+from .io import prepare_inputs, summarize_dataset
 from .utils.misc import RESULTS_DIR
 from .utils.summarize import summarize_runs
 
@@ -76,9 +80,6 @@ def _render_dashboard(results_dir: Path) -> None:
         for p in sorted(results_dir.iterdir())
         if p.is_dir() and any(p.glob("**/metrics.json"))
     ]
-    if not run_dirs:
-        st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
-        return
 
     def _display_figures(fig_dir: Path) -> None:
         bases = {
@@ -111,60 +112,144 @@ def _render_dashboard(results_dir: Path) -> None:
                         mime="image/png",
                     )
 
-    exec_tab, results_tab = st.tabs(["Execução", "Resultados"])
+    prep_tab, exec_tab, results_tab = st.tabs(
+        ["Preparar Dados", "Execução", "Resultados"]
+    )
+
+    with prep_tab:
+        uploaded = st.file_uploader(
+            "Arquivo CSV ou XLSX",
+            type=["csv", "xlsx", "xls"],
+        )
+        if uploaded is not None:
+            df = (
+                pd.read_csv(uploaded)
+                if uploaded.name.lower().endswith(".csv")
+                else pd.read_excel(uploaded)
+            )
+            is_num = pd.api.types.is_numeric_dtype
+            non_num = [c for c in df.columns if not is_num(df[c])]
+            target_col = st.selectbox("Coluna alvo", non_num)
+            spectral_input = st.text_input("Faixa espectral (mín,max)")
+            if target_col and st.button("Processar"):
+                with tempfile.NamedTemporaryFile(
+                    "wb", delete=False, suffix=Path(uploaded.name).suffix
+                ) as tmp:
+                    tmp.write(uploaded.getbuffer())
+                    tmp_path = Path(tmp.name)
+                cfg = {"input_path": str(tmp_path), "target_col": target_col}
+                if spectral_input:
+                    try:
+                        lo, hi = map(float, spectral_input.split(","))
+                        cfg["spectral_range"] = [lo, hi]
+                    except Exception:
+                        st.error("Formato inválido de faixa espectral")
+                try:
+                    ds_list = prepare_inputs(cfg, use_cache=False)
+                    summary = summarize_dataset(ds_list)
+                    st.subheader("Resumo do conjunto")
+                    st.dataframe(summary)
+                    for ds in ds_list:
+                        st.markdown(f"### {ds['target']}")
+                        head_df = ds["X"].copy()
+                        head_df[ds["target"]] = ds["Y"]
+                        st.dataframe(head_df.head())
+                        counts = ds["Y"].value_counts().reset_index()
+                        counts.columns = ["class", "count"]
+                        fig = px.bar(counts, x="class", y="count")
+                        st.plotly_chart(fig, use_container_width=True)
+                        mean = ds["X"].mean()
+                        std = ds["X"].std()
+                        wl = mean.index.astype(float)
+                        fig2 = go.Figure()
+                        fig2.add_trace(go.Scatter(x=wl, y=mean, name="mean"))
+                        fig2.add_trace(
+                            go.Scatter(
+                                x=wl,
+                                y=mean + std,
+                                name="+sd",
+                                line=dict(width=0),
+                                showlegend=False,
+                            )
+                        )
+                        fig2.add_trace(
+                            go.Scatter(
+                                x=wl,
+                                y=mean - std,
+                                name="-sd",
+                                fill="tonexty",
+                                line=dict(width=0),
+                                showlegend=False,
+                            )
+                        )
+                        fig2.update_layout(
+                            xaxis_title="Comprimento de onda",
+                            yaxis_title="Reflectância",
+                        )
+                        st.plotly_chart(fig2, use_container_width=True)
+                except Exception as exc:  # pragma: no cover - display error
+                    st.error(f"Erro ao preparar dados: {exc}")
+                finally:
+                    tmp_path.unlink(missing_ok=True)
 
     with exec_tab:
-        selected_run = st.selectbox(
-            "Selecione uma execução",
-            run_dirs,
-            format_func=lambda p: p.name,
-        )
-        for metrics_path in sorted(selected_run.rglob("metrics.json")):
-            strat_dir = metrics_path.parent
-            st.subheader(strat_dir.relative_to(selected_run).as_posix())
-            try:
-                with metrics_path.open() as f:
-                    metrics = json.load(f)
-                if metrics:
-                    st.dataframe(pd.DataFrame(metrics))
-            except Exception as exc:  # pragma: no cover - display error
-                st.error(f"Erro ao carregar métricas: {exc}")
-            fig_dir = strat_dir / "figures"
-            if fig_dir.exists():
-                _display_figures(fig_dir)
+        if not run_dirs:
+            st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
+        else:
+            selected_run = st.selectbox(
+                "Selecione uma execução",
+                run_dirs,
+                format_func=lambda p: p.name,
+            )
+            for metrics_path in sorted(selected_run.rglob("metrics.json")):
+                strat_dir = metrics_path.parent
+                st.subheader(strat_dir.relative_to(selected_run).as_posix())
+                try:
+                    with metrics_path.open() as f:
+                        metrics = json.load(f)
+                    if metrics:
+                        st.dataframe(pd.DataFrame(metrics))
+                except Exception as exc:  # pragma: no cover - display error
+                    st.error(f"Erro ao carregar métricas: {exc}")
+                fig_dir = strat_dir / "figures"
+                if fig_dir.exists():
+                    _display_figures(fig_dir)
 
     with results_tab:
-        summary = summarize_runs(results_dir)
-        if summary.empty:
-            st.warning("Nenhuma métrica agregada encontrada.")
+        if not run_dirs:
+            st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
         else:
-            st.dataframe(summary)
+            summary = summarize_runs(results_dir)
+            if summary.empty:
+                st.warning("Nenhuma métrica agregada encontrada.")
+            else:
+                st.dataframe(summary)
 
-        compare_runs = st.multiselect(
-            "Selecione execuções para comparar",
-            run_dirs,
-            format_func=lambda p: p.name,
-        )
-        if len(compare_runs) >= 2:
-            cols = st.columns(len(compare_runs))
-            for col, run in zip(cols, compare_runs):
-                with col:
-                    st.markdown(f"### {run.name}")
-                    for metrics_path in sorted(run.rglob("metrics.json")):
-                        strat_dir = metrics_path.parent
-                        st.caption(strat_dir.relative_to(run).as_posix())
-                        try:
-                            with metrics_path.open() as f:
-                                metrics = json.load(f)
-                            if metrics:
-                                st.dataframe(pd.DataFrame(metrics))
-                        except Exception as exc:  # pragma: no cover
-                            st.error(f"Erro ao carregar métricas: {exc}")
-                        fig_dir = strat_dir / "figures"
-                        if fig_dir.exists():
-                            _display_figures(fig_dir)
-        elif compare_runs:
-            st.warning("Selecione ao menos duas execuções para comparar.")
+            compare_runs = st.multiselect(
+                "Selecione execuções para comparar",
+                run_dirs,
+                format_func=lambda p: p.name,
+            )
+            if len(compare_runs) >= 2:
+                cols = st.columns(len(compare_runs))
+                for col, run in zip(cols, compare_runs):
+                    with col:
+                        st.markdown(f"### {run.name}")
+                        for metrics_path in sorted(run.rglob("metrics.json")):
+                            strat_dir = metrics_path.parent
+                            st.caption(strat_dir.relative_to(run).as_posix())
+                            try:
+                                with metrics_path.open() as f:
+                                    metrics = json.load(f)
+                                if metrics:
+                                    st.dataframe(pd.DataFrame(metrics))
+                            except Exception as exc:  # pragma: no cover
+                                st.error(f"Erro ao carregar métricas: {exc}")
+                            fig_dir = strat_dir / "figures"
+                            if fig_dir.exists():
+                                _display_figures(fig_dir)
+            elif compare_runs:
+                st.warning("Selecione ao menos duas execuções para comparar.")
 
 
 if __name__ == "__main__":
