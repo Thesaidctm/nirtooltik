@@ -313,6 +313,9 @@ produzidos:
 * `figures/` – gráficos de curva ROC, matriz de confusão e confiabilidade,
   além de `*.confusion.csv` com a matriz em formato tabular para análises
   externas.
+* arquivos `shap_*.html` – figuras interativas de explicabilidade geradas com
+  [SHAP](https://shap.readthedocs.io/) (quando a dependência opcional estiver
+  instalada).
 * `metadata.json` – informações de rastreabilidade como hashes dos arquivos de
   entrada, versões das dependências e semente aleatória.
 
