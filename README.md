@@ -1,4 +1,4 @@
-# NIRCLS — NIR Species Classification Toolkit
+# NIRCLS — NIR Spectroscopy Toolkit for Tree Species Classification
 Autor: Thalles Loiola Dias | PPGCTM | UFLA |
 
 ## Introdução
