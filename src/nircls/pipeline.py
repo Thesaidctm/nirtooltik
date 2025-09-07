@@ -1194,5 +1194,57 @@ def predict_with_model(model_path: Path, data_path: Path, out_dir: Path) -> None
         df.to_csv(out_dir / "predictions.csv", index=False)
         progress.update(save_task, completed=1)
 def explain_model(model_path: Path, data_path: Path, out_dir: Path):
+    """Generate SHAP explanations for a saved model and dataset.
+
+    Parameters
+    ----------
+    model_path:
+        Path to a previously saved model in ``joblib`` format.
+    data_path:
+        Dataset in tabular or Excel format. Only the feature matrix ``X`` is
+        required; target columns will be ignored if present.
+    out_dir:
+        Directory where the generated figures will be persisted.
+    """
+
+    try:
+        import shap  # type: ignore
+    except Exception as e:  # pragma: no cover - optional dependency
+        raise ModuleNotFoundError(
+            "shap is required for model explanation. Install with 'pip install nircls[shap]'"
+        ) from e
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "explain.txt").write_text("Explainability hook.")
+
+    # Load model and feature matrix
+    est = load(model_path)
+    try:
+        if data_path.suffix.lower() in [".xlsx", ".xls"]:
+            try:
+                X, _, _ = read_xlsx_xy(data_path)
+            except DataError:
+                X, _, _ = read_tabular(data_path)
+        else:
+            X, _, _ = read_tabular(data_path)
+    except DataError as e:
+        raise DataError(f"Erro ao processar dados: {e}") from e
+
+    # Build explainer according to model and compute SHAP values
+    explainer = shap.Explainer(est, X)
+    shap_values = explainer(X)
+
+    # summary_plot accepts the Explanation object directly
+    shap.summary_plot(shap_values, X, show=False)
+    import matplotlib.pyplot as plt
+
+    plt.savefig(out_dir / "shap_summary.png", bbox_inches="tight")
+    plt.close()
+
+    values = shap_values.values
+    if values.ndim == 3:  # multi-class -> use first class
+        values = values[:, :, 0]
+    mean_abs = np.abs(values).mean(axis=0)
+    top_idx = int(mean_abs.argmax())
+    shap.dependence_plot(top_idx, values, X, show=False)
+    plt.savefig(out_dir / f"shap_dependence_{X.columns[top_idx]}.png", bbox_inches="tight")
+    plt.close()
