@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union, Literal
-from pydantic import BaseModel, Field, root_validator, ValidationError
+from typing import Any, Dict, List, Literal, Optional, Union
+
+from pydantic import BaseModel, Field, ValidationError, root_validator
 
 from .utils.misc import RESULTS_DIR
 
@@ -110,6 +111,7 @@ class ModelConfig(BaseModel):
     params: Optional[Dict[str, Any]] = None
     grid: Optional[Dict[str, Any]] = None
     calibration: Optional[CalibConfig] = None
+    overfit_check: bool = False
 
     class Config:
         extra = "forbid"
