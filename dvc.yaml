@@ -1,0 +1,18 @@
+stages:
+  prepare_inputs:
+    cmd: PYTHONPATH=src python scripts/dvc_prepare.py configs/demo.yaml data/prepared/demo.xlsx
+    deps:
+      - scripts/dvc_prepare.py
+      - configs/demo.yaml
+      - data/demo.csv
+    outs:
+      - data/prepared/demo.xlsx
+  train_and_save:
+    cmd: PYTHONPATH=src python scripts/dvc_train.py configs/demo.yaml results/model
+    deps:
+      - scripts/dvc_train.py
+      - configs/demo.yaml
+      - data/demo.csv
+      - data/prepared/demo.xlsx
+    outs:
+      - results/model

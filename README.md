@@ -35,7 +35,7 @@ de uso da API.
 Requer Python 3.9 ou superior. Principais dependências: `numpy`, `pandas`,
 `scikit-learn`, `scipy`, `matplotlib`, `seaborn`, `pyyaml`, `rich`, `joblib`,
 `openpyxl` e `tqdm`. Pacotes opcionais incluem `xgboost`, `lightgbm`,
-`catboost`, `torch`, `questionary` e `mlflow`.
+`catboost`, `torch`, `questionary`, `mlflow` e `dvc`.
 
 Para exportar relatórios em PDF é necessário instalar dependências extras:
 
@@ -240,6 +240,18 @@ Para permitir que outros reproduzam seus resultados:
   pip install -r requirements-lock.txt
   ```
 
+* Para versionar dados utilize o [DVC](https://dvc.org). Após instalar o
+  extra opcional com `pip install -e .[dvc]`, execute:
+
+  ```bash
+  dvc pull    # baixa os dados versionados
+  dvc repro   # roda a pipeline definida em dvc.yaml
+  dvc push    # envia novas versões para o remoto configurado
+  ```
+
+  Dessa forma, colaboradores podem obter exatamente a mesma versão dos dados e
+  reproduzir o experimento localmente.
+
 * Cite o projeto em publicações, por exemplo:
 
   > Dias, T. L. (2024). *nircls: NIR Species Classification Toolkit* (versão
@@ -378,6 +390,10 @@ nircls crossval --config experimento.yml --mlflow http://localhost:5000
 
 Abra `http://localhost:5000` no navegador para consultar o histórico de
 execuções e artefatos registrados.
+
+Quando o extra `dvc` está instalado, o comando `train` registra no MLflow o
+hash dos dados versionados pelo DVC, permitindo correlacionar código, dados e
+resultados em um único lugar.
 
 ## Testes
 
