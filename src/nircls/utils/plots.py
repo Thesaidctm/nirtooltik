@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from sklearn.metrics import roc_curve
 from sklearn.preprocessing import label_binarize
@@ -76,6 +77,10 @@ def plot_confusion(cm, classes, out_base: Path, interactive: bool = False) -> No
         "Taxa de acerto normalizada",
     )
     _single(cm, "Confusion Matrix", "_raw", "Número de indivíduos")
+
+    pd.DataFrame(cm, index=classes, columns=classes).to_csv(
+        out_base.with_suffix(".csv")
+    )
 
 
 def plot_roc_ovr(

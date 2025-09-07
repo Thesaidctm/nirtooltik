@@ -249,7 +249,9 @@ produzidos:
 * `metrics.json` – métricas detalhadas por partição;
 * `metrics_summary.csv` – resumo das métricas agregadas;
 * `report.md` – relatório em Markdown com tabelas e figuras;
-* `figures/` – gráficos de curva ROC, matriz de confusão e confiabilidade.
+* `figures/` – gráficos de curva ROC, matriz de confusão e confiabilidade,
+  além de `*.confusion.csv` com a matriz em formato tabular para análises
+  externas.
 
 O relatório é gerado inteiramente de forma local, sem qualquer integração com
 serviços externos ou APIs.
