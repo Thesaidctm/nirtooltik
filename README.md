@@ -14,8 +14,17 @@ de uso da API.
 
 A documentação completa está disponível em [https://Thesaidctm.github.io/nirtooltik/](https://Thesaidctm.github.io/nirtooltik/).
 
-Para uma execução completa com parâmetros padrão, usuários iniciantes podem
-simplesmente rodar:
+Antes de executar os comandos a seguir, recomenda-se criar e ativar um
+ambiente virtual:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Unix/macOS
+# No Windows use: .venv\Scripts\activate
+```
+
+Com o ambiente virtual ativo, usuários iniciantes podem realizar uma execução
+completa com parâmetros padrão executando:
 
 ```bash
 nircls run-all
