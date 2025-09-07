@@ -253,6 +253,10 @@ O dashboard permite executar todas as etapas do fluxo sem recorrer à CLI.
    permite enviar um modelo salvo e um novo arquivo de dados para que
    `predict_with_model` produza o arquivo `predictions.csv`.
 
+5. A aba **Resultados** lista todas as execuções presentes no diretório
+   informado, apresenta uma tabela agregada de métricas e permite selecionar
+   duas ou mais execuções para comparar métricas e figuras lado a lado.
+
 Com essas etapas é possível conduzir um experimento completo apenas pela
 interface web.
 
