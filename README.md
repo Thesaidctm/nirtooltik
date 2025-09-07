@@ -38,7 +38,8 @@ nircls run-all
 15. [Rastreamento com MLflow](#rastreamento-com-mlflow)
 16. [Testes](#testes)
 17. [Docker](#docker)
-18. [Créditos/Autoria](#creditosautoria)
+18. [Empacotamento para distribuição](#empacotamento-para-distribuicao)
+19. [Créditos/Autoria](#creditosautoria)
 
 ## Requisitos
 
@@ -451,6 +452,26 @@ docker run -p 8501:8501 nircls
 ```
 
 Opcionalmente, publique a imagem em um registro interno para facilitar a distribuição no laboratório.
+
+## Empacotamento para distribuição
+
+Para gerar um pacote independente com o código e as configurações do `nircls`, execute:
+
+```bash
+python make_nircls_zip.py
+```
+
+Será criado o arquivo `nircls_bundle.zip` contendo `src/nircls`, exemplos de configuração em `configs/` e um `requirements.txt` gerado a partir do ambiente atual.
+
+Em outra máquina:
+
+1. Extraia o `nircls_bundle.zip`.
+2. Crie um ambiente virtual e instale as dependências:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Utilize os utilitários do `nircls` a partir do diretório extraído.
 
 ## Créditos/Autoria
 
