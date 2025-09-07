@@ -26,15 +26,16 @@ de uso da API.
 12. [Treinar modelo final e predições](#treinar-modelo-final-e-predicoes)
 13. [Erros comuns e soluções](#erros-comuns-e-solucoes)
 14. [Extensões e contribuições](#extensoes-e-contribuicoes)
-15. [Testes](#testes)
-16. [Créditos/Autoria](#creditosautoria)
+15. [Rastreamento com MLflow](#rastreamento-com-mlflow)
+16. [Testes](#testes)
+17. [Créditos/Autoria](#creditosautoria)
 
 ## Requisitos
 
 Requer Python 3.9 ou superior. Principais dependências: `numpy`, `pandas`,
 `scikit-learn`, `scipy`, `matplotlib`, `seaborn`, `pyyaml`, `rich`, `joblib`,
 `openpyxl` e `tqdm`. Pacotes opcionais incluem `xgboost`, `lightgbm`,
-`catboost`, `torch` e `questionary`.
+`catboost`, `torch`, `questionary` e `mlflow`.
 
 Para exportar relatórios em PDF é necessário instalar dependências extras:
 
@@ -348,6 +349,30 @@ requests.
 Os resultados serão salvos em `results/<run_id>/<estratégia>/`. Cada pasta de
 estratégia contém as métricas (`metrics.json`, `metrics_summary.xlsx`), as figuras
 geradas e um relatório final em Markdown (`report.md`).
+
+## Rastreamento com MLflow
+
+Para registrar experimentos com [MLflow](https://mlflow.org) instale a
+dependência opcional:
+
+```bash
+pip install -e .[tracking]
+```
+
+Em seguida, inicie um servidor local:
+
+```bash
+mlflow server --host 0.0.0.0 --port 5000
+```
+
+Execute os comandos do `nircls` apontando para o URI do servidor:
+
+```bash
+nircls train --config experimento.yml --mlflow http://localhost:5000
+```
+
+Abra `http://localhost:5000` no navegador para consultar o histórico de
+execuções e artefatos registrados.
 
 ## Testes
 

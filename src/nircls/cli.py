@@ -142,6 +142,10 @@ def main(argv=None):
         default=42,
         help="Semente para reprodutibilidade",
     )
+    parser.add_argument(
+        "--mlflow",
+        help="URI do servidor MLflow para rastreamento",
+    )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
     p_prep.add_argument("--config", required=True)
@@ -180,6 +184,17 @@ def main(argv=None):
     set_seed(args.seed)
     setup_logging()
     log_versions()
+    mlflow_uri = args.mlflow
+    if mlflow_uri:
+        try:
+            import mlflow
+        except Exception:
+            print(
+                "'mlflow' não está instalado. Instale com `pip install mlflow`.",
+                file=sys.stderr,
+            )
+            return 1
+        mlflow.set_tracking_uri(mlflow_uri)
     if args.cmd in {"prepare-data", "train", "crossval"}:
         try:
             with open(args.config) as f:
@@ -249,6 +264,7 @@ def main(argv=None):
                 out_dir,
                 interactive=args.interactive,
                 random_state=args.seed,
+                mlflow_uri=mlflow_uri,
             )
         except DataError as e:
             print(f"Dados inválidos: {e}", file=sys.stderr)
@@ -289,6 +305,7 @@ def main(argv=None):
                 out_dir,
                 interactive=args.interactive,
                 random_state=args.seed,
+                mlflow_uri=mlflow_uri,
             )
         except DataError as e:
             print(f"Dados inválidos: {e}", file=sys.stderr)
@@ -347,7 +364,7 @@ def main(argv=None):
         ensure_dirs(train_dir)
         try:
             metrics_path, figs_dir = train_and_save(
-                cfg.dict(), train_dir, random_state=args.seed
+                cfg.dict(), train_dir, random_state=args.seed, mlflow_uri=mlflow_uri
             )
             if metrics_path:
                 _print_metrics_table(metrics_path)
@@ -361,7 +378,9 @@ def main(argv=None):
         cv_dir = base_dir / "cv"
         ensure_dirs(cv_dir)
         try:
-            outputs = run_multiple_eval(cfg.dict(), cv_dir, random_state=args.seed)
+            outputs = run_multiple_eval(
+                cfg.dict(), cv_dir, random_state=args.seed, mlflow_uri=mlflow_uri
+            )
             for metrics_path, figs_dir in outputs:
                 _print_metrics_table(metrics_path)
                 _print_confusion_paths(figs_dir)
@@ -455,7 +474,7 @@ def main(argv=None):
             ensure_dirs(train_dir)
             try:
                 metrics_path, figs_dir = train_and_save(
-                    cfg_obj.dict(), train_dir, random_state=args.seed
+                    cfg_obj.dict(), train_dir, random_state=args.seed, mlflow_uri=mlflow_uri
                 )
                 if metrics_path:
                     _print_metrics_table(metrics_path)
@@ -465,7 +484,7 @@ def main(argv=None):
                 cv_dir = base_dir / "cv"
                 ensure_dirs(cv_dir)
                 outputs = run_multiple_eval(
-                    cfg_obj.dict(), cv_dir, random_state=args.seed
+                    cfg_obj.dict(), cv_dir, random_state=args.seed, mlflow_uri=mlflow_uri
                 )
                 for metrics_path, figs_dir in outputs:
                     _print_metrics_table(metrics_path)
