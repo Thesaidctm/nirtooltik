@@ -34,8 +34,10 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
     if interactive:
         try:
             fig.write_html(out_base.with_suffix(".html"), include_plotlyjs="cdn")
+            out_base.with_suffix(".json").write_text(fig.to_json())
         except Exception:
             out_base.with_suffix(".html").write_text("")
+            out_base.with_suffix(".json").write_text("")
 
 
 
