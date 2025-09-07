@@ -2,6 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
+from contextlib import nullcontext
 import warnings
 import json
 import sys
@@ -671,6 +672,7 @@ def run_multiple_eval(
     *,
     random_state: int = 42,
     interactive: bool = False,
+    mlflow_uri: Optional[str] = None,
 ) -> List[Tuple[Path, Path]]:
     """Run evaluation for multiple cross-validation strategies.
 
@@ -693,6 +695,12 @@ def run_multiple_eval(
     strategies = cfg.get("cv", {}).get("strategies", [])
     random_state = cfg.get("cv", {}).get("random_state", random_state)
     cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
+    mlflow_enabled = bool(mlflow_uri)
+    if mlflow_enabled:
+        import mlflow
+        mlflow.set_tracking_uri(mlflow_uri)
+    model_names = [m.get("name", "") for m in cfg.get("models", [])]
+    steps_cfg = cfg.get("preprocess", {}).get("steps", [])
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # log and persist environment metadata for reproducibility
@@ -751,6 +759,30 @@ def run_multiple_eval(
                     figs = sub / "figures"
                     generate_report(metrics, figs, sub / "report.md")
                     outputs.append((metrics, figs))
+                    if mlflow_enabled:
+                        params = {
+                            "strategy": "kfold",
+                            "n_splits": int(k),
+                            "n_repeats": int(n_repeats),
+                            "models": ",".join(model_names),
+                            "preprocess_steps": ",".join(steps_cfg),
+                        }
+                        with mlflow.start_run(run_name=sub.name):
+                            mlflow.log_params(params)
+                            try:
+                                df = pd.read_json(metrics)
+                                if not df.empty:
+                                    mlflow.log_metrics(
+                                        {
+                                            k: float(v)
+                                            for k, v in df.iloc[0].items()
+                                            if isinstance(v, (int, float))
+                                        }
+                                    )
+                            except Exception:
+                                pass
+                            mlflow.log_artifact(metrics)
+                            mlflow.log_artifacts(figs, artifact_path="figures")
             elif stype == "loo":
                 if cv_method == "group":
                     raise ModelError(
@@ -763,6 +795,28 @@ def run_multiple_eval(
                 figs = sub / "figures"
                 generate_report(metrics, figs, sub / "report.md")
                 outputs.append((metrics, figs))
+                if mlflow_enabled:
+                    params = {
+                        "strategy": "loo",
+                        "models": ",".join(model_names),
+                        "preprocess_steps": ",".join(steps_cfg),
+                    }
+                    with mlflow.start_run(run_name=sub.name):
+                        mlflow.log_params(params)
+                        try:
+                            df = pd.read_json(metrics)
+                            if not df.empty:
+                                mlflow.log_metrics(
+                                    {
+                                        k: float(v)
+                                        for k, v in df.iloc[0].items()
+                                        if isinstance(v, (int, float))
+                                    }
+                                )
+                        except Exception:
+                            pass
+                        mlflow.log_artifact(metrics)
+                        mlflow.log_artifacts(figs, artifact_path="figures")
             elif stype == "holdout":
                 if cv_method == "group":
                     raise ModelError(
@@ -776,6 +830,29 @@ def run_multiple_eval(
                 figs = sub / "figures"
                 generate_report(metrics, figs, sub / "report.md")
                 outputs.append((metrics, figs))
+                if mlflow_enabled:
+                    params = {
+                        "strategy": "holdout",
+                        "test_size": float(test_size),
+                        "models": ",".join(model_names),
+                        "preprocess_steps": ",".join(steps_cfg),
+                    }
+                    with mlflow.start_run(run_name=sub.name):
+                        mlflow.log_params(params)
+                        try:
+                            df = pd.read_json(metrics)
+                            if not df.empty:
+                                mlflow.log_metrics(
+                                    {
+                                        k: float(v)
+                                        for k, v in df.iloc[0].items()
+                                        if isinstance(v, (int, float))
+                                    }
+                                )
+                        except Exception:
+                            pass
+                        mlflow.log_artifact(metrics)
+                        mlflow.log_artifacts(figs, artifact_path="figures")
             else:
                 raise ModelError(
                     f"Estratégia de validação desconhecida: {stype}. Use 'kfold', 'loo' ou 'holdout'."
@@ -790,128 +867,146 @@ def train_and_save(
     *,
     random_state: int = 42,
     interactive: bool = False,
+    mlflow_uri: Optional[str] = None,
 ) -> Tuple[Path, Path]:
     """Train final model and persist artefacts."""
 
-    with Progress() as progress:
-        load_task = progress.add_task("Carregando dados", total=None)
-        _validate_cfg(cfg, need_data=True, need_models=True)
-        ds = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))[0]
-        X, y = ds["X"], ds["Y"]
-        groups = ds.get("groups")
-        le = LabelEncoder().fit(y)
-        y_enc = le.transform(y)
-        # persist class labels for later use in predictions
-        out_dir.mkdir(parents=True, exist_ok=True)
-        with open(out_dir / "classes.json", "w") as f:
-            json.dump(le.classes_.tolist(), f)
-        progress.update(load_task, completed=1)
+    mlflow_cm = nullcontext()
+    if mlflow_uri:
+        import mlflow
+        mlflow.set_tracking_uri(mlflow_uri)
+        mlflow_cm = mlflow.start_run(run_name="train")
+    with mlflow_cm:
+        with Progress() as progress:
+            load_task = progress.add_task("Carregando dados", total=None)
+            _validate_cfg(cfg, need_data=True, need_models=True)
+            ds = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))[0]
+            X, y = ds["X"], ds["Y"]
+            groups = ds.get("groups")
+            le = LabelEncoder().fit(y)
+            y_enc = le.transform(y)
+            # persist class labels for later use in predictions
+            out_dir.mkdir(parents=True, exist_ok=True)
+            with open(out_dir / "classes.json", "w") as f:
+                json.dump(le.classes_.tolist(), f)
+            progress.update(load_task, completed=1)
 
-        # log and persist environment metadata
-        log_versions()
-        input_hashes = {}
-        if Path(ds["file"]).exists():
-            input_hashes[ds["file"]] = file_hash(ds["file"])
-        metadata = {
-            "sys_version": sys.version,
-            "versions": {
-                "numpy": np.__version__,
-                "pandas": pd.__version__,
-                "sklearn": sklearn.__version__,
-            },
-            "seed": random_state,
-            "input_hashes": input_hashes,
-        }
-        with open(out_dir / "metadata.json", "w") as f:
-            json.dump(metadata, f, indent=2)
+            # log and persist environment metadata
+            log_versions()
+            input_hashes = {}
+            if Path(ds["file"]).exists():
+                input_hashes[ds["file"]] = file_hash(ds["file"])
+            metadata = {
+                "sys_version": sys.version,
+                "versions": {
+                    "numpy": np.__version__,
+                    "pandas": pd.__version__,
+                    "sklearn": sklearn.__version__,
+                },
+                "seed": random_state,
+                "input_hashes": input_hashes,
+            }
+            with open(out_dir / "metadata.json", "w") as f:
+                json.dump(metadata, f, indent=2)
 
-        name, pipe, grid = build_pipeline_from_config(cfg)[0]
-        model_cfg = cfg.get("models", [])[0] if cfg.get("models") else {}
-        steps_cfg = cfg.get("preprocess", {}).get("steps", [])
-        logger.info("Running %s with steps: %s", name, steps_cfg)
-        cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
-        train_task = progress.add_task("Treinando", total=None)
-        fit_kwargs = {}
-        if cv_method == "spxy":
-            cv = spxy_split(X.values, y_enc, 5)
-        elif cv_method == "group":
-            if groups is None:
-                raise DataError("group_col deve ser informado para cv_method 'group'")
-            cv = GroupKFold(n_splits=5)
-            fit_kwargs["groups"] = groups
-        else:
-            cv = RepeatedStratifiedKFold(
-                n_splits=5, n_repeats=1, random_state=random_state
+            name, pipe, grid = build_pipeline_from_config(cfg)[0]
+            model_cfg = cfg.get("models", [])[0] if cfg.get("models") else {}
+            steps_cfg = cfg.get("preprocess", {}).get("steps", [])
+            logger.info("Running %s with steps: %s", name, steps_cfg)
+            cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
+            train_task = progress.add_task("Treinando", total=None)
+            fit_kwargs = {}
+            if cv_method == "spxy":
+                cv = spxy_split(X.values, y_enc, 5)
+            elif cv_method == "group":
+                if groups is None:
+                    raise DataError("group_col deve ser informado para cv_method 'group'")
+                cv = GroupKFold(n_splits=5)
+                fit_kwargs["groups"] = groups
+            else:
+                cv = RepeatedStratifiedKFold(
+                    n_splits=5, n_repeats=1, random_state=random_state
+                )
+            gs = GridSearchCV(
+                pipe,
+                grid,
+                scoring="f1_macro",
+                cv=cv,
+                n_jobs=-1,
             )
-        gs = GridSearchCV(
-            pipe,
-            grid,
-            scoring="f1_macro",
-            cv=cv,
-            n_jobs=-1,
-        )
-        gs.fit(X.values, y_enc, **fit_kwargs)
-        progress.update(train_task, completed=1)
+            gs.fit(X.values, y_enc, **fit_kwargs)
+            progress.update(train_task, completed=1)
 
-        best = gs.best_estimator_
-        calib_cfg = model_cfg.get("calibration") if model_cfg else None
-        if calib_cfg:
-            best = CalibratedClassifierCV(
-                estimator=best,
-                method=calib_cfg.get("method", "sigmoid"),
-                cv=calib_cfg.get("cv", 5),
-            )
-            best.fit(X.values, y_enc)
+            best = gs.best_estimator_
+            calib_cfg = model_cfg.get("calibration") if model_cfg else None
+            if calib_cfg:
+                best = CalibratedClassifierCV(
+                    estimator=best,
+                    method=calib_cfg.get("method", "sigmoid"),
+                    cv=calib_cfg.get("cv", 5),
+                )
+                best.fit(X.values, y_enc)
 
-        save_task = progress.add_task("Salvando", total=None)
-        dump(best, out_dir / "model.joblib")
-        export_xy_xlsx(out_dir / "prepared_XY.xlsx", X, y)
-        (out_dir / "model_card.md").write_text(
-            f"# Model Card\nBest model: {name}\nBest params: {gs.best_params_}\n",
-        )
+            save_task = progress.add_task("Salvando", total=None)
+            dump(best, out_dir / "model.joblib")
+            export_xy_xlsx(out_dir / "prepared_XY.xlsx", X, y)
+            (out_dir / "model_card.md").write_text(
+                f"# Model Card\nBest model: {name}\nBest params: {gs.best_params_}\n",
+            )
 
-        yhat = best.predict(X.values)
-        row = {
-            "file": ds["file"],
-            "target": ds["target"],
-            "model": name,
-            "calibrated": bool(calib_cfg),
-            "F1-macro_mean": float(f1_score(y_enc, yhat, average="macro")),
-            "BalancedAcc_mean": float(balanced_accuracy_score(y_enc, yhat)),
-            "Accuracy_mean": float(accuracy_score(y_enc, yhat)),
-        }
-        proba_fn = getattr(best, "predict_proba", None)
-        proba = None
-        if proba_fn is not None:
-            proba = proba_fn(X.values)
-            brier = np.mean(
-                [
-                    brier_score_loss((y_enc == k).astype(int), proba[:, k])
-                    for k in range(len(le.classes_))
-                ]
+            yhat = best.predict(X.values)
+            row = {
+                "file": ds["file"],
+                "target": ds["target"],
+                "model": name,
+                "calibrated": bool(calib_cfg),
+                "F1-macro_mean": float(f1_score(y_enc, yhat, average="macro")),
+                "BalancedAcc_mean": float(balanced_accuracy_score(y_enc, yhat)),
+                "Accuracy_mean": float(accuracy_score(y_enc, yhat)),
+            }
+            proba_fn = getattr(best, "predict_proba", None)
+            proba = None
+            if proba_fn is not None:
+                proba = proba_fn(X.values)
+                brier = np.mean(
+                    [
+                        brier_score_loss((y_enc == k).astype(int), proba[:, k])
+                        for k in range(len(le.classes_))
+                    ]
+                )
+                row["Brier_mean"] = float(brier)
+                row["ECE_mean"] = float(
+                    expected_calibration_error(y_enc, proba, n_bins=15)
+                )
+            _save_metrics([row], out_dir)
+            _save_plots(
+                ds["file"],
+                ds["target"],
+                name,
+                le.classes_,
+                out_dir,
+                y_enc,
+                yhat,
+                proba,
+                interactive=interactive,
             )
-            row["Brier_mean"] = float(brier)
-            row["ECE_mean"] = float(
-                expected_calibration_error(y_enc, proba, n_bins=15)
+            generate_report(
+                out_dir / "metrics.json",
+                out_dir / "figures",
+                out_dir / "report.md",
             )
-        _save_metrics([row], out_dir)
-        _save_plots(
-            ds["file"],
-            ds["target"],
-            name,
-            le.classes_,
-            out_dir,
-            y_enc,
-            yhat,
-            proba,
-            interactive=interactive,
-        )
-        generate_report(
-            out_dir / "metrics.json",
-            out_dir / "figures",
-            out_dir / "report.md",
-        )
-        progress.update(save_task, completed=1)
+            if mlflow_uri:
+                params = {
+                    "model": name,
+                    "preprocess_steps": ",".join(steps_cfg),
+                    "cv_method": cv_method,
+                }
+                mlflow.log_params(params)
+                mlflow.log_metrics(row)
+                mlflow.log_artifact(out_dir / "model.joblib")
+                mlflow.log_artifact(out_dir / "metrics.json")
+                mlflow.log_artifacts(out_dir / "figures", artifact_path="figures")
+            progress.update(save_task, completed=1)
     return out_dir / "metrics.json", out_dir / "figures"
 
 
