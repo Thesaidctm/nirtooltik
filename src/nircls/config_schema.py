@@ -111,7 +111,7 @@ class ModelConfig(BaseModel):
     params: Optional[Dict[str, Any]] = None
     grid: Optional[Dict[str, Any]] = None
     calibration: Optional[CalibConfig] = None
-    overfit_check: bool = False
+    overfit_check: bool = True
 
     class Config:
         extra = "forbid"

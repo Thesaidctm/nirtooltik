@@ -17,9 +17,11 @@ models:
       kernel_size: [3, 5]
       n_epochs: [20]
       lr: [0.001]
+    # overfit_check: false  # desativa Y-scrambling (ativo por padrão)
   - name: LSTM1D
     grid:
       hidden_dim: [64, 128]
       num_layers: [1, 2]
       n_epochs: [20]
       lr: [0.001]
+    # overfit_check: false  # desativa Y-scrambling (ativo por padrão)

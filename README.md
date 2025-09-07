@@ -373,25 +373,23 @@ avaliar overfitting e o desempenho em dados não vistos.
 
 ## Teste Y-scrambling
 
-Para verificar se um modelo está capturando apenas ruído, é possível executar o
-teste de *Y-scrambling*. Nesse procedimento os rótulos são embaralhados várias
-vezes, o modelo é re‑treinado e avaliado a cada permutação, produzindo uma
-distribuição de desempenhos ao acaso.
+O *Y-scrambling* agora é executado automaticamente para todos os modelos. Os
+rótulos são embaralhados diversas vezes e o modelo é re‑treinado em cada
+permuta, gerando uma distribuição de desempenhos ao acaso. As colunas
+`Yscramble_mean` e `Yscramble_p95` em `metrics_summary.xlsx` e `metrics.json`
+trazem respectivamente a média e o percentil 95% dessa distribuição.
 
-Habilite o teste em um modelo específico adicionando `overfit_check: true` à
-configuração:
+Se o desempenho obtido no conjunto original ficar próximo ou abaixo desses
+valores, é um forte indicativo de que o modelo está ajustando apenas ruído.
+
+Para desativar o teste em um modelo específico, defina `overfit_check: false`:
 
 ```yaml
 models:
   - name: PLSDA
     grid: {n_components: [2]}
-    overfit_check: true
+    overfit_check: false
 ```
-
-Os valores médio e percentil 95% dessa distribuição são registrados em
-`metrics_summary.xlsx` e `metrics.json` nas colunas `Yscramble_mean` e
-`Yscramble_p95`. Se o desempenho real do modelo não superar esses valores de
-forma consistente, há forte indício de overfitting.
 
 ## Pré-processadores e modelos suportados
 

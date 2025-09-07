@@ -13,3 +13,4 @@ preprocess:
 models:
   - name: PLSDA
     grid: {n_components: [5]}
+    # overfit_check: false  # desativa Y-scrambling (ativo por padrão)

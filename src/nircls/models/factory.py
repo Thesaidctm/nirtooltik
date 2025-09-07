@@ -264,6 +264,7 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
     builders = get_model_builders()
     out = []
     for m in models_cfg:
+        m.setdefault("overfit_check", True)
         name = m["name"]
         upper = name.upper()
 
