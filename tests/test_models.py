@@ -60,7 +60,7 @@ def test_mlp_accepts_hidden_layer_and_alpha():
     assert name == "MLP"
     assert "clf__hidden_layer_sizes" in grid
     assert "clf__alpha" in grid
-    gs = GridSearchCV(pipe, grid, cv=2)
+    gs = GridSearchCV(pipe, grid, cv=2, n_jobs=1)
     gs.fit(X, y)
     assert gs.best_params_["clf__hidden_layer_sizes"] in [(5,), (10,)]
     assert gs.best_params_["clf__alpha"] in [0.0001, 0.001]
@@ -81,7 +81,7 @@ def test_decision_tree_with_grid():
     assert name == "DT"
     assert "clf__max_depth" in grid
     assert "clf__min_samples_split" in grid
-    gs = GridSearchCV(pipe, grid, cv=2)
+    gs = GridSearchCV(pipe, grid, cv=2, n_jobs=1)
     gs.fit(X, y)
     assert gs.best_params_["clf__max_depth"] in [None, 3]
     assert gs.best_params_["clf__min_samples_split"] in [2, 4]
@@ -103,7 +103,7 @@ def test_extratrees_model_with_grid():
     assert "clf__n_estimators" in grid
     assert "clf__max_depth" in grid
     cv = StratifiedKFold(n_splits=2)
-    gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy")
+    gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy", n_jobs=1)
     gs.fit(X, y)
     assert gs.best_params_["clf__n_estimators"] in [10, 20]
     assert gs.best_params_["clf__max_depth"] in [None, 5]
@@ -119,7 +119,7 @@ def test_knn_model_with_grid():
     name, pipe, grid = build_pipeline_from_config(cfg)[0]
     assert "clf__n_neighbors" in grid
     cv = StratifiedKFold(n_splits=2)
-    gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy")
+    gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy", n_jobs=1)
     gs.fit(X, y)
 
 
@@ -140,7 +140,7 @@ def test_qda_accepts_params_and_grid():
     assert name == "QDA"
     assert pipe.named_steps["clf"].reg_param == 0.1
     assert "clf__reg_param" in grid
-    gs = GridSearchCV(pipe, grid, cv=2)
+    gs = GridSearchCV(pipe, grid, cv=2, n_jobs=1)
     gs.fit(X, y)
     assert gs.best_params_["clf__reg_param"] in [0.0, 0.1]
 
@@ -153,7 +153,7 @@ def test_gaussian_nb_model_with_default_grid():
     assert name == "NB"
     assert isinstance(pipe.named_steps["clf"], GaussianNB)
     assert "clf__var_smoothing" in grid
-    gs = GridSearchCV(pipe, grid, cv=2)
+    gs = GridSearchCV(pipe, grid, cv=2, n_jobs=1)
     gs.fit(X, y)
     assert gs.best_params_["clf__var_smoothing"] in [1e-09]
 
