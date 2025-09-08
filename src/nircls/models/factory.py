@@ -218,15 +218,35 @@ def _normalize_grid_values(grid: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
 
     for param, values in list(grid.items()):
         normalized: List[Any] = []
-        for val in values:
+        i = 0
+        while i < len(values):
+            val = values[i]
             if isinstance(val, list):
-                val = tuple(val)
-            elif isinstance(val, str) and val.startswith("(") and val.endswith(")"):
+                normalized.append(tuple(val))
+                i += 1
+                continue
+            if isinstance(val, str) and val.startswith("("):
+                # Handle tuple representations possibly split across multiple
+                # YAML tokens. Concatenate subsequent strings until a closing
+                # parenthesis is found before attempting to evaluate.
+                parts = [val]
+                if not val.endswith(")"):
+                    i += 1
+                    while i < len(values):
+                        part = values[i]
+                        parts.append(part)
+                        if isinstance(part, str) and part.endswith(")"):
+                            break
+                        i += 1
+                joined = " ".join(str(p) for p in parts)
                 try:
-                    val = ast.literal_eval(val)
+                    normalized.append(ast.literal_eval(joined))
                 except Exception:
-                    pass
+                    normalized.extend(parts)
+                i += 1
+                continue
             normalized.append(val)
+            i += 1
         grid[param] = normalized
     return grid
 
