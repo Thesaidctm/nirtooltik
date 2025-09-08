@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import numpy as np
 from typing import Optional
+
+import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 try:  # pragma: no cover - optional dependency
@@ -31,7 +32,9 @@ class _BaseTorchClassifier(BaseEstimator, ClassifierMixin):
         self.device = device
         self.patience = patience
 
-    def _build_model(self, n_features: int, n_classes: int) -> "nn.Module":  # pragma: no cover - abstract
+    def _build_model(
+        self, n_features: int, n_classes: int
+    ) -> "nn.Module":  # pragma: no cover - abstract
         raise NotImplementedError
 
     # scikit-learn API -------------------------------------------------
@@ -44,7 +47,8 @@ class _BaseTorchClassifier(BaseEstimator, ClassifierMixin):
     ):
         if torch is None:
             raise ImportError(
-                "torch is required for neural models. Install with `pip install torch`.")
+                "torch is required for neural models. Install with `pip install torch`."
+            )
         if self.random_state is not None:
             torch.manual_seed(self.random_state)
             np.random.seed(self.random_state)
@@ -104,7 +108,8 @@ class _BaseTorchClassifier(BaseEstimator, ClassifierMixin):
                 if val_loss < best_loss:
                     best_loss = val_loss
                     best_state = {
-                        k: v.detach().cpu().clone() for k, v in self.model_.state_dict().items()
+                        k: v.detach().cpu().clone()
+                        for k, v in self.model_.state_dict().items()
                     }
                     epochs_no_improve = 0
                 else:
@@ -121,7 +126,8 @@ class _BaseTorchClassifier(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         if torch is None:
             raise ImportError(
-                "torch is required for neural models. Install with `pip install torch`.")
+                "torch is required for neural models. Install with `pip install torch`."
+            )
         X = np.asarray(X, dtype=np.float32)
         self.model_.eval()
         with torch.no_grad():
@@ -147,9 +153,13 @@ class SpectralCNN(_BaseTorchClassifier):
         batch_size: int = 32,
         lr: float = 1e-3,
         random_state: Optional[int] = None,
-        device: str = "cpu",
+        device: Optional[str] = None,
         patience: int = 0,
     ) -> None:
+        if device is None:
+            device = (
+                "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
+            )
         super().__init__(
             n_epochs=n_epochs,
             batch_size=batch_size,
@@ -189,9 +199,13 @@ class SpectralLSTM(_BaseTorchClassifier):
         batch_size: int = 32,
         lr: float = 1e-3,
         random_state: Optional[int] = None,
-        device: str = "cpu",
+        device: Optional[str] = None,
         patience: int = 0,
     ) -> None:
+        if device is None:
+            device = (
+                "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
+            )
         super().__init__(
             n_epochs=n_epochs,
             batch_size=batch_size,
@@ -208,7 +222,9 @@ class SpectralLSTM(_BaseTorchClassifier):
             raise ImportError
 
         class Net(nn.Module):
-            def __init__(self, n_features: int, n_classes: int, hidden_dim: int, num_layers: int):
+            def __init__(
+                self, n_features: int, n_classes: int, hidden_dim: int, num_layers: int
+            ):
                 super().__init__()
                 self.lstm = nn.LSTM(
                     input_size=1,
