@@ -122,6 +122,7 @@ models:
   - name: PLSDA
     grid:
       n_components: [2, 4, 6]
+      method: [logreg, lda]
 
 # Para evitar sobreajuste, mantenha `n_components` bem abaixo de
 # `min(n_amostras - 1, n_variáveis)`; valores acima de 80% desse limite
@@ -427,7 +428,9 @@ Modelos implementados (modelos que dependem de pacotes extras são ignorados se 
 * `PLSDA` – usa regressão de mínimos quadrados parciais para discriminação,
   adequada a dados de alta dimensionalidade com colinearidade. Valores de
   `n_components` acima de 80% de `min(n_amostras - 1, n_variáveis)` podem
-  levar a sobreajuste e geram um aviso.
+  levar a sobreajuste e geram um aviso. O parâmetro `method` escolhe o
+  classificador final (`"logreg"` ou `"lda"`) e pode ser avaliado via grade,
+  por exemplo: `grid: {n_components: [2], method: [logreg, lda]}`.
 * `SVM_RBF` e `SVM_LINEAR` – máquinas de vetores de suporte; kernel RBF modela
   fronteiras não lineares enquanto o kernel linear serve para separações simples
 * `RF` (Random Forest) – conjunto de árvores de decisão construídas por bootstrap
