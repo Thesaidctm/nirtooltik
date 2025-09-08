@@ -18,6 +18,8 @@ models:
         - [10]
       alpha: [0.0001]
       max_iter: [50]
+      early_stopping: [True]
+      validation_fraction: [0.2]
 """
     cfg = yaml.safe_load(yaml_cfg)
     X = np.random.RandomState(0).randn(20, 10)
@@ -42,6 +44,8 @@ models:
         - )
       alpha: [0.0001]
       max_iter: [50]
+      early_stopping: [True]
+      validation_fraction: [0.2]
 """
     cfg = yaml.safe_load(yaml_cfg)
     X = np.random.RandomState(0).randn(20, 10)

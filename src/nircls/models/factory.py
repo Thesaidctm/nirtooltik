@@ -134,6 +134,7 @@ DEFAULT_GRIDS = {
         "n_neighbors": [5],
     },
     "LOGREG": {"C": [1.0]},
+    "MLP": {"max_iter": [500, 1000], "early_stopping": [True]},
     "ADABOOST": {"n_estimators": [50], "learning_rate": [1.0]},
     "XGBOOST": {"n_estimators": [100], "max_depth": [3], "learning_rate": [0.1]},
     "LGBM": {"n_estimators": [100], "num_leaves": [31], "learning_rate": [0.1]},
