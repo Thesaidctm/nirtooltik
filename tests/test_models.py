@@ -3,12 +3,12 @@ import pathlib
 import sys
 
 import numpy as np
-from sklearn.model_selection import StratifiedKFold, GridSearchCV
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.naive_bayes import GaussianNB
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
-from nircls.pipeline import build_pipeline_from_config
-from nircls.models.plsda import PLSDA
+from nircls.models.plsda import PLSDA  # noqa: E402
+from nircls.pipeline import build_pipeline_from_config  # noqa: E402
 
 
 def test_logreg_default_grid_contains_C_and_balanced_class_weight():
@@ -203,3 +203,30 @@ def test_plsda_warns_when_components_high(caplog):
     with caplog.at_level(logging.WARNING):
         model.fit(X, y)
     assert any("overfit" in r.message.lower() for r in caplog.records)
+
+
+def test_plsda_default_grid_exposes_classifier_params():
+    cfg = {"models": [{"name": "PLSDA"}]}
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "PLSDA"
+    assert "clf__C" in grid
+    assert "clf__reg_param" in grid
+    assert "clf__n_neighbors" in grid
+
+
+def test_plsda_qda_predict_proba_and_grid():
+    rng = np.random.RandomState(0)
+    X = rng.rand(20, 5)
+    y = (np.arange(20) % 2).astype(int)
+    model = PLSDA(method="qda", reg_param=0.1, n_components=2)
+    model.fit(X, y)
+    proba = model.predict_proba(X)
+    assert proba.shape == (20, 2)
+    gs = GridSearchCV(
+        PLSDA(method="qda"),
+        {"n_components": [2], "reg_param": [0.0, 0.1]},
+        cv=2,
+        n_jobs=1,
+    )
+    gs.fit(X, y)
+    assert gs.best_params_["reg_param"] in [0.0, 0.1]

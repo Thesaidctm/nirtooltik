@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from importlib.metadata import entry_points
@@ -14,7 +13,7 @@ from sklearn.tree import DecisionTreeClassifier
 from .base import BaseModelBuilder
 
 # Helpers for model construction with optional class weighting
-from .builders import _build_svm, _build_rf, _build_etc, _build_logreg
+from .builders import _build_etc, _build_logreg, _build_rf, _build_svm
 from .plsda import PLSDA
 
 # Optional third-party estimators
@@ -126,6 +125,13 @@ MODEL_BUILDERS = {
 
 
 DEFAULT_GRIDS = {
+    "PLSDA": {
+        "n_components": [10],
+        "method": ["logreg"],
+        "C": [1.0],
+        "reg_param": [0.0],
+        "n_neighbors": [5],
+    },
     "LOGREG": {"C": [1.0]},
     "ADABOOST": {"n_estimators": [50], "learning_rate": [1.0]},
     "XGBOOST": {"n_estimators": [100], "max_depth": [3], "learning_rate": [0.1]},
@@ -198,6 +204,7 @@ def get_model_descriptions() -> Dict[str, str]:
 
     _load_entry_point_builders()
     return MODEL_DESCRIPTIONS
+
 
 def make_models_from_config(models_cfg: List[Dict[str, Any]]):
     builders = get_model_builders()
