@@ -28,7 +28,8 @@ cv:
 models:
   - name: PLSDA
     grid: {n_components: [5,10], method: [logreg], C: [0.5,1.0,2.0]}
-    # overfit_check: false  # desativa Y-scrambling (ativo por padrão)
+    # y_scramble_n_iter: 5  # reduz iterações de Y-scrambling (0 desativa)
+    # overfit_check: false  # desativa Y-scrambling por completo
 
   - name: SVM_RBF
     grid: {C: [0.5,1.0,2.0], gamma: [scale, auto]}

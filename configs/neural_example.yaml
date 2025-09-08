@@ -17,11 +17,13 @@ models:
       kernel_size: [3, 5]
       n_epochs: [20]
       lr: [0.001]
-    # overfit_check: false  # desativa Y-scrambling (ativo por padrão)
+    # y_scramble_n_iter: 5  # reduz iterações de Y-scrambling (0 desativa)
+    # overfit_check: false  # desativa Y-scrambling por completo
   - name: LSTM1D
     grid:
       hidden_dim: [64, 128]
       num_layers: [1, 2]
       n_epochs: [20]
       lr: [0.001]
-    # overfit_check: false  # desativa Y-scrambling (ativo por padrão)
+    # y_scramble_n_iter: 5  # reduz iterações de Y-scrambling (0 desativa)
+    # overfit_check: false  # desativa Y-scrambling por completo

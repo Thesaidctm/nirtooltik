@@ -453,6 +453,7 @@ def _run_cv(
             progress.update(model_task, description=f"Model: {name}")
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
+            yscramble_iter = int(m_cfg.get("y_scramble_n_iter", 20))
             scores_val: Dict[str, List[float]] = {
                 "F1-macro": [],
                 "BalancedAcc": [],
@@ -593,7 +594,7 @@ def _run_cv(
                 row.setdefault(f"{m}_std", None)
                 row.setdefault(f"train_{m}_mean", None)
                 row.setdefault(f"train_{m}_std", None)
-            if m_cfg.get("overfit_check"):
+            if m_cfg.get("overfit_check") and yscramble_iter > 0:
                 cv_scramble = outer
                 if cv_method == "spxy":
                     cv_scramble = StratifiedKFold(
@@ -609,7 +610,7 @@ def _run_cv(
                     y_enc,
                     cv=cv_scramble,
                     scoring="balanced_accuracy",
-                    n_iter=20,
+                    n_iter=yscramble_iter,
                     random_state=random_state,
                     groups=groups.values if groups is not None else None,
                 )
@@ -704,6 +705,7 @@ def _run_holdout(
             )
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
+            yscramble_iter = int(m_cfg.get("y_scramble_n_iter", 20))
             if cv_method == "spxy":
                 inner = spxy_split(Xtr, ytr, inner_folds)
             else:
@@ -712,9 +714,7 @@ def _run_holdout(
                     shuffle=True,
                     random_state=random_state,
                 )
-            gs = GridSearchCV(
-                pipe, grid, scoring="f1_macro", cv=inner, n_jobs=n_jobs
-            )
+            gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=n_jobs)
             gs.fit(Xtr, ytr)
             n_comp = _get_n_components(gs.best_params_)
             best = gs.best_estimator_
@@ -771,7 +771,7 @@ def _run_holdout(
             for m in ["Brier", "ECE"]:
                 row.setdefault(f"{m}_mean", None)
                 row.setdefault(f"train_{m}_mean", None)
-            if m_cfg.get("overfit_check"):
+            if m_cfg.get("overfit_check") and yscramble_iter > 0:
                 cv_scramble = StratifiedKFold(
                     n_splits=inner_folds,
                     shuffle=True,
@@ -783,7 +783,7 @@ def _run_holdout(
                     y_enc,
                     cv=cv_scramble,
                     scoring="balanced_accuracy",
-                    n_iter=20,
+                    n_iter=yscramble_iter,
                     random_state=random_state,
                 )
                 if scramble_scores.size:

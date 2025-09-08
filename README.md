@@ -412,13 +412,17 @@ trazem respectivamente a média e o percentil 95% dessa distribuição.
 Se o desempenho obtido no conjunto original ficar próximo ou abaixo desses
 valores, é um forte indicativo de que o modelo está ajustando apenas ruído.
 
-Para desativar o teste em um modelo específico, defina `overfit_check: false`:
+Por padrão são executadas 20 permutações. Para reduzir o tempo de execução,
+ajuste o número de iterações com `y_scramble_n_iter` (por exemplo, 5 para um
+teste mais rápido). Defina `y_scramble_n_iter: 0` ou `overfit_check: false`
+para desativar totalmente o Y‑scrambling:
 
 ```yaml
 models:
   - name: PLSDA
     grid: {n_components: [2]}
-    overfit_check: false
+    y_scramble_n_iter: 5  # menos iterações (0 desativa)
+    # overfit_check: false
 ```
 
 ## Pré-processadores e modelos suportados
