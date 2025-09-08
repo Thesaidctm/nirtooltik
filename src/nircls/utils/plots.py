@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from sklearn.metrics import roc_curve
 from sklearn.preprocessing import label_binarize
+
+logger = logging.getLogger(__name__)
 
 
 def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
@@ -27,17 +30,25 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
 
     out_base.parent.mkdir(parents=True, exist_ok=True)
     out = out_base.with_suffix(".png")
+    logger.debug("Exporting %s", out)
     try:
         fig.write_image(out)
+        logger.debug("Exported %s", out)
     except Exception:
+        logger.exception("Export failed for %s", out)
         out.touch()
     if interactive:
+        html_out = out_base.with_suffix(".html")
+        json_out = out_base.with_suffix(".json")
         try:
-            fig.write_html(out_base.with_suffix(".html"), include_plotlyjs="cdn")
-            out_base.with_suffix(".json").write_text(fig.to_json())
+            fig.write_html(html_out, include_plotlyjs="cdn")
+            json_out.write_text(fig.to_json())
+            logger.debug("Exported %s", html_out)
+            logger.debug("Exported %s", json_out)
         except Exception:
-            out_base.with_suffix(".html").write_text("")
-            out_base.with_suffix(".json").write_text("")
+            logger.exception("Export failed for %s", html_out)
+            html_out.write_text("")
+            json_out.write_text("")
 
 
 def plot_confusion(
