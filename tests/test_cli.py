@@ -96,6 +96,8 @@ def test_summary_cli_aggregates_results(tmp_path: pathlib.Path) -> None:
             sys.executable,
             "-m",
             "nircls.cli",
+            "--log-level",
+            "WARNING",
             "summary",
             "--results",
             str(tmp_path),
