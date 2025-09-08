@@ -22,7 +22,11 @@ from nircls.pipeline import (  # noqa: E402
 from nircls.utils.errors import DataError, ModelError  # noqa: E402
 
 
-def test_pipeline_fit_predict_with_cv_and_windows():
+METHODS = ["logreg", "lda"]
+
+
+@pytest.mark.parametrize("method", METHODS)
+def test_pipeline_fit_predict_with_cv_and_windows(method):
     X = np.random.RandomState(0).randn(30, 60)
     y = (np.arange(30) % 2).astype(int)
     cfg = {
@@ -31,7 +35,11 @@ def test_pipeline_fit_predict_with_cv_and_windows():
             "sg": {"window": [5, 7], "polyorder": 2, "deriv": 1},
         },
         "models": [
-            {"name": "PLSDA", "grid": {"n_components": [2]}, "overfit_check": True}
+            {
+                "name": "PLSDA",
+                "grid": {"n_components": [2], "method": [method]},
+                "overfit_check": True,
+            }
         ],
     }
     name, pipe, grid = build_pipeline_from_config(cfg)[0]
@@ -41,7 +49,8 @@ def test_pipeline_fit_predict_with_cv_and_windows():
     gs.fit(X, y)
 
 
-def test_end_to_end_cv_and_export(tmp_path):
+@pytest.mark.parametrize("method", METHODS)
+def test_end_to_end_cv_and_export(tmp_path, method):
     rng = np.random.RandomState(1)
     X = rng.rand(20, 6)
     y = np.array(["A"] * 10 + ["B"] * 10)
@@ -54,7 +63,11 @@ def test_end_to_end_cv_and_export(tmp_path):
         "data": {"input_path": str(data_file), "target_cols": ["target"]},
         "preprocess": {"steps": ["SNV"]},
         "models": [
-            {"name": "PLSDA", "grid": {"n_components": [2]}, "overfit_check": True}
+            {
+                "name": "PLSDA",
+                "grid": {"n_components": [2], "method": [method]},
+                "overfit_check": True,
+            }
         ],
         "cv": {
             "random_state": 0,
@@ -93,7 +106,8 @@ def test_end_to_end_cv_and_export(tmp_path):
     assert (train_dir / "astm_classification.json").exists()
 
 
-def test_pipeline_runs_with_spxy_cv_method(tmp_path):
+@pytest.mark.parametrize("method", METHODS)
+def test_pipeline_runs_with_spxy_cv_method(tmp_path, method):
     rng = np.random.RandomState(0)
     X = rng.rand(12, 4)
     y = np.array(["A"] * 6 + ["B"] * 6)
@@ -104,7 +118,9 @@ def test_pipeline_runs_with_spxy_cv_method(tmp_path):
 
     cfg = {
         "data": {"input_path": str(data_file), "target_cols": ["target"]},
-        "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
+        "models": [
+            {"name": "PLSDA", "grid": {"n_components": [2], "method": [method]}}
+        ],
         "cv": {
             "cv_method": "spxy",
             "random_state": 0,
@@ -117,7 +133,8 @@ def test_pipeline_runs_with_spxy_cv_method(tmp_path):
     assert (out_dir / "kfold_2" / "metrics_summary.xlsx").exists()
 
 
-def test_pipeline_runs_with_group_cv_method(tmp_path):
+@pytest.mark.parametrize("method", METHODS)
+def test_pipeline_runs_with_group_cv_method(tmp_path, method):
     rng = np.random.RandomState(0)
     X = rng.rand(12, 4)
     y = np.array(["A"] * 6 + ["B"] * 6)
@@ -134,7 +151,9 @@ def test_pipeline_runs_with_group_cv_method(tmp_path):
             "target_cols": ["target"],
             "group_col": "group",
         },
-        "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
+        "models": [
+            {"name": "PLSDA", "grid": {"n_components": [2], "method": [method]}}
+        ],
         "cv": {
             "cv_method": "group",
             "random_state": 0,
@@ -209,7 +228,8 @@ def test_summarize_dataset_columns(tmp_path):
     }
 
 
-def test_nested_crossval_report(tmp_path):
+@pytest.mark.parametrize("method", METHODS)
+def test_nested_crossval_report(tmp_path, method):
     rng = np.random.RandomState(2)
     X = rng.rand(20, 4)
     y = np.array(["A"] * 10 + ["B"] * 10)
@@ -220,7 +240,9 @@ def test_nested_crossval_report(tmp_path):
 
     cfg = {
         "data": {"input_path": str(data_file), "target_col": "target"},
-        "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
+        "models": [
+            {"name": "PLSDA", "grid": {"n_components": [2], "method": [method]}}
+        ],
         "cv": {
             "inner_folds": 2,
             "random_state": 0,
@@ -284,19 +306,23 @@ def test_predict_with_model_includes_y_true_when_available(tmp_path):
     assert len(preds) == len(X)
 
 
-def test_run_multiple_eval_requires_cv(tmp_path):
+@pytest.mark.parametrize("method", METHODS)
+def test_run_multiple_eval_requires_cv(tmp_path, method):
     cfg = {
         "data": {"input_path": str(tmp_path / "data.csv"), "target_cols": ["t"]},
-        "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
+        "models": [
+            {"name": "PLSDA", "grid": {"n_components": [2], "method": [method]}}
+        ],
     }
     with pytest.raises(ModelError):
         run_multiple_eval(cfg, tmp_path, n_jobs=1)
 
 
-def test_run_multiple_eval_file_not_found(tmp_path):
+@pytest.mark.parametrize("method", METHODS)
+def test_run_multiple_eval_file_not_found(tmp_path, method):
     cfg = {
         "data": {"input_path": str(tmp_path / "missing.csv"), "target_cols": ["t"]},
-        "models": [{"name": "PLSDA"}],
+        "models": [{"name": "PLSDA", "grid": {"method": [method]}}],
         "cv": {"strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}]},
     }
     with pytest.raises(DataError, match="Arquivo de dados não encontrado"):
@@ -314,15 +340,16 @@ def test_compute_vip_identifies_relevant_feature():
     assert np.all(vip > 0)
 
 
-def _dummy_cfg():
+def _dummy_cfg(method):
     return {
         "data": {"input_path": "dummy", "target_cols": ["t"]},
-        "models": [{"name": "PLSDA"}],
+        "models": [{"name": "PLSDA", "grid": {"method": [method]}}],
     }
 
 
-def test_train_and_save_file_not_found(monkeypatch, tmp_path):
-    cfg = _dummy_cfg()
+@pytest.mark.parametrize("method", METHODS)
+def test_train_and_save_file_not_found(monkeypatch, tmp_path, method):
+    cfg = _dummy_cfg(method)
 
     def raise_data_error(_, **kwargs):
         raise DataError("Arquivo de dados não encontrado")
@@ -332,8 +359,9 @@ def test_train_and_save_file_not_found(monkeypatch, tmp_path):
         train_and_save(cfg, tmp_path, n_jobs=1)
 
 
-def test_train_and_save_missing_data_error(monkeypatch, tmp_path):
-    cfg = _dummy_cfg()
+@pytest.mark.parametrize("method", METHODS)
+def test_train_and_save_missing_data_error(monkeypatch, tmp_path, method):
+    cfg = _dummy_cfg(method)
 
     def raise_data_error(_, **kwargs):
         raise DataError("dados inexistentes na planilha")
@@ -343,8 +371,9 @@ def test_train_and_save_missing_data_error(monkeypatch, tmp_path):
         train_and_save(cfg, tmp_path, n_jobs=1)
 
 
-def test_train_and_save_model_incompatible(monkeypatch, tmp_path):
-    cfg = _dummy_cfg()
+@pytest.mark.parametrize("method", METHODS)
+def test_train_and_save_model_incompatible(monkeypatch, tmp_path, method):
+    cfg = _dummy_cfg(method)
 
     def dummy_prepare(_, **kwargs):
         return [
