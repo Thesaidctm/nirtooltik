@@ -28,3 +28,27 @@ models:
     gs = GridSearchCV(pipe, grid, cv=2, n_jobs=1)
     gs.fit(X, y)
     assert gs.best_params_["clf__hidden_layer_sizes"] in [(5,), (10,)]
+
+
+def test_yaml_grid_parsing_reconstructs_split_tuple_strings():
+    yaml_cfg = """
+models:
+  - name: MLP
+    grid:
+      hidden_layer_sizes:
+        - (100,
+        - )
+        - (200,
+        - )
+      alpha: [0.0001]
+      max_iter: [50]
+"""
+    cfg = yaml.safe_load(yaml_cfg)
+    X = np.random.RandomState(0).randn(20, 10)
+    y = (np.arange(20) % 2).astype(int)
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "MLP"
+    assert grid["clf__hidden_layer_sizes"] == [(100,), (200,)]
+    gs = GridSearchCV(pipe, grid, cv=2, n_jobs=1)
+    gs.fit(X, y)
+    assert gs.best_params_["clf__hidden_layer_sizes"] in [(100,), (200,)]
