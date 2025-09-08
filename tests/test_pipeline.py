@@ -21,7 +21,6 @@ from nircls.pipeline import (  # noqa: E402
 )
 from nircls.utils.errors import DataError, ModelError  # noqa: E402
 
-
 METHODS = ["logreg", "lda"]
 
 
@@ -61,7 +60,10 @@ def test_end_to_end_cv_and_export(tmp_path, method):
 
     cfg = {
         "data": {"input_path": str(data_file), "target_cols": ["target"]},
-        "preprocess": {"steps": ["SNV"]},
+        "preprocess": {
+            "steps": ["SNV", "SG"],
+            "sg": {"window": 5, "polyorder": 2, "deriv": 1},
+        },
         "models": [
             {
                 "name": "PLSDA",
@@ -94,7 +96,10 @@ def test_end_to_end_cv_and_export(tmp_path, method):
     with open(strat_dir / "metrics.json") as f:
         metrics_json = json.load(f)
     assert "Yscramble_mean" in metrics_json[0]
-    assert metrics_json[0]["preprocess_steps"] == ["SNV"]
+    assert metrics_json[0]["preprocess_steps"] == [
+        "SNV()",
+        "SavitzkyGolayTransformer(window_length=5)",
+    ]
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
