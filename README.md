@@ -426,11 +426,29 @@ Pré-processadores disponíveis:
 Modelos implementados (modelos que dependem de pacotes extras são ignorados se as bibliotecas não estiverem instaladas):
 
 * `PLSDA` – usa regressão de mínimos quadrados parciais para discriminação,
+  adequada a dados de alta dimensionalidade com colinearidade. Após a redução
+  dimensional, pode empregar diferentes classificadores (`logreg`, `lda`,
+  `qda`, `svm`, `knn`). Hiperparâmetros desses métodos podem ser ajustados via
+  `grid`. Valores de `n_components` acima de 80% de
+  `min(n_amostras - 1, n_variáveis)` podem levar a sobreajuste e geram um
+  aviso. Exemplos de configuração:
+
+  ```yaml
+  models:
+    - name: PLSDA
+      params: {method: qda}
+      grid: {n_components: [2, 4], reg_param: [0.0, 0.1]}
+    - name: PLSDA
+      params: {method: knn}
+      grid: {n_neighbors: [3, 5], n_components: [2]}
+  ```
+
   adequada a dados de alta dimensionalidade com colinearidade. Valores de
   `n_components` acima de 80% de `min(n_amostras - 1, n_variáveis)` podem
   levar a sobreajuste e geram um aviso. O parâmetro `method` escolhe o
   classificador final (`"logreg"` ou `"lda"`) e pode ser avaliado via grade,
   por exemplo: `grid: {n_components: [2], method: [logreg, lda]}`.
+
 * `SVM_RBF` e `SVM_LINEAR` – máquinas de vetores de suporte; kernel RBF modela
   fronteiras não lineares enquanto o kernel linear serve para separações simples
 * `RF` (Random Forest) – conjunto de árvores de decisão construídas por bootstrap
