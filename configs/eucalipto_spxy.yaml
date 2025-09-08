@@ -28,7 +28,7 @@ cv:
 models:
   - name: PLSDA
     # Mantenha `n_components` abaixo de 80% de min(n_amostras - 1, n_variáveis)
-    grid: {n_components: [5,10,15], method: [logreg], C: [0.5,1.0,2.0]}
+    grid: {n_components: [5,10,15], method: [logreg, lda], C: [0.5,1.0,2.0]}
     # overfit_check: false  # desativa Y-scrambling (ativo por padrão)
   - name: SVM_RBF
     grid: {C: [0.5,1.0,2.0], gamma: [scale, auto]}

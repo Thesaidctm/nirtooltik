@@ -5,6 +5,7 @@ import sys
 import numpy as np
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.naive_bayes import GaussianNB
+import pytest
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from nircls.models.plsda import PLSDA  # noqa: E402
@@ -195,11 +196,12 @@ def test_estimator_without_proba_is_calibrated(monkeypatch):
     assert "clf__estimator__constant" in grid
 
 
-def test_plsda_warns_when_components_high(caplog):
+@pytest.mark.parametrize("method", ["logreg", "lda"])
+def test_plsda_warns_when_components_high(caplog, method):
     rng = np.random.RandomState(0)
     X = rng.rand(10, 20)
     y = (np.arange(10) % 2).astype(int)
-    model = PLSDA(n_components=8)
+    model = PLSDA(n_components=8, method=method)
     with caplog.at_level(logging.WARNING):
         model.fit(X, y)
     assert any("overfit" in r.message.lower() for r in caplog.records)
