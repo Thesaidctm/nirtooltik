@@ -216,9 +216,10 @@ def _normalize_grid_values(grid: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
     """Coerce YAML-loaded grid values to proper Python types.
 
     Nested lists representing tuples (e.g. ``[100]``) are converted to
-    :class:`tuple` and any string values that look like tuples are
-    ``ast.literal_eval``-ed. The grid is modified in-place and returned for
-    convenience.
+    :class:`tuple`. String values are interpreted where possible using
+    :func:`ast.literal_eval` so that numeric parameters provided as quoted
+    values (e.g. ``"1e-09"``) are coerced to proper Python types. The grid is
+    modified in-place and returned for convenience.
     """
 
     for param, values in list(grid.items()):
@@ -230,24 +231,33 @@ def _normalize_grid_values(grid: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
                 normalized.append(tuple(val))
                 i += 1
                 continue
-            if isinstance(val, str) and val.startswith("("):
-                # Handle tuple representations possibly split across multiple
-                # YAML tokens. Concatenate subsequent strings until a closing
-                # parenthesis is found before attempting to evaluate.
-                parts = [val]
-                if not val.endswith(")"):
-                    i += 1
-                    while i < len(values):
-                        part = values[i]
-                        parts.append(part)
-                        if isinstance(part, str) and part.endswith(")"):
-                            break
+            if isinstance(val, str):
+                if val.startswith("("):
+                    # Handle tuple representations possibly split across
+                    # multiple YAML tokens. Concatenate subsequent strings
+                    # until a closing parenthesis is found before attempting
+                    # to evaluate.
+                    parts = [val]
+                    if not val.endswith(")"):
                         i += 1
-                joined = " ".join(str(p) for p in parts)
+                        while i < len(values):
+                            part = values[i]
+                            parts.append(part)
+                            if isinstance(part, str) and part.endswith(")"):
+                                break
+                            i += 1
+                    joined = " ".join(str(p) for p in parts)
+                    try:
+                        normalized.append(ast.literal_eval(joined))
+                    except Exception:
+                        normalized.extend(parts)
+                    i += 1
+                    continue
+                # Attempt to parse numeric strings (e.g. "1e-09")
                 try:
-                    normalized.append(ast.literal_eval(joined))
+                    normalized.append(ast.literal_eval(val))
                 except Exception:
-                    normalized.extend(parts)
+                    normalized.append(val)
                 i += 1
                 continue
             normalized.append(val)
@@ -277,6 +287,13 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
 
         params = m.get("params", {})
         if params:
+            # Coerce any quoted numeric values to their Python equivalents
+            for k, v in list(params.items()):
+                if isinstance(v, str):
+                    try:
+                        params[k] = ast.literal_eval(v)
+                    except Exception:
+                        pass
             est.set_params(**params)
 
         out.append({"name": name, "estimator": est, "grid": grid})
