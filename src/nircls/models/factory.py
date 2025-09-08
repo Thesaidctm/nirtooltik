@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from importlib.metadata import entry_points
 from typing import Any, Dict, List
+import ast
 
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
@@ -206,6 +207,30 @@ def get_model_descriptions() -> Dict[str, str]:
     return MODEL_DESCRIPTIONS
 
 
+def _normalize_grid_values(grid: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
+    """Coerce YAML-loaded grid values to proper Python types.
+
+    Nested lists representing tuples (e.g. ``[100]``) are converted to
+    :class:`tuple` and any string values that look like tuples are
+    ``ast.literal_eval``-ed. The grid is modified in-place and returned for
+    convenience.
+    """
+
+    for param, values in list(grid.items()):
+        normalized: List[Any] = []
+        for val in values:
+            if isinstance(val, list):
+                val = tuple(val)
+            elif isinstance(val, str) and val.startswith("(") and val.endswith(")"):
+                try:
+                    val = ast.literal_eval(val)
+                except Exception:
+                    pass
+            normalized.append(val)
+        grid[param] = normalized
+    return grid
+
+
 def make_models_from_config(models_cfg: List[Dict[str, Any]]):
     builders = get_model_builders()
     out = []
@@ -218,7 +243,7 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
         if builder is None:
             raise ValueError(f"Modelo não suportado: {name}")
 
-        grid = m.get("grid", {}) or {}
+        grid = _normalize_grid_values(m.get("grid", {}) or {})
         defaults = DEFAULT_GRIDS.get(upper, {})
         for k, v in defaults.items():
             grid.setdefault(k, v)
