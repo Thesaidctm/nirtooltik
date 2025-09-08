@@ -2,11 +2,14 @@ from __future__ import annotations
 
 """Utility functions for Y-scrambling overfit assessment."""
 
+from time import perf_counter
 from typing import Iterable, Optional, Sequence
 
 import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import cross_val_score
+
+from .logging import logger
 
 
 def y_scramble_scores(
@@ -24,7 +27,8 @@ def y_scramble_scores(
 
     The labels ``y`` are shuffled ``n_iter`` times and the estimator is
     evaluated via cross-validation for each permutation. The mean score of each
-    permutation is returned.
+    permutation is returned. Progress information is logged at the INFO level
+    after each permutation, including the iteration count and elapsed time.
 
     Parameters
     ----------
@@ -53,7 +57,8 @@ def y_scramble_scores(
 
     rng = np.random.default_rng(random_state)
     scores = []
-    for _ in range(n_iter):
+    start = perf_counter()
+    for i in range(n_iter):
         y_perm = rng.permutation(y)
         try:
             cv_scores = cross_val_score(
@@ -67,4 +72,11 @@ def y_scramble_scores(
             scores.append(cv_scores.mean())
         except Exception:  # pragma: no cover - best effort
             continue
+        elapsed = perf_counter() - start
+        logger.info(
+            "Y-scramble iteration %d/%d completed in %.2fs",
+            i + 1,
+            n_iter,
+            elapsed,
+        )
     return np.asarray(scores, dtype=float)
