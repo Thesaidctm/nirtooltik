@@ -147,7 +147,10 @@ data:
 
 * `preprocess.steps` lista os transformadores aplicados antes do classificador.
   Alguns pré-processos como `SG` aceitam parâmetros (janela, ordem do polinômio,
-  derivada) que podem ser fixos ou listas para busca em grade.
+  derivada) que podem ser fixos ou listas para busca em grade. Nos arquivos de
+  métricas, a coluna `preprocess_steps` registra apenas as etapas realmente
+  empregadas pelo melhor modelo, incluindo os valores finais de seus
+  hiperparâmetros.
 * `models` define um ou mais estimadores; cada um pode receber um dicionário de
   hiperparâmetros (`grid`).
 * `cv.strategies` especifica a estratégia de avaliação: `kfold`, `loo` ou
