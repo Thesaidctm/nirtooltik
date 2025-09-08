@@ -3,9 +3,9 @@ import pathlib
 import sys
 
 import numpy as np
+import pytest
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.naive_bayes import GaussianNB
-import pytest
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from nircls.models.plsda import PLSDA  # noqa: E402
@@ -141,6 +141,19 @@ def test_qda_accepts_params_and_grid():
     assert name == "QDA"
     assert pipe.named_steps["clf"].reg_param == 0.1
     assert "clf__reg_param" in grid
+    gs = GridSearchCV(pipe, grid, cv=2, n_jobs=1)
+    gs.fit(X, y)
+    assert gs.best_params_["clf__reg_param"] in [0.0, 0.1]
+
+
+def test_qda_model_with_default_grid_includes_regularization():
+    X = np.random.RandomState(0).randn(20, 5)
+    y = (np.arange(20) % 2).astype(int)
+    cfg = {"preprocess": {"steps": []}, "models": [{"name": "QDA"}]}
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "QDA"
+    assert "clf__reg_param" in grid
+    assert grid["clf__reg_param"] == [0.0, 0.1]
     gs = GridSearchCV(pipe, grid, cv=2, n_jobs=1)
     gs.fit(X, y)
     assert gs.best_params_["clf__reg_param"] in [0.0, 0.1]

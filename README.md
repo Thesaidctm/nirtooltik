@@ -478,7 +478,9 @@ Modelos implementados (modelos que dependem de pacotes extras são ignorados se 
 * `AdaBoost`, `XGBoost` (`xgboost`), `LightGBM` (`lightgbm`), `CatBoost` (`catboost`) – métodos de boosting robusto que capturam
   relações complexas e lidam bem com grandes conjuntos de dados
 * `QDA` (Quadratic Discriminant Analysis) – adequado quando cada classe tem matrizes de
-  covariância distintas
+  covariância distintas. Utilize o parâmetro de regularização `reg_param` (>0) para
+  atenuar problemas de posto da matriz de covariância em dados de alta
+  dimensionalidade.
 * `Naive Bayes` – assume independência condicional entre atributos, servindo como baseline
   rápido em alta dimensionalidade
 * `CNN 1D` e `LSTM 1D` – redes neurais para séries 1D; convoluções extraem padrões locais
