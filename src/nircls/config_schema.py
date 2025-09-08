@@ -112,6 +112,7 @@ class ModelConfig(BaseModel):
     grid: Optional[Dict[str, Any]] = None
     calibration: Optional[CalibConfig] = None
     overfit_check: bool = True
+    y_scramble_n_iter: int = 20
 
     class Config:
         extra = "forbid"
