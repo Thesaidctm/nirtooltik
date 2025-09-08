@@ -288,6 +288,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=-1,
         help="Number of parallel jobs",
     )
+    parser.add_argument(
+        "--cv-verbose",
+        type=int,
+        default=0,
+        help="GridSearchCV verbosity",
+    )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
     p_prep.add_argument("--config", required=True)
@@ -358,7 +364,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(log_path.parent)
         setup_logging(level=log_level, log_file=log_path)
         return log_path
-    n_jobs = args.n_jobs  # stored for later use  # noqa: F841
+
+    n_jobs = args.n_jobs
+    cv_verbose = args.cv_verbose
     mlflow_uri = args.mlflow
     if mlflow_uri:
         try:
@@ -437,6 +445,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 interactive=args.interactive,
                 random_state=args.seed,
                 mlflow_uri=mlflow_uri,
+                n_jobs=n_jobs,
+                gs_verbose=cv_verbose,
             )
         except DataError as e:
             print(t("invalid_data", err=e), file=sys.stderr)
@@ -551,6 +561,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 train_dir,
                 random_state=args.seed,
                 mlflow_uri=mlflow_uri,
+                n_jobs=n_jobs,
+                gs_verbose=cv_verbose,
             )
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)
@@ -620,7 +632,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(train_dir)
         try:
             metrics_path, figs_dir = train_and_save(
-                cfg.dict(), train_dir, random_state=args.seed, mlflow_uri=mlflow_uri
+                cfg.dict(),
+                train_dir,
+                random_state=args.seed,
+                mlflow_uri=mlflow_uri,
+                n_jobs=n_jobs,
+                gs_verbose=cv_verbose,
             )
             if metrics_path:
                 _print_metrics_table(metrics_path)
@@ -726,6 +743,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     train_dir,
                     random_state=args.seed,
                     mlflow_uri=mlflow_uri,
+                    n_jobs=n_jobs,
+                    gs_verbose=cv_verbose,
                 )
                 if metrics_path:
                     _print_metrics_table(metrics_path)

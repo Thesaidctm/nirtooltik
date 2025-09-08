@@ -5,6 +5,7 @@ import subprocess
 import sys
 import warnings
 from contextlib import nullcontext
+from datetime import datetime
 from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -28,6 +29,7 @@ from sklearn.model_selection import (
     GridSearchCV,
     GroupKFold,
     LeaveOneOut,
+    ParameterGrid,
     RepeatedStratifiedKFold,
     StratifiedKFold,
     train_test_split,
@@ -64,6 +66,18 @@ warnings.filterwarnings(
     message="This Pipeline instance is not fitted yet",
     category=FutureWarning,
 )
+
+
+class LoggingGridSearchCV(GridSearchCV):
+    """GridSearchCV with optional debug logging for progress."""
+
+    def _run_search(self, evaluate_candidates):  # type: ignore[override]
+        grid = list(ParameterGrid(self.param_grid))
+        total = len(grid)
+        for i, params in enumerate(grid, 1):
+            if self.verbose < 1:
+                logger.debug("Grid search progress: %d/%d parameters", i, total)
+            evaluate_candidates([params])
 
 
 def _validate_cfg(
@@ -1012,6 +1026,8 @@ def train_and_save(
     random_state: int = 42,
     interactive: bool = False,
     mlflow_uri: Optional[str] = None,
+    n_jobs: int = -1,
+    gs_verbose: int = 0,
 ) -> Tuple[Path, Path]:
     """Train final model and persist artefacts."""
 
@@ -1081,14 +1097,18 @@ def train_and_save(
                 cv = RepeatedStratifiedKFold(
                     n_splits=5, n_repeats=1, random_state=random_state
                 )
-            gs = GridSearchCV(
+            gs = LoggingGridSearchCV(
                 pipe,
                 grid,
                 scoring="f1_macro",
                 cv=cv,
-                n_jobs=-1,
+                n_jobs=n_jobs,
+                verbose=gs_verbose,
             )
+            start_ts = datetime.now().isoformat()
+            logger.info("Grid search start: %s", start_ts)
             gs.fit(X.values, y_enc, **fit_kwargs)
+            logger.info("Grid search end: %s", datetime.now().isoformat())
             progress.update(train_task, completed=1)
 
             n_comp = _get_n_components(gs.best_params_)
