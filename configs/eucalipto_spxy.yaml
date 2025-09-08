@@ -52,7 +52,11 @@ models:
     grid: {reg_param: [0.0,0.1]}
 
   - name: MLP
-    grid: {hidden_layer_sizes: [(100,), (200,)], alpha: [0.0001]}
+    grid:
+      hidden_layer_sizes:
+        - [100]
+        - [200]
+      alpha: [0.0001]
 
   - name: DT
     grid: {max_depth: [null,20], min_samples_split: [2,5]}
