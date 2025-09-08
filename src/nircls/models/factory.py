@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import ast
 from importlib.metadata import entry_points
 from typing import Any, Dict, List
-import ast
 
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
@@ -152,7 +152,11 @@ DEFAULT_GRIDS = {
         "patience": [0],
         "device": ["cpu"],
     },
-    "QDA": {"reg_param": [0.0]},
+    # Include a positive regularization parameter to handle rank-deficient
+    # covariance matrices that frequently arise in high dimensional settings.
+    # A value of 0.1 provides mild shrinkage while preserving the ability to
+    # search for an unregularized solution (0.0).
+    "QDA": {"reg_param": [0.0, 0.1]},
     "GAUSSIANNB": {"var_smoothing": [1e-09]},
     "NB": {"var_smoothing": [1e-09]},
     "MULTINB": {"alpha": [1.0]},
