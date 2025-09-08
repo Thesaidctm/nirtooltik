@@ -405,6 +405,7 @@ def _run_cv(
     *,
     random_state: int,
     interactive: bool = False,
+    n_jobs: int = -1,
 ) -> None:
     """Run cross-validation for configured datasets and models.
 
@@ -420,6 +421,8 @@ def _run_cv(
         Progress bar instance for user feedback.
     random_state:
         Seed applied to inner cross-validation splits.
+    n_jobs:
+        Number of parallel jobs for ``GridSearchCV``.
     """
 
     logger.info("Starting cross-validation")
@@ -495,7 +498,9 @@ def _run_cv(
                         shuffle=True,
                         random_state=random_state,
                     )
-                gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
+                gs = GridSearchCV(
+                    pipe, grid, scoring="f1_macro", cv=inner, n_jobs=n_jobs
+                )
                 gs.fit(Xtr, ytr, **fit_kwargs)
 
                 n_comp = _get_n_components(gs.best_params_)
@@ -650,6 +655,7 @@ def _run_holdout(
     random_state: int,
     *,
     interactive: bool = False,
+    n_jobs: int = -1,
 ) -> None:
     """Evaluate models using a single train/test split.
 
@@ -665,6 +671,8 @@ def _run_holdout(
         Seed applied to the train/test split and inner cross-validation.
     interactive:
         If ``True``, also generate interactive Plotly HTML figures.
+    n_jobs:
+        Number of parallel jobs for ``GridSearchCV``.
     """
 
     try:
@@ -704,7 +712,9 @@ def _run_holdout(
                     shuffle=True,
                     random_state=random_state,
                 )
-            gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=-1)
+            gs = GridSearchCV(
+                pipe, grid, scoring="f1_macro", cv=inner, n_jobs=n_jobs
+            )
             gs.fit(Xtr, ytr)
             n_comp = _get_n_components(gs.best_params_)
             best = gs.best_estimator_
@@ -807,6 +817,7 @@ def run_multiple_eval(
     *,
     random_state: int = 42,
     interactive: bool = False,
+    n_jobs: int = -1,
     mlflow_uri: Optional[str] = None,
 ) -> List[Tuple[Path, Path]]:
     """Run evaluation for multiple cross-validation strategies.
@@ -819,6 +830,8 @@ def run_multiple_eval(
         Directory that receives a subfolder for each strategy.
     interactive:
         If ``True``, also generate interactive Plotly HTML figures.
+    n_jobs:
+        Number of parallel jobs for ``GridSearchCV``.
     Returns
     -------
     list of tuple(Path, Path)
@@ -905,6 +918,7 @@ def run_multiple_eval(
                             progress,
                             random_state=random_state,
                             interactive=interactive,
+                            n_jobs=n_jobs,
                         )
                         metrics = sub / "metrics.json"
                         figs = sub / "figures"
@@ -948,6 +962,7 @@ def run_multiple_eval(
                         progress,
                         random_state=random_state,
                         interactive=interactive,
+                        n_jobs=n_jobs,
                     )
                     metrics = sub / "metrics.json"
                     figs = sub / "figures"
@@ -982,7 +997,12 @@ def run_multiple_eval(
                     sub.mkdir(parents=True, exist_ok=True)
                     test_size = float(strat.get("test_size", 0.3))
                     _run_holdout(
-                        cfg, sub, test_size, random_state, interactive=interactive
+                        cfg,
+                        sub,
+                        test_size,
+                        random_state,
+                        interactive=interactive,
+                        n_jobs=n_jobs,
                     )
                     metrics = sub / "metrics.json"
                     figs = sub / "figures"
@@ -1025,6 +1045,7 @@ def train_and_save(
     *,
     random_state: int = 42,
     interactive: bool = False,
+    n_jobs: int = -1,
     mlflow_uri: Optional[str] = None,
     n_jobs: int = -1,
     gs_verbose: int = 0,
@@ -1208,6 +1229,7 @@ def run_experiment(
     *,
     interactive: bool = False,
     random_state: int = 42,
+    n_jobs: int = -1,
 ) -> Tuple[Tuple[Path, Path], List[Tuple[Path, Path]]]:
     """Execute um experimento completo usando a API de alto nível.
 
@@ -1224,6 +1246,8 @@ def run_experiment(
         Se ``True``, gera também gráficos interativos.
     random_state:
         Semente aleatória utilizada nas rotinas de treino e validação.
+    n_jobs:
+        Número de trabalhos paralelos para ``GridSearchCV``.
 
     Returns
     -------
@@ -1237,12 +1261,20 @@ def run_experiment(
 
     train_dir = out_dir / "train"
     train_outputs = train_and_save(
-        cfg, train_dir, random_state=random_state, interactive=interactive
+        cfg,
+        train_dir,
+        random_state=random_state,
+        interactive=interactive,
+        n_jobs=n_jobs,
     )
 
     cv_dir = out_dir / "cv"
     cv_outputs = run_multiple_eval(
-        cfg, cv_dir, random_state=random_state, interactive=interactive
+        cfg,
+        cv_dir,
+        random_state=random_state,
+        interactive=interactive,
+        n_jobs=n_jobs,
     )
 
     return train_outputs, cv_outputs

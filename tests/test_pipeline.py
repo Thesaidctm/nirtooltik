@@ -37,7 +37,7 @@ def test_pipeline_fit_predict_with_cv_and_windows():
     name, pipe, grid = build_pipeline_from_config(cfg)[0]
     assert "sg__window_length" in grid
     cv = StratifiedKFold(n_splits=3)
-    gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy")
+    gs = GridSearchCV(pipe, grid, cv=cv, scoring="accuracy", n_jobs=1)
     gs.fit(X, y)
 
 
@@ -64,7 +64,7 @@ def test_end_to_end_cv_and_export(tmp_path):
     }
 
     out_dir = tmp_path / "cv_run"
-    run_multiple_eval(cfg, out_dir)
+    run_multiple_eval(cfg, out_dir, n_jobs=1)
     strat_dir = out_dir / "kfold_2"
     metrics_path = strat_dir / "metrics_summary.xlsx"
     assert metrics_path.exists()
@@ -85,7 +85,7 @@ def test_end_to_end_cv_and_export(tmp_path):
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
-    train_and_save(cfg, train_dir)
+    train_and_save(cfg, train_dir, n_jobs=1)
     assert (train_dir / "model.joblib").exists()
     assert (train_dir / "prepared_XY.xlsx").exists()
     assert (train_dir / "model_card.md").exists()
@@ -113,7 +113,7 @@ def test_pipeline_runs_with_spxy_cv_method(tmp_path):
     }
 
     out_dir = tmp_path / "cv_spxy"
-    run_multiple_eval(cfg, out_dir)
+    run_multiple_eval(cfg, out_dir, n_jobs=1)
     assert (out_dir / "kfold_2" / "metrics_summary.xlsx").exists()
 
 
@@ -143,7 +143,7 @@ def test_pipeline_runs_with_group_cv_method(tmp_path):
     }
 
     out_dir = tmp_path / "cv_group"
-    run_multiple_eval(cfg, out_dir)
+    run_multiple_eval(cfg, out_dir, n_jobs=1)
     assert (out_dir / "kfold_2" / "metrics_summary.xlsx").exists()
 
 
@@ -229,7 +229,7 @@ def test_nested_crossval_report(tmp_path):
     }
 
     out_dir = tmp_path / "nested"
-    run_multiple_eval(cfg, out_dir)
+    run_multiple_eval(cfg, out_dir, n_jobs=1)
     strat_dir = out_dir / "kfold_2"
     metrics_path = strat_dir / "metrics_summary.xlsx"
     assert metrics_path.exists()
@@ -290,7 +290,7 @@ def test_run_multiple_eval_requires_cv(tmp_path):
         "models": [{"name": "PLSDA", "grid": {"n_components": [2]}}],
     }
     with pytest.raises(ModelError):
-        run_multiple_eval(cfg, tmp_path)
+        run_multiple_eval(cfg, tmp_path, n_jobs=1)
 
 
 def test_run_multiple_eval_file_not_found(tmp_path):
@@ -300,7 +300,7 @@ def test_run_multiple_eval_file_not_found(tmp_path):
         "cv": {"strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}]},
     }
     with pytest.raises(DataError, match="Arquivo de dados não encontrado"):
-        run_multiple_eval(cfg, tmp_path)
+        run_multiple_eval(cfg, tmp_path, n_jobs=1)
 
 
 def test_compute_vip_identifies_relevant_feature():
@@ -329,7 +329,7 @@ def test_train_and_save_file_not_found(monkeypatch, tmp_path):
 
     monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_data_error)
     with pytest.raises(DataError, match="Arquivo de dados não encontrado"):
-        train_and_save(cfg, tmp_path)
+        train_and_save(cfg, tmp_path, n_jobs=1)
 
 
 def test_train_and_save_missing_data_error(monkeypatch, tmp_path):
@@ -340,7 +340,7 @@ def test_train_and_save_missing_data_error(monkeypatch, tmp_path):
 
     monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_data_error)
     with pytest.raises(DataError, match="dados inexistentes"):
-        train_and_save(cfg, tmp_path)
+        train_and_save(cfg, tmp_path, n_jobs=1)
 
 
 def test_train_and_save_model_incompatible(monkeypatch, tmp_path):
@@ -357,4 +357,4 @@ def test_train_and_save_model_incompatible(monkeypatch, tmp_path):
     monkeypatch.setattr("nircls.pipeline.prepare_inputs", dummy_prepare)
     monkeypatch.setattr("nircls.pipeline.build_pipeline_from_config", raise_model_error)
     with pytest.raises(ModelError, match="modelo incompatível"):
-        train_and_save(cfg, tmp_path)
+        train_and_save(cfg, tmp_path, n_jobs=1)
