@@ -258,26 +258,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--lang", choices=["pt", "en"], default=LANG, help=t("lang_help")
     )
     parser.add_argument(
-        "--run",
-        choices=["one", "all"],
-        default="all",
-        help=t("run_help"),
+        "--run", choices=["one", "all"], default="all", help=t("run_help")
     )
     parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help=t("seed_help"),
+        "--seed", type=int, default=42, help=t("seed_help")
     )
     parser.add_argument(
-        "--mlflow",
-        help=t("mlflow_help"),
+        "--mlflow", help=t("mlflow_help")
     )
     parser.add_argument(
-        "--n-jobs",
-        type=int,
-        default=-1,
-        help=t("n_jobs_help"),
+        "--n-jobs", type=int, default=-1, help=t("n_jobs_help")
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
@@ -289,17 +281,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to log file (overrides default)",
     )
     parser.add_argument(
-        "--n-jobs",
-        type=int,
-        default=-1,
-        help="Number of parallel jobs",
-    )
-    parser.add_argument(
         "--cv-verbose",
         type=int,
         default=0,
         help="GridSearchCV verbosity",
-
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable progress bars",
     )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
@@ -451,10 +441,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 out_dir,
                 interactive=args.interactive,
                 random_state=args.seed,
-                n_jobs=args.n_jobs,
-                mlflow_uri=mlflow_uri,
                 n_jobs=n_jobs,
+                mlflow_uri=mlflow_uri,
                 gs_verbose=cv_verbose,
+                show_progress=not args.no_progress,
             )
         except DataError as e:
             print(t("invalid_data", err=e), file=sys.stderr)
@@ -569,10 +559,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 default_cfg,
                 train_dir,
                 random_state=args.seed,
-                n_jobs=args.n_jobs,
-                mlflow_uri=mlflow_uri,
                 n_jobs=n_jobs,
+                mlflow_uri=mlflow_uri,
                 gs_verbose=cv_verbose,
+                show_progress=not args.no_progress,
             )
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)
@@ -646,14 +636,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cfg.dict(),
                 train_dir,
                 random_state=args.seed,
-
-                n_jobs=args.n_jobs,
-                mlflow_uri=mlflow_uri,
-
-                mlflow_uri=mlflow_uri,
                 n_jobs=n_jobs,
+                mlflow_uri=mlflow_uri,
                 gs_verbose=cv_verbose,
-
+                show_progress=not args.no_progress,
             )
             if metrics_path:
                 _print_metrics_table(metrics_path)
@@ -762,10 +748,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     cfg_obj.dict(),
                     train_dir,
                     random_state=args.seed,
-                    n_jobs=args.n_jobs,
-                    mlflow_uri=mlflow_uri,
                     n_jobs=n_jobs,
+                    mlflow_uri=mlflow_uri,
                     gs_verbose=cv_verbose,
+                    show_progress=not args.no_progress,
                 )
                 if metrics_path:
                     _print_metrics_table(metrics_path)
