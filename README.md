@@ -468,7 +468,9 @@ Modelos implementados (modelos que dependem de pacotes extras são ignorados se 
 * `LOGREG` (Regressão Logística) – modelo linear probabilístico para
   classificação binária ou multiclasse
 * `MLP` (rede neural Multi‑Layer Perceptron) – camadas densas capazes de
-  aprender relações não lineares
+  aprender relações não lineares. A grade padrão avalia `max_iter` em
+  `[500, 1000]` e ativa `early_stopping` para mitigar avisos de não
+  convergência sem aumentar excessivamente o tempo de treinamento.
 * `DT` (Árvore de decisão) – estrutura hierárquica que particiona os dados por
   atributos, fácil de interpretar mas sensível a ruído
 * `KNN` – atribui o rótulo mais comum entre os vizinhos mais próximos,

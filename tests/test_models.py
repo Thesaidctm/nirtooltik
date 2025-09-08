@@ -53,6 +53,8 @@ def test_mlp_accepts_hidden_layer_and_alpha():
                     "hidden_layer_sizes": [(5,), (10,)],
                     "alpha": [0.0001, 0.001],
                     "max_iter": [50],
+                    "early_stopping": [True],
+                    "validation_fraction": [0.2],
                 },
             }
         ]
@@ -61,6 +63,8 @@ def test_mlp_accepts_hidden_layer_and_alpha():
     assert name == "MLP"
     assert "clf__hidden_layer_sizes" in grid
     assert "clf__alpha" in grid
+    assert grid["clf__early_stopping"] == [True]
+    assert grid["clf__validation_fraction"] == [0.2]
     gs = GridSearchCV(pipe, grid, cv=2, n_jobs=1)
     gs.fit(X, y)
     assert gs.best_params_["clf__hidden_layer_sizes"] in [(5,), (10,)]
