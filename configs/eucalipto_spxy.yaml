@@ -25,11 +25,37 @@ cv:
     - type: holdout
       test_size: 0.3
 
+
+data:
+  input_path: data/raw/*.xlsx
+  x_sheet: X
+  y_sheet: Y
+  target_cols: all   # ou uma lista explícita de colunas
+  spectral_range: null
+  drop_nans: true
+  out_dir: results
+
+preprocess:
+  steps: [SNV,MSC, SG, EPO, SCALE]
+  sg:
+    window: [3,7,11,15,21,25]
+    polyorder: 2
+    deriv: [1,2]
+
+cv:
+  random_state: 42
+  strategies:
+    - type: kfold
+      n_splits: [5,10]
+      n_repeats: 2
+    - type: loo
+    - type: holdout
+      test_size: 0.3
+
 models:
   - name: PLSDA
     grid: {n_components: [5,10], method: [logreg], C: [0.5,1.0,2.0]}
-    # y_scramble_n_iter: 5  # reduz iterações de Y-scrambling (0 desativa)
-    # overfit_check: false  # desativa Y-scrambling por completo
+    # overfit_check: false  # desativa Y-scrambling (ativo por padrão)
 
   - name: SVM_RBF
     grid: {C: [0.5,1.0,2.0], gamma: [scale, auto]}
@@ -66,16 +92,4 @@ models:
     grid: {n_neighbors: [3,5,7]}
 
   - name: CNN1D
-    grid: {n_filters: [32], kernel_size: [3], n_epochs: [10], patience: [0], device: [cpu]}
-
-  - name: LSTM1D
-    grid: {hidden_dim: [64], num_layers: [1], n_epochs: [10], patience: [0], device: [cpu]}
-
-  - name: GAUSSIANNB
-    grid: {var_smoothing: [1e-09]}
-
-  - name: MULTINB
-    grid: {alpha: [1.0]}
-
-  - name: BERNOULLINB
-    grid: {alpha: [1.0]}
+    grid: {n_filters: [32], kernel_size: [3], n_epochs: [10], patience: [0], device: [cuda]}
