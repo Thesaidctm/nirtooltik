@@ -11,8 +11,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from sklearn.metrics import roc_curve
 from sklearn.preprocessing import label_binarize
-
 logger = logging.getLogger(__name__)
+from .logging import logger
 
 
 def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
@@ -32,6 +32,7 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
     out = out_base.with_suffix(".png")
     logger.debug("Exporting %s", out)
     try:
+        logger.debug("Exporting figure to %s", out)
         fig.write_image(out)
         logger.debug("Exported %s", out)
     except Exception:
@@ -49,6 +50,14 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
             logger.exception("Export failed for %s", html_out)
             html_out.write_text("")
             json_out.write_text("")
+            html_path = out_base.with_suffix(".html")
+            json_path = out_base.with_suffix(".json")
+            logger.debug("Exporting interactive figure to %s", html_path)
+            fig.write_html(html_path, include_plotlyjs="cdn")
+            json_path.write_text(fig.to_json())
+        except Exception:
+            html_path.write_text("")
+            json_path.write_text("")
 
 
 def plot_confusion(

@@ -55,6 +55,7 @@ STRINGS = {
         "run_help": "Run only one or all analyses",
         "seed_help": "Seed for reproducibility",
         "mlflow_help": "MLflow server URI for tracking",
+        "n_jobs_help": "Number of parallel jobs",
         "interactive_help": "Generate HTML files with interactive Plotly graphs",
         "astm_help": "Check ASTM classification criteria",
         "run_all_help": "Process raw data and run training + evaluation with defaults",
@@ -104,6 +105,7 @@ STRINGS = {
         "run_help": "Rodar somente uma ou todas as análises",
         "seed_help": "Semente para reprodutibilidade",
         "mlflow_help": "URI do servidor MLflow para rastreamento",
+        "n_jobs_help": "Número de jobs paralelos",
         "interactive_help": "Gerar arquivos HTML com gráficos Plotly interativos",
         "astm_help": "Verificar critérios ASTM para classificação",
         "run_all_help": "Processa dados brutos e executa treino+avaliação com padrões",
@@ -272,6 +274,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         help=t("mlflow_help"),
     )
     parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=-1,
+        help=t("n_jobs_help"),
         "--log-level",
         default="INFO",
         choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
@@ -293,6 +299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=int,
         default=0,
         help="GridSearchCV verbosity",
+
     )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
@@ -444,6 +451,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 out_dir,
                 interactive=args.interactive,
                 random_state=args.seed,
+                n_jobs=args.n_jobs,
                 mlflow_uri=mlflow_uri,
                 n_jobs=n_jobs,
                 gs_verbose=cv_verbose,
@@ -489,6 +497,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 out_dir,
                 interactive=args.interactive,
                 random_state=args.seed,
+                n_jobs=args.n_jobs,
                 mlflow_uri=mlflow_uri,
             )
         except DataError as e:
@@ -560,6 +569,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 default_cfg,
                 train_dir,
                 random_state=args.seed,
+                n_jobs=args.n_jobs,
                 mlflow_uri=mlflow_uri,
                 n_jobs=n_jobs,
                 gs_verbose=cv_verbose,
@@ -574,6 +584,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 default_cfg,
                 cv_dir,
                 random_state=args.seed,
+                n_jobs=args.n_jobs,
                 mlflow_uri=mlflow_uri,
             )
         except (DataError, ModelError) as e:
@@ -635,9 +646,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cfg.dict(),
                 train_dir,
                 random_state=args.seed,
+
+                n_jobs=args.n_jobs,
+                mlflow_uri=mlflow_uri,
+
                 mlflow_uri=mlflow_uri,
                 n_jobs=n_jobs,
                 gs_verbose=cv_verbose,
+
             )
             if metrics_path:
                 _print_metrics_table(metrics_path)
@@ -652,7 +668,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(cv_dir)
         try:
             outputs = run_multiple_eval(
-                cfg.dict(), cv_dir, random_state=args.seed, mlflow_uri=mlflow_uri
+                cfg.dict(),
+                cv_dir,
+                random_state=args.seed,
+                n_jobs=args.n_jobs,
+                mlflow_uri=mlflow_uri,
             )
             for metrics_path, figs_dir in outputs:
                 _print_metrics_table(metrics_path)
@@ -742,6 +762,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     cfg_obj.dict(),
                     train_dir,
                     random_state=args.seed,
+                    n_jobs=args.n_jobs,
                     mlflow_uri=mlflow_uri,
                     n_jobs=n_jobs,
                     gs_verbose=cv_verbose,
@@ -757,6 +778,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     cfg_obj.dict(),
                     cv_dir,
                     random_state=args.seed,
+                    n_jobs=args.n_jobs,
                     mlflow_uri=mlflow_uri,
                 )
                 for metrics_path, figs_dir in outputs:
