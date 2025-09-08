@@ -11,6 +11,8 @@ import plotly.graph_objects as go
 from sklearn.metrics import roc_curve
 from sklearn.preprocessing import label_binarize
 
+from .logging import logger
+
 
 def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
     """Save a Plotly figure to multiple static formats and optional HTML.
@@ -28,16 +30,20 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
     out_base.parent.mkdir(parents=True, exist_ok=True)
     out = out_base.with_suffix(".png")
     try:
+        logger.debug("Exporting figure to %s", out)
         fig.write_image(out)
     except Exception:
         out.touch()
     if interactive:
         try:
-            fig.write_html(out_base.with_suffix(".html"), include_plotlyjs="cdn")
-            out_base.with_suffix(".json").write_text(fig.to_json())
+            html_path = out_base.with_suffix(".html")
+            json_path = out_base.with_suffix(".json")
+            logger.debug("Exporting interactive figure to %s", html_path)
+            fig.write_html(html_path, include_plotlyjs="cdn")
+            json_path.write_text(fig.to_json())
         except Exception:
-            out_base.with_suffix(".html").write_text("")
-            out_base.with_suffix(".json").write_text("")
+            html_path.write_text("")
+            json_path.write_text("")
 
 
 def plot_confusion(
