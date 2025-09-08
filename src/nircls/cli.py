@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any, Dict, Sequence, cast
@@ -277,6 +278,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=int,
         default=-1,
         help=t("n_jobs_help"),
+        "--log-level",
+        default="INFO",
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+        help="Logging level",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        help="Path to log file (overrides default)",
+    )
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=-1,
+        help="Number of parallel jobs",
+    )
+    parser.add_argument(
+        "--cv-verbose",
+        type=int,
+        default=0,
+        help="GridSearchCV verbosity",
+
     )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
@@ -337,8 +360,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_sum.add_argument("--results", required=True, help=t("dashboard_results_help"))
     args = parser.parse_args(argv)
     set_seed(args.seed)
-    setup_logging()
+    log_level = getattr(logging, args.log_level.upper(), logging.INFO)
+    if args.log_file:
+        ensure_dirs(args.log_file.parent)
+    setup_logging(level=log_level, log_file=args.log_file)
     log_versions()
+
+    def _setup_run_logging(run_id: str) -> Path:
+        log_path = args.log_file or RESULTS_DIR / run_id / "nircls.log"
+        ensure_dirs(log_path.parent)
+        setup_logging(level=log_level, log_file=log_path)
+        return log_path
+
+    n_jobs = args.n_jobs
+    cv_verbose = args.cv_verbose
     mlflow_uri = args.mlflow
     if mlflow_uri:
         try:
@@ -371,6 +406,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(t("config_invalid_data_section"), file=sys.stderr)
             return 1
         run_id = make_run_id("prepare")
+        _setup_run_logging(run_id)
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
         try:
@@ -398,6 +434,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         cfg.astm = args.astm
         run_id = make_run_id("train")
+        _setup_run_logging(run_id)
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
         try:
@@ -416,6 +453,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 random_state=args.seed,
                 n_jobs=args.n_jobs,
                 mlflow_uri=mlflow_uri,
+                n_jobs=n_jobs,
+                gs_verbose=cv_verbose,
             )
         except DataError as e:
             print(t("invalid_data", err=e), file=sys.stderr)
@@ -448,6 +487,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.run == "one" and ds_list:
             cfg.data.target_cols = ds_list[0]["target"]
         run_id = make_run_id("cv")
+        _setup_run_logging(run_id)
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
         cfg.astm = args.astm
@@ -504,6 +544,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 models_cfg.append({"name": name})
             default_cfg["models"] = models_cfg
         run_id = now_ts()
+        _setup_run_logging(run_id)
         data_cfg = cast(Dict[str, Any], default_cfg["data"])
         base_dir = Path(data_cfg.get("out_dir", RESULTS_DIR)) / run_id
         ensure_dirs(base_dir)
@@ -530,6 +571,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 random_state=args.seed,
                 n_jobs=args.n_jobs,
                 mlflow_uri=mlflow_uri,
+                n_jobs=n_jobs,
+                gs_verbose=cv_verbose,
             )
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)
@@ -577,6 +620,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(t("demo_config_invalid", err=e), file=sys.stderr)
             return 1
         run_id = make_run_id("demo")
+        _setup_run_logging(run_id)
         base_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(base_dir)
         ds_list = []
@@ -602,8 +646,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cfg.dict(),
                 train_dir,
                 random_state=args.seed,
+
                 n_jobs=args.n_jobs,
                 mlflow_uri=mlflow_uri,
+
+                mlflow_uri=mlflow_uri,
+                n_jobs=n_jobs,
+                gs_verbose=cv_verbose,
+
             )
             if metrics_path:
                 _print_metrics_table(metrics_path)
@@ -702,6 +752,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if run_now:
             cfg_obj = ConfigModel(**cfg_dict)
             run_id = make_run_id("wizard")
+            _setup_run_logging(run_id)
             base_dir = Path(cfg_obj.data.out_dir or RESULTS_DIR) / run_id
             ensure_dirs(base_dir)
             train_dir = base_dir / "train"
@@ -713,6 +764,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     random_state=args.seed,
                     n_jobs=args.n_jobs,
                     mlflow_uri=mlflow_uri,
+                    n_jobs=n_jobs,
+                    gs_verbose=cv_verbose,
                 )
                 if metrics_path:
                     _print_metrics_table(metrics_path)

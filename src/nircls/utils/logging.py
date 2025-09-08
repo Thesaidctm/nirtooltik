@@ -1,17 +1,33 @@
-
 import logging
+from pathlib import Path
+
+from rich.console import Console
+from rich.logging import RichHandler
 
 logger = logging.getLogger("nircls")
 
 
-def setup_logging(level: int = logging.INFO) -> None:
-    """Configure basic logging for the project.
+def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> None:
+    """Configure logging with separate console and file handlers."""
 
-    Args:
-        level: Logging level used by the root logger.
-    """
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+    console = Console(stderr=True)
+    handlers: list[logging.Handler] = [
+        RichHandler(console=console, show_path=False, markup=True)
+    ]
+    if log_file:
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        handlers.append(file_handler)
 
-    logging.basicConfig(level=level, format="%(asctime)s | %(levelname)s | %(message)s")
+    logging.basicConfig(
+        level=level,
+        handlers=handlers,
+        format="%(message)s",
+        force=True,
+    )
+    logging.getLogger("kaleido").setLevel(logging.WARNING)
+    logging.getLogger("choreography").setLevel(logging.WARNING)
 
 
 def log_versions() -> None:
