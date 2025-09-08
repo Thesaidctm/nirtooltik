@@ -1,17 +1,27 @@
 
 import logging
+import sys
+from pathlib import Path
 
 logger = logging.getLogger("nircls")
 
 
-def setup_logging(level: int = logging.INFO) -> None:
+def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> None:
     """Configure basic logging for the project.
 
     Args:
         level: Logging level used by the root logger.
+        log_file: Optional path to a log file.
     """
 
-    logging.basicConfig(level=level, format="%(asctime)s | %(levelname)s | %(message)s")
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    if log_file:
+        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+    for h in handlers:
+        h.setFormatter(formatter)
+
+    logging.basicConfig(level=level, handlers=handlers, force=True)
 
 
 def log_versions() -> None:

@@ -278,6 +278,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Logging level",
     )
     parser.add_argument(
+        "--log-file",
+        type=Path,
+        help="Path to log file (overrides default)",
+    )
+    parser.add_argument(
         "--n-jobs",
         type=int,
         default=-1,
@@ -343,8 +348,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     set_seed(args.seed)
     log_level = getattr(logging, args.log_level.upper(), logging.INFO)
-    setup_logging(level=log_level)
+    if args.log_file:
+        ensure_dirs(args.log_file.parent)
+    setup_logging(level=log_level, log_file=args.log_file)
     log_versions()
+
+    def _setup_run_logging(run_id: str) -> Path:
+        log_path = args.log_file or RESULTS_DIR / run_id / "nircls.log"
+        ensure_dirs(log_path.parent)
+        setup_logging(level=log_level, log_file=log_path)
+        return log_path
     n_jobs = args.n_jobs  # stored for later use  # noqa: F841
     mlflow_uri = args.mlflow
     if mlflow_uri:
@@ -378,6 +391,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(t("config_invalid_data_section"), file=sys.stderr)
             return 1
         run_id = make_run_id("prepare")
+        _setup_run_logging(run_id)
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
         try:
@@ -405,6 +419,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         cfg.astm = args.astm
         run_id = make_run_id("train")
+        _setup_run_logging(run_id)
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
         try:
@@ -454,6 +469,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.run == "one" and ds_list:
             cfg.data.target_cols = ds_list[0]["target"]
         run_id = make_run_id("cv")
+        _setup_run_logging(run_id)
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(out_dir)
         cfg.astm = args.astm
@@ -509,6 +525,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 models_cfg.append({"name": name})
             default_cfg["models"] = models_cfg
         run_id = now_ts()
+        _setup_run_logging(run_id)
         data_cfg = cast(Dict[str, Any], default_cfg["data"])
         base_dir = Path(data_cfg.get("out_dir", RESULTS_DIR)) / run_id
         ensure_dirs(base_dir)
@@ -580,6 +597,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(t("demo_config_invalid", err=e), file=sys.stderr)
             return 1
         run_id = make_run_id("demo")
+        _setup_run_logging(run_id)
         base_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
         ensure_dirs(base_dir)
         ds_list = []
@@ -697,6 +715,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if run_now:
             cfg_obj = ConfigModel(**cfg_dict)
             run_id = make_run_id("wizard")
+            _setup_run_logging(run_id)
             base_dir = Path(cfg_obj.data.out_dir or RESULTS_DIR) / run_id
             ensure_dirs(base_dir)
             train_dir = base_dir / "train"
