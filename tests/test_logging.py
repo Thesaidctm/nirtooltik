@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 from nircls import cli
 from nircls.utils.logging import logger
@@ -15,4 +14,6 @@ def test_log_file_created(tmp_path):
     for h in logging.getLogger().handlers:
         h.flush()
     assert log_file.exists()
-    assert test_message in log_file.read_text()
+    content = log_file.read_text()
+    assert test_message in content
+    assert "\x1b" not in content
