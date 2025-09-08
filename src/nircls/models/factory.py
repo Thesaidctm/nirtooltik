@@ -144,14 +144,14 @@ DEFAULT_GRIDS = {
         "kernel_size": [3],
         "n_epochs": [10],
         "patience": [0],
-        "device": ["cpu"],
+        "device": [None],
     },
     "LSTM1D": {
         "hidden_dim": [64],
         "num_layers": [1],
         "n_epochs": [10],
         "patience": [0],
-        "device": ["cpu"],
+        "device": [None],
     },
     # Include a positive regularization parameter to handle rank-deficient
     # covariance matrices that frequently arise in high dimensional settings.
