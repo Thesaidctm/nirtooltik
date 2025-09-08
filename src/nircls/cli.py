@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any, Dict, Sequence, cast
@@ -270,6 +271,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--mlflow",
         help=t("mlflow_help"),
     )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+        help="Logging level",
+    )
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=-1,
+        help="Number of parallel jobs",
+    )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
     p_prep.add_argument("--config", required=True)
@@ -329,8 +342,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_sum.add_argument("--results", required=True, help=t("dashboard_results_help"))
     args = parser.parse_args(argv)
     set_seed(args.seed)
-    setup_logging()
+    log_level = getattr(logging, args.log_level.upper(), logging.INFO)
+    setup_logging(level=log_level)
     log_versions()
+    n_jobs = args.n_jobs  # stored for later use  # noqa: F841
     mlflow_uri = args.mlflow
     if mlflow_uri:
         try:
