@@ -70,7 +70,8 @@ def y_scramble_scores(
                 groups=groups,
             )
             scores.append(cv_scores.mean())
-        except Exception:  # pragma: no cover - best effort
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning("Y-scramble iteration %d failed: %s", i + 1, exc)
             continue
         elapsed = perf_counter() - start
         logger.info(
