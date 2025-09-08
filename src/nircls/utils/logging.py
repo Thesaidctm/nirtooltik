@@ -1,27 +1,31 @@
-
 import logging
-import sys
 from pathlib import Path
+
+from rich.console import Console
+from rich.logging import RichHandler
 
 logger = logging.getLogger("nircls")
 
 
 def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> None:
-    """Configure basic logging for the project.
-
-    Args:
-        level: Logging level used by the root logger.
-        log_file: Optional path to a log file.
-    """
+    """Configure logging with separate console and file handlers."""
 
     formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    console = Console(stderr=True)
+    handlers: list[logging.Handler] = [
+        RichHandler(console=console, show_path=False, markup=True)
+    ]
     if log_file:
-        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
-    for h in handlers:
-        h.setFormatter(formatter)
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        handlers.append(file_handler)
 
-    logging.basicConfig(level=level, handlers=handlers, force=True)
+    logging.basicConfig(
+        level=level,
+        handlers=handlers,
+        format="%(message)s",
+        force=True,
+    )
 
 
 def log_versions() -> None:

@@ -14,6 +14,7 @@ import pandas as pd
 import sklearn
 import yaml  # type: ignore[import-untyped]
 from joblib import dump, load
+from rich.console import Console
 from rich.progress import Progress
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
@@ -407,10 +408,12 @@ def _run_cv(
         Seed applied to inner cross-validation splits.
     """
 
+    logger.info("Starting cross-validation")
     try:
         data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
         _maybe_run_qc(cfg, data, out_dir)
     except DataError as e:
+        logger.error("Data preparation failed: %s", e)
         raise DataError(
             "Arquivo de dados não encontrado. Verifique o caminho informado."
         ) from e
@@ -623,6 +626,7 @@ def _run_cv(
         )
         with open(out_dir / "astm_classification.json", "w") as f:
             json.dump(flags, f, indent=2)
+    logger.info("Cross-validation finished")
 
 
 def _run_holdout(
@@ -849,10 +853,12 @@ def run_multiple_eval(
             json.dump(metadata, f, indent=2)
 
         outputs: List[Tuple[Path, Path]] = []
-        with Progress() as progress:
+        logger.info("Running evaluation for %d CV strategies", len(strategies))
+        with Progress(console=Console(stderr=True)) as progress:
             strat_task = progress.add_task("CV strategy", total=len(strategies))
             for strat in strategies:
                 stype = strat.get("type", "").lower()
+                logger.info("Evaluating strategy %s", stype)
                 progress.update(strat_task, description=f"Strategy: {stype}")
                 if stype == "kfold":
                     n_repeats = strat.get("n_repeats", 1)
@@ -1009,19 +1015,23 @@ def train_and_save(
 ) -> Tuple[Path, Path]:
     """Train final model and persist artefacts."""
 
-    mlflow_cm = nullcontext()
-    if mlflow_uri:
-        import mlflow
+    logger.info("Starting training pipeline")
+    try:
+        mlflow_cm = nullcontext()
+        if mlflow_uri:
+            import mlflow
 
-        mlflow.set_tracking_uri(mlflow_uri)
-        mlflow_cm = mlflow.start_run(run_name="train")
-    with mlflow_cm:
-        with Progress() as progress:
-            load_task = progress.add_task("Carregando dados", total=None)
-            _validate_cfg(cfg, need_data=True, need_models=True)
-            ds_list = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
-            _maybe_run_qc(cfg, ds_list, out_dir)
-            ds = ds_list[0]
+            mlflow.set_tracking_uri(mlflow_uri)
+            mlflow_cm = mlflow.start_run(run_name="train")
+        with mlflow_cm:
+            with Progress(console=Console(stderr=True)) as progress:
+                load_task = progress.add_task("Carregando dados", total=None)
+                _validate_cfg(cfg, need_data=True, need_models=True)
+                ds_list = prepare_inputs(
+                    cfg["data"], use_cache=cfg.get("use_cache", True)
+                )
+                _maybe_run_qc(cfg, ds_list, out_dir)
+                ds = ds_list[0]
             summary = summarize_dataset(ds_list)
             X, y = ds["X"], ds["Y"]
             groups = ds.get("groups")
@@ -1166,6 +1176,9 @@ def train_and_save(
                 mlflow.log_artifact(out_dir / "metrics.json")
                 mlflow.log_artifacts(out_dir / "figures", artifact_path="figures")
             progress.update(save_task, completed=1)
+    except Exception:
+        logger.error("Training failed", exc_info=True)
+        raise
     return out_dir / "metrics.json", out_dir / "figures"
 
 
@@ -1234,7 +1247,7 @@ def predict_with_model(model_path: Path, data_path: Path, out_dir: Path) -> None
         est = load(model_path)
     except FileNotFoundError as e:
         raise ModelError("Modelo não encontrado. Verifique o caminho informado.") from e
-    with Progress() as progress:
+    with Progress(console=Console(stderr=True)) as progress:
         load_data_task = progress.add_task("Carregando dados", total=None)
         y = None
         try:
