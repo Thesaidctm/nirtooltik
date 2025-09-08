@@ -212,6 +212,16 @@ Cada item da lista define um estimador:
 - **name** (`str`): identificador do modelo.
 - **params** (`dict`): parâmetros fixos passados ao modelo.
 - **grid** (`dict`): hiperparâmetros para busca em grade.
+  Parâmetros que esperam tuplas (por exemplo, `hidden_layer_sizes` do `MLP`)
+  devem ser representados como listas de listas no YAML para preservar a
+  semântica de tupla, e.g.:
+
+  ```yaml
+  grid:
+    hidden_layer_sizes:
+      - [100]
+      - [200]
+  ```
 - **calibration.method** (`"sigmoid"` ou `"isotonic"`) e
   **calibration.cv** (`int`): opções para calibração de probabilidades.
 
