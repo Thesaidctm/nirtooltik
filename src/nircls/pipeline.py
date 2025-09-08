@@ -1047,8 +1047,8 @@ def train_and_save(
     interactive: bool = False,
     n_jobs: int = -1,
     mlflow_uri: Optional[str] = None,
-    n_jobs: int = -1,
     gs_verbose: int = 0,
+    show_progress: bool = True,
 ) -> Tuple[Path, Path]:
     """Train final model and persist artefacts."""
 
@@ -1061,7 +1061,9 @@ def train_and_save(
             mlflow.set_tracking_uri(mlflow_uri)
             mlflow_cm = mlflow.start_run(run_name="train")
         with mlflow_cm:
-            with Progress(console=Console(stderr=True)) as progress:
+            with Progress(
+                console=Console(stderr=True), disable=not show_progress
+            ) as progress:
                 load_task = progress.add_task("Carregando dados", total=None)
                 _validate_cfg(cfg, need_data=True, need_models=True)
                 ds_list = prepare_inputs(
