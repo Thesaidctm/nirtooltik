@@ -176,6 +176,18 @@ def test_gaussian_nb_model_with_default_grid():
     assert gs.best_params_["clf__var_smoothing"] in [1e-09]
 
 
+def test_gaussian_nb_accepts_string_var_smoothing():
+    X = np.random.RandomState(0).randn(20, 5)
+    y = (np.arange(20) % 2).astype(int)
+    cfg = {"models": [{"name": "NB", "grid": {"var_smoothing": ["1e-09"]}}]}
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "NB"
+    assert grid["clf__var_smoothing"] == [1e-09]
+    gs = GridSearchCV(pipe, grid, cv=2, n_jobs=1)
+    gs.fit(X, y)
+    assert gs.best_params_["clf__var_smoothing"] in [1e-09]
+
+
 def test_estimator_without_proba_is_calibrated(monkeypatch):
     from sklearn.base import BaseEstimator, ClassifierMixin
     from sklearn.calibration import CalibratedClassifierCV
