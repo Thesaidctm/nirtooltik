@@ -284,14 +284,23 @@ def _save_metrics(
     rows: List[Dict[str, Any]],
     out_dir: Path,
     preprocess_steps: Sequence[str],
+    *,
+    append: bool = False,
 ) -> None:
-    """Persist metrics to Excel and JSON files."""
+    """Persist metrics to disk.
+
+    When ``append`` is ``True``, metrics are appended to CSV files allowing
+    incremental saving. Otherwise, a full summary in Excel/JSON format is
+    written, overwriting any existing files.
+    """
 
     for row in rows:
         if "preprocess_steps" not in row:
             row["preprocess_steps"] = list(preprocess_steps)
         row.setdefault("overfit_warning", False)
     df = pd.DataFrame(rows)
+    if df.empty:
+        return
 
     id_cols = ["file", "target", "model", "preprocess_steps", "calibrated"]
     val_cols = id_cols + [
@@ -304,6 +313,15 @@ def _save_metrics(
     calib_df.rename(
         columns={c: c.removeprefix("train_") for c in train_cols}, inplace=True
     )
+
+    if append:
+        val_csv = out_dir / "metrics_summary.csv"
+        calib_csv = out_dir / "metrics_calibration.csv"
+        val_df.to_csv(val_csv, mode="a", header=not val_csv.exists(), index=False)
+        calib_df.to_csv(
+            calib_csv, mode="a", header=not calib_csv.exists(), index=False
+        )
+        return
 
     with pd.ExcelWriter(out_dir / "metrics_summary.xlsx") as writer:
         val_df.to_excel(writer, sheet_name="validation", index=False)
@@ -631,6 +649,12 @@ def _run_cv(
             if best_steps_repr is not None:
                 row["preprocess_steps"] = best_steps_repr
             rows.append(row)
+            _save_metrics(
+                [row],
+                out_dir,
+                cfg.get("preprocess", {}).get("steps", []),
+                append=True,
+            )
             y_true = np.concatenate(y_true_all)
             y_pred = np.concatenate(y_pred_all)
             y_proba = np.vstack(y_proba_all) if y_proba_all else None
@@ -805,6 +829,12 @@ def _run_holdout(
                     row["Yscramble_p95"] = None
             row["preprocess_steps"] = preprocess_steps
             rows.append(row)
+            _save_metrics(
+                [row],
+                out_dir,
+                cfg.get("preprocess", {}).get("steps", []),
+                append=True,
+            )
             _save_plots(
                 ds["file"],
                 ds["target"],
