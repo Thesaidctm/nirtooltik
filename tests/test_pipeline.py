@@ -186,6 +186,21 @@ def test_prepare_inputs_with_multiple_targets(tmp_path):
     assert all(ds["Y"].dtype.name == "category" for ds in ds_list)
 
 
+def test_prepare_inputs_supports_encoding_and_sep_decimal(tmp_path):
+    df = pd.DataFrame({"0": [1.5, 2.5], "target": ["A", "B"]})
+    data_file = tmp_path / "data.csv"
+    df.to_csv(data_file, index=False, sep=";", decimal=",", encoding="latin1")
+    cfg = {
+        "input_path": str(data_file),
+        "target_cols": ["target"],
+        "sep": ";",
+        "decimal": ",",
+        "encoding": "latin1",
+    }
+    ds_list = prepare_inputs(cfg)
+    assert ds_list[0]["X"].iloc[0, 0] == pytest.approx(1.5)
+
+
 def test_prepare_inputs_raises_when_range_unavailable(tmp_path):
     rng = np.random.RandomState(0)
     X = rng.rand(5, 3)

@@ -174,6 +174,17 @@ cv:
       n_splits: [5]
 ```
 
+Para CSV com separador `;`, separador decimal `,` e codificação `latin1`:
+
+```yaml
+data:
+  input_path: dados/espectros.csv
+  target_col: especie
+  sep: ";"
+  decimal: ","
+  encoding: latin1
+```
+
 ### Chaves suportadas
 
 #### data
@@ -188,6 +199,9 @@ cv:
   **target_col** é um atalho para uma única coluna.
 - **group_col** (`str`): nome da coluna que define grupos para validação
   cruzada agrupada.
+- **encoding** (`str`): codificação do arquivo de entrada (ex.: `latin1`).
+- **sep** (`str`, padrão `","`): separador de campos em arquivos CSV.
+- **decimal** (`str`, padrão `"."`): separador decimal utilizado nos números.
 - **spectral_range** (`[float, float]`): limites inferior e superior de
   comprimento de onda.
 - **drop_nans** (`bool`, padrão `true`): remove linhas com valores ausentes.

@@ -320,6 +320,9 @@ def _render_dashboard(results_dir: Path) -> None:
             "email",
             cfg_defaults.get("email", email_defaults.get("to_addr", "")),
         )
+        st.session_state.setdefault("encoding", cfg_defaults.get("encoding", ""))
+        st.session_state.setdefault("sep", cfg_defaults.get("sep", ","))
+        st.session_state.setdefault("decimal", cfg_defaults.get("decimal", "."))
 
         if st.button("Reiniciar wizard"):
             if config_path.exists():
@@ -356,6 +359,21 @@ def _render_dashboard(results_dir: Path) -> None:
                 key="preprocess",
                 help=f"Selecione os pré-processadores. {ajuda_link}",
             )
+            encoding = st.text_input(
+                "Codificação",
+                key="encoding",
+                help=f"Codificação dos arquivos CSV. {ajuda_link}",
+            )
+            sep = st.text_input(
+                "Separador",
+                key="sep",
+                help=f"Separador de campos do CSV. {ajuda_link}",
+            )
+            decimal = st.text_input(
+                "Separador decimal",
+                key="decimal",
+                help=f"Caractere usado como separador decimal. {ajuda_link}",
+            )
             email = st.text_input(
                 "E-mail",
                 key="email",
@@ -368,24 +386,39 @@ def _render_dashboard(results_dir: Path) -> None:
             cfg = _load_cfg()
             cfg.update(
                 {
-                    k: st.session_state.get(k, [] if k != "email" else "")
-                    for k in ["modelos", "preprocess", "email"]
+                    "modelos": st.session_state.get("modelos", []),
+                    "preprocess": st.session_state.get("preprocess", []),
+                    "email": st.session_state.get("email", ""),
+                    "encoding": st.session_state.get("encoding", ""),
+                    "sep": st.session_state.get("sep", ","),
+                    "decimal": st.session_state.get("decimal", "."),
                 }
             )
             _save_cfg(cfg)
             st.success("Configurações salvas.")
         if cols[1].button("Carregar"):
             loaded = _load_cfg()
-            for k in ["modelos", "preprocess", "email"]:
-                st.session_state[k] = loaded.get(k, [] if k != "email" else "")
+            for k, default in [
+                ("modelos", []),
+                ("preprocess", []),
+                ("email", ""),
+                ("encoding", ""),
+                ("sep", ","),
+                ("decimal", "."),
+            ]:
+                st.session_state[k] = loaded.get(k, default)
             st.experimental_rerun()
 
         if submitted:
             cfg = _load_cfg()
             cfg.update(
                 {
-                    k: st.session_state.get(k, [] if k != "email" else "")
-                    for k in ["modelos", "preprocess", "email"]
+                    "modelos": st.session_state.get("modelos", []),
+                    "preprocess": st.session_state.get("preprocess", []),
+                    "email": st.session_state.get("email", ""),
+                    "encoding": st.session_state.get("encoding", ""),
+                    "sep": st.session_state.get("sep", ","),
+                    "decimal": st.session_state.get("decimal", "."),
                 }
             )
             _save_cfg(cfg)
@@ -399,8 +432,15 @@ def _render_dashboard(results_dir: Path) -> None:
                     for up in uploaded_files:
                         dest = tmpdir_path / up.name
                         dest.write_bytes(up.getbuffer())
+                    data_cfg = {"input_path": str(tmpdir_path / "*")}
+                    if encoding:
+                        data_cfg["encoding"] = encoding
+                    if sep:
+                        data_cfg["sep"] = sep
+                    if decimal:
+                        data_cfg["decimal"] = decimal
                     cfg = {
-                        "data": {"input_path": str(tmpdir_path / "*")},
+                        "data": data_cfg,
                         "models": [{"name": m} for m in modelos],
                         "preprocess": {"steps": list(preprocess)},
                         "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
@@ -543,10 +583,13 @@ def _render_dashboard(results_dir: Path) -> None:
             type=["csv", "xlsx", "xls"],
         )
         if uploaded is not None:
+            enc = st.text_input("Codificação", st.session_state.get("encoding", ""))
+            sep = st.text_input("Separador", st.session_state.get("sep", ","))
+            decimal = st.text_input("Separador decimal", st.session_state.get("decimal", "."))
             df = (
-                pd.read_csv(uploaded)
+                pd.read_csv(uploaded, encoding=enc or None, sep=sep, decimal=decimal)
                 if uploaded.name.lower().endswith(".csv")
-                else pd.read_excel(uploaded)
+                else pd.read_excel(uploaded, decimal=decimal)
             )
             is_num = pd.api.types.is_numeric_dtype
             non_num = [c for c in df.columns if not is_num(df[c])]
@@ -558,7 +601,13 @@ def _render_dashboard(results_dir: Path) -> None:
                 ) as tmp:
                     tmp.write(uploaded.getbuffer())
                     tmp_path = Path(tmp.name)
-                cfg = {"input_path": str(tmp_path), "target_col": target_col}
+                cfg = {
+                    "input_path": str(tmp_path),
+                    "target_col": target_col,
+                    "encoding": enc or None,
+                    "sep": sep,
+                    "decimal": decimal,
+                }
                 if spectral_input:
                     try:
                         lo, hi = map(float, spectral_input.split(","))

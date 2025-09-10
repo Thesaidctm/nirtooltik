@@ -24,6 +24,15 @@ class DataConfig(BaseModel):
     group_col: Optional[str] = Field(
         None, description="Column name with group labels for grouped CV"
     )
+    encoding: Optional[str] = Field(
+        None, description="File encoding for tabular input"
+    )
+    sep: Optional[str] = Field(
+        ",", description="Field separator for CSV files"
+    )
+    decimal: Optional[str] = Field(
+        ".", description="Decimal separator"
+    )
     spectral_range: Optional[Union[List[float], tuple[float, float]]] = Field(
         None, description="Lower and upper wavelength limits"
     )
