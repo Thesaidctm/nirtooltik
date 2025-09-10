@@ -98,6 +98,69 @@ def _render_dashboard(results_dir: Path) -> None:
     results_dir.mkdir(parents=True, exist_ok=True)
 
     st.set_page_config(page_title="nircls Dashboard", page_icon="🧪", layout="wide")
+    config_path = Path.home() / ".nircls" / "config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _load_cfg() -> dict:
+        try:
+            with config_path.open() as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _save_cfg(data: dict) -> None:
+        with config_path.open("w") as f:
+            json.dump(data, f, indent=2)
+
+    def _run_wizard() -> None:
+        st.title("nircls Dashboard")
+        st.header("Configuração inicial")
+        step = st.session_state.get("wizard_step", 0)
+        data = st.session_state.setdefault("wizard_data", {})
+        if step == 0:
+            with st.form("wiz_modelos"):
+                modelos = st.multiselect(
+                    "Modelos",
+                    options=sorted(MODEL_DESCRIPTIONS),
+                    default=data.get("modelos", []),
+                )
+                submitted = st.form_submit_button("Próximo")
+            if submitted:
+                data["modelos"] = modelos
+                st.session_state["wizard_step"] = 1
+                st.experimental_rerun()
+        elif step == 1:
+            with st.form("wiz_preprocess"):
+                preprocess = st.multiselect(
+                    "Preprocessadores",
+                    options=_get_preprocessor_names(),
+                    default=data.get("preprocess", []),
+                )
+                submitted = st.form_submit_button("Próximo")
+            if submitted:
+                data["preprocess"] = preprocess
+                st.session_state["wizard_step"] = 2
+                st.experimental_rerun()
+        else:
+            with st.form("wiz_email"):
+                email = st.text_input(
+                    "E-mail",
+                    value=data.get("email", ""),
+                    help="Endereço para notificações",
+                )
+                submitted = st.form_submit_button("Concluir")
+            if submitted:
+                data["email"] = email
+                _save_cfg(data)
+                st.session_state.pop("wizard_step", None)
+                st.session_state.pop("wizard_data", None)
+                st.session_state.pop("run_wizard", None)
+                st.experimental_rerun()
+
+    if st.session_state.get("run_wizard") or not config_path.exists():
+        _run_wizard()
+        return
+
     st.title("nircls Dashboard")
     st.info("Execute `nircls run-all` antes de abrir o dashboard.")
 
@@ -155,6 +218,15 @@ def _render_dashboard(results_dir: Path) -> None:
                         file_name=html_file.name,
                         mime="text/html",
                     )
+    config_tab, prep_tab, exec_tab, results_tab, summary_tab, help_tab = st.tabs(
+        [
+            "Configurações",
+            "Preparar Dados",
+            "Execução",
+            "Resultados",
+            "Resumo",
+            "Ajuda",
+        ]
 
     config_tab, settings_tab, prep_tab, exec_tab, results_tab, summary_tab, help_tab = (
         st.tabs(
@@ -171,20 +243,6 @@ def _render_dashboard(results_dir: Path) -> None:
     )
 
     with config_tab:
-        config_path = Path.home() / ".nircls" / "config.json"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-
-        def _load_cfg() -> dict:
-            try:
-                with config_path.open() as f:
-                    return json.load(f)
-            except Exception:
-                return {}
-
-        def _save_cfg(data: dict) -> None:
-            with config_path.open("w") as f:
-                json.dump(data, f, indent=2)
-
         cfg_defaults = _load_cfg()
         email_defaults = _load_email_config()
         st.session_state.setdefault("modelos", cfg_defaults.get("modelos", []))
@@ -193,6 +251,15 @@ def _render_dashboard(results_dir: Path) -> None:
             "email",
             cfg_defaults.get("email", email_defaults.get("to_addr", "")),
         )
+
+        if st.button("Reiniciar wizard"):
+            if config_path.exists():
+                try:
+                    config_path.unlink()
+                except OSError:
+                    pass
+            st.session_state["run_wizard"] = True
+            st.experimental_rerun()
 
         ajuda_link = "Consulte a [aba Ajuda](#ajuda)"
 
