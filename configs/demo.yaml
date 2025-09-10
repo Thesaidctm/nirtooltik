@@ -20,3 +20,6 @@ cv:
     - type: kfold
       n_splits: [2]
       n_repeats: 1
+
+# Configure as variáveis NIRCLS_EMAIL_HOST, NIRCLS_EMAIL_PORT, NIRCLS_EMAIL_USER,
+# NIRCLS_EMAIL_PASS e NIRCLS_EMAIL_TO para notificações por e-mail.
