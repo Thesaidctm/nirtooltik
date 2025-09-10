@@ -526,6 +526,8 @@ def _run_cv(
                 scores_val["BalancedAcc"].append(balanced_accuracy_score(y_enc, yhat))
                 scores_val["Accuracy"].append(accuracy_score(y_enc, yhat))
                 proba_fn = getattr(best, "predict_proba", None)
+                proba = None
+                proba_tr = None
                 if proba_fn is not None:
                     proba = cross_val_predict(
                         best,
@@ -630,7 +632,7 @@ def _run_cv(
                     interactive=interactive,
                 )
                 progress.advance(model_task)
-                del gs, best, yhat, yhat_tr, y_true_all, y_pred_all, y_proba_all
+                del gs, best, proba, proba_tr, yhat, yhat_tr, y_true_all, y_pred_all, y_proba_all
                 gc.collect()
                 continue
             if cv_method == "spxy":
@@ -644,6 +646,10 @@ def _run_cv(
             else:
                 outer_splits = list(outer.split(X, y_enc))
             fold_task = progress.add_task("Fold", total=len(outer_splits))
+            proba = None
+            proba_tr = None
+            yhat = None
+            yhat_tr = None
             for tr, te in outer_splits:
                 Xtr, Xte = X.iloc[tr].values, X.iloc[te].values
                 ytr, yte = y_enc[tr], y_enc[te]
@@ -811,7 +817,7 @@ def _run_cv(
                 interactive=interactive,
             )
             progress.advance(model_task)
-            del gs, best, y_true_all, y_pred_all, y_proba_all
+            del gs, best, proba, proba_tr, yhat, yhat_tr, y_true_all, y_pred_all, y_proba_all
             gc.collect()
         progress.advance(tgt_task)
     _save_metrics(rows, out_dir, cfg.get("preprocess", {}).get("steps", []))
@@ -923,6 +929,7 @@ def _run_holdout(
             row["n_components"] = n_comp
             proba_fn = getattr(best, "predict_proba", None)
             proba = None
+            proba_tr = None
             if proba_fn is not None:
                 proba = proba_fn(Xte)
                 brier = np.mean(
@@ -989,6 +996,8 @@ def _run_holdout(
                 proba,
                 interactive=interactive,
             )
+            del best, proba, proba_tr, yhat, yhat_tr
+            gc.collect()
     _save_metrics(rows, out_dir, cfg.get("preprocess", {}).get("steps", []))
     if cfg.get("astm"):
         flags = check_astm_classification(summary, {"external_validation": True})
@@ -1384,6 +1393,8 @@ def train_and_save(
                 proba,
                 interactive=interactive,
             )
+            del best, proba, yhat
+            gc.collect()
             with open(out_dir / "metrics.json") as f:
                 metrics_data = json.load(f)
             generate_scientific_report(metrics_data, cfg, out_dir)
