@@ -85,11 +85,21 @@ def read_tabular(
     path: Path,
     target_cols: Optional[Sequence[str] | str] = None,
     group_col: Optional[str] = None,
+    *,
+    encoding: Optional[str] = None,
+    sep: str = ",",
+    decimal: str = ".",
 ) -> Tuple[pd.DataFrame, List[Tuple[str, pd.Series]], Optional[pd.Series]]:
     if not path.is_file() or path.suffix.lower() not in {".csv", ".xls", ".xlsx"}:
         raise DataError("Caminho é um diretório ou possui formato não suportado")
     try:
-        df = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
+        if path.suffix.lower() == ".csv":
+            read_kwargs = {"sep": sep, "decimal": decimal}
+            if encoding:
+                read_kwargs["encoding"] = encoding
+            df = pd.read_csv(path, **read_kwargs)
+        else:
+            df = pd.read_excel(path, decimal=decimal)
     except (FileNotFoundError, PermissionError) as e:
         raise DataError(str(e)) from e
     if target_cols in [None, "all"]:
@@ -171,7 +181,14 @@ def prepare_inputs(
                 grp,
             )
         else:
-            X, y_list, groups = read_tabular(f, tgt, grp)
+            X, y_list, groups = read_tabular(
+                f,
+                tgt,
+                grp,
+                encoding=data_cfg.get("encoding"),
+                sep=data_cfg.get("sep", ","),
+                decimal=data_cfg.get("decimal", "."),
+            )
         X = _filter_range(X, sp)
         if X.empty:
             raise DataError("Intervalo espectral fora da faixa disponível")
