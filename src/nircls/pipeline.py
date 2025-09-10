@@ -13,9 +13,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
+import psutil
 import sklearn
 import yaml  # type: ignore[import-untyped]
-import psutil
 from joblib import dump, load
 from rich.console import Console
 from rich.progress import Progress
@@ -467,8 +467,36 @@ def _run_cv(
         le = LabelEncoder().fit(y)
         y_enc = le.transform(y)
         classes = le.classes_
-        cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
-        inner_folds = cfg.get("cv", {}).get("inner_folds", 3)
+        counts = np.bincount(y_enc)
+        cv_cfg = cfg.get("cv", {})
+        outer_folds = int(
+            cv_cfg.get(
+                "outer_folds",
+                getattr(outer, "n_splits", outer.get_n_splits(X, y_enc, groups)),
+            )
+        )
+        n_splits = int(min(outer_folds, counts.min()))
+        n_splits = max(n_splits, 2)
+        if n_splits != outer_folds:
+            logger.warning(
+                "Adjusted number of outer folds from %d to %d", outer_folds, n_splits
+            )
+        if isinstance(outer, RepeatedStratifiedKFold):
+            outer = RepeatedStratifiedKFold(
+                n_splits=n_splits,
+                n_repeats=outer.n_repeats,
+                random_state=random_state,
+            )
+        elif isinstance(outer, StratifiedKFold):
+            outer = StratifiedKFold(
+                n_splits=n_splits,
+                shuffle=True,
+                random_state=random_state,
+            )
+        elif isinstance(outer, GroupKFold):
+            outer = GroupKFold(n_splits=n_splits)
+        cv_method = cv_cfg.get("cv_method", "stratified").lower()
+        inner_folds = cv_cfg.get("inner_folds", 3)
         models = build_pipeline_from_config(cfg)
         model_cfgs = cfg.get("models", [])
         model_task = progress.add_task("Model", total=len(models))
@@ -501,7 +529,6 @@ def _run_cv(
             n_comp_list: List[int] = []
             best_steps_repr: Optional[List[str]] = None
             if is_loo:
-                counts = np.bincount(y_enc)
                 inner_splits = int(min(inner_folds, counts.min()))
                 inner_splits = max(inner_splits, 2)
                 inner = StratifiedKFold(
@@ -911,8 +938,9 @@ def _run_holdout(
         le = LabelEncoder().fit(y)
         y_enc = le.transform(y)
         classes = le.classes_
-        cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
-        inner_folds = cfg.get("cv", {}).get("inner_folds", 3)
+        cv_cfg = cfg.get("cv", {})
+        cv_method = cv_cfg.get("cv_method", "stratified").lower()
+        outer_folds = int(cv_cfg.get("outer_folds", cv_cfg.get("inner_folds", 3)))
         model_cfgs = cfg.get("models", [])
         for m_cfg, (name, pipe, grid) in zip(
             model_cfgs, build_pipeline_from_config(cfg)
@@ -924,14 +952,21 @@ def _run_holdout(
                 random_state=random_state,
                 stratify=y_enc,
             )
+            counts = np.bincount(ytr)
+            n_splits = int(min(outer_folds, counts.min()))
+            n_splits = max(n_splits, 2)
+            if n_splits != outer_folds:
+                logger.warning(
+                    "Adjusted number of CV folds from %d to %d", outer_folds, n_splits
+                )
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
             yscramble_iter = int(m_cfg.get("y_scramble_n_iter", 20))
             if cv_method == "spxy":
-                inner = spxy_split(Xtr, ytr, inner_folds)
+                inner = spxy_split(Xtr, ytr, n_splits)
             else:
                 inner = StratifiedKFold(
-                    n_splits=inner_folds,
+                    n_splits=n_splits,
                     shuffle=True,
                     random_state=random_state,
                 )
@@ -998,7 +1033,7 @@ def _run_holdout(
                 row.setdefault(f"train_{m}_mean", None)
             if m_cfg.get("overfit_check") and yscramble_iter > 0:
                 cv_scramble = StratifiedKFold(
-                    n_splits=inner_folds,
+                    n_splits=n_splits,
                     shuffle=True,
                     random_state=random_state,
                 )
