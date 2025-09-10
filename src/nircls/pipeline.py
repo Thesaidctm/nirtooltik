@@ -4,6 +4,7 @@ import gc
 import json
 import subprocess
 import sys
+import traceback
 import warnings
 from contextlib import nullcontext
 from datetime import datetime
@@ -57,6 +58,7 @@ from .preprocessors.spectro import (
 from .report import generate_scientific_report
 from .utils.compliance import check_astm_classification
 from .utils.errors import DataError, ModelError
+from .utils.email import enviar_email
 from .utils.logging import log_versions, logger
 from .utils.misc import RESULTS_DIR, file_hash
 from .utils.plots import plot_confusion, plot_reliability, plot_roc_ovr
@@ -1133,6 +1135,8 @@ def run_multiple_eval(
     steps_cfg = cfg.get("preprocess", {}).get("steps", [])
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    enviar_email("Processamento Y iniciou", "O processamento Y foi iniciado.")
+
     with mlflow_cm:
         if mlflow_enabled:
             mlflow.log_params(
@@ -1317,6 +1321,7 @@ def run_multiple_eval(
                         f"Estratégia de validação desconhecida: {stype}. Use 'kfold', 'loo' ou 'holdout'."
                     )
                 progress.advance(strat_task)
+    enviar_email("Processamento Y concluído", "O processamento Y foi concluído.")
     return outputs
 
 
@@ -1521,6 +1526,10 @@ def train_and_save(
     except Exception:
         logger.error("Training failed", exc_info=True)
         raise
+    enviar_email(
+        "Processamento X terminado",
+        "O processamento X foi concluído. Iniciando o Y…",
+    )
     return out_dir / "metrics.json", out_dir / "figures"
 
 
@@ -1558,30 +1567,35 @@ def run_experiment(
         :func:`train_and_save` e :func:`run_multiple_eval`.
     """
 
-    _validate_cfg(cfg, need_data=True, need_models=True, need_cv=True)
-    prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+    try:
+        _validate_cfg(cfg, need_data=True, need_models=True, need_cv=True)
+        prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
 
-    train_dir = out_dir / "train"
-    train_outputs = train_and_save(
-        cfg,
-        train_dir,
-        random_state=random_state,
-        interactive=interactive,
-        n_jobs=n_jobs,
-        log_memory=log_memory,
-    )
+        train_dir = out_dir / "train"
+        train_outputs = train_and_save(
+            cfg,
+            train_dir,
+            random_state=random_state,
+            interactive=interactive,
+            n_jobs=n_jobs,
+            log_memory=log_memory,
+        )
 
-    cv_dir = out_dir / "cv"
-    cv_outputs = run_multiple_eval(
-        cfg,
-        cv_dir,
-        random_state=random_state,
-        interactive=interactive,
-        n_jobs=n_jobs,
-        log_memory=log_memory,
-    )
+        cv_dir = out_dir / "cv"
+        cv_outputs = run_multiple_eval(
+            cfg,
+            cv_dir,
+            random_state=random_state,
+            interactive=interactive,
+            n_jobs=n_jobs,
+            log_memory=log_memory,
+        )
 
-    return train_outputs, cv_outputs
+        return train_outputs, cv_outputs
+    except Exception as exc:
+        tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        enviar_email("Erro no processamento", f"{exc}\n\n{tb}")
+        raise
 
 
 def evaluate_saved_model(model_path: Path, data_path: Path) -> None:
