@@ -285,6 +285,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Disable progress bars",
     )
+    parser.add_argument(
+        "--log-memory",
+        action="store_true",
+        help="Log memory usage during processing",
+    )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
     p_prep.add_argument("--config", required=True)
@@ -439,6 +444,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 mlflow_uri=mlflow_uri,
                 gs_verbose=cv_verbose,
                 show_progress=not args.no_progress,
+                log_memory=args.log_memory,
             )
         except DataError as e:
             print(t("invalid_data", err=e), file=sys.stderr)
@@ -483,6 +489,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 random_state=args.seed,
                 n_jobs=n_jobs,
                 mlflow_uri=mlflow_uri,
+                log_memory=args.log_memory,
             )
         except DataError as e:
             print(t("invalid_data", err=e), file=sys.stderr)
@@ -557,6 +564,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 mlflow_uri=mlflow_uri,
                 gs_verbose=cv_verbose,
                 show_progress=not args.no_progress,
+                log_memory=args.log_memory,
             )
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)
@@ -570,6 +578,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 random_state=args.seed,
                 n_jobs=n_jobs,
                 mlflow_uri=mlflow_uri,
+                log_memory=args.log_memory,
             )
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)
@@ -634,6 +643,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 mlflow_uri=mlflow_uri,
                 gs_verbose=cv_verbose,
                 show_progress=not args.no_progress,
+                log_memory=args.log_memory,
             )
             if metrics_path:
                 _print_metrics_table(metrics_path)
@@ -653,6 +663,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 random_state=args.seed,
                 n_jobs=n_jobs,
                 mlflow_uri=mlflow_uri,
+                log_memory=args.log_memory,
             )
             for metrics_path, figs_dir in outputs:
                 _print_metrics_table(metrics_path)
@@ -746,6 +757,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     mlflow_uri=mlflow_uri,
                     gs_verbose=cv_verbose,
                     show_progress=not args.no_progress,
+                    log_memory=args.log_memory,
                 )
                 if metrics_path:
                     _print_metrics_table(metrics_path)
@@ -760,6 +772,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     random_state=args.seed,
                     n_jobs=n_jobs,
                     mlflow_uri=mlflow_uri,
+                    log_memory=args.log_memory,
                 )
                 for metrics_path, figs_dir in outputs:
                     _print_metrics_table(metrics_path)
