@@ -23,6 +23,8 @@ from nircls.config_schema import ConfigModel, ValidationError
 from nircls.io import prepare_inputs, summarize_dataset
 from nircls.models.factory import MODEL_DESCRIPTIONS
 from nircls.pipeline import run_multiple_eval, train_and_save
+from nircls.utils.email import _load_config as _load_email_config
+from nircls.utils.email import _save_config as _save_email_config
 from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.summarize import summarize_runs
@@ -51,14 +53,18 @@ def _get_preprocessor_names() -> list[str]:
     return sorted(names)
 
 
-def run_dashboard(results_dir: str | Path) -> int:
+def run_dashboard(results_dir: str | Path | None = None) -> int:
     """Launch the Streamlit dashboard.
 
     Parameters
     ----------
-    results_dir : str | Path
-        Root directory where run artefacts will be stored.
+    results_dir : str | Path | None, optional
+        Root directory where run artefacts will be stored. If ``None``, the
+        value is read from the email configuration file or defaults to
+        :data:`nircls.utils.misc.RESULTS_DIR`.
     """
+    if results_dir is None:
+        results_dir = _load_email_config().get("results_dir", RESULTS_DIR)
     module_path = Path(__file__).resolve()
     cmd = [
         sys.executable,
@@ -81,7 +87,7 @@ def run_dashboard(results_dir: str | Path) -> int:
 
 def main() -> int:
     """Entry point used by the ``nircls-dashboard`` console script."""
-    return run_dashboard(RESULTS_DIR)
+    return run_dashboard()
 
 
 def _render_dashboard(results_dir: Path) -> None:
@@ -212,7 +218,6 @@ def _render_dashboard(results_dir: Path) -> None:
                         file_name=html_file.name,
                         mime="text/html",
                     )
-
     config_tab, prep_tab, exec_tab, results_tab, summary_tab, help_tab = st.tabs(
         [
             "Configurações",
@@ -222,13 +227,30 @@ def _render_dashboard(results_dir: Path) -> None:
             "Resumo",
             "Ajuda",
         ]
+
+    config_tab, settings_tab, prep_tab, exec_tab, results_tab, summary_tab, help_tab = (
+        st.tabs(
+            [
+                "Configurar & Executar",
+                "Configurações",
+                "Preparar Dados",
+                "Execução",
+                "Resultados",
+                "Resumo",
+                "Ajuda",
+            ]
+        )
     )
 
     with config_tab:
         cfg_defaults = _load_cfg()
+        email_defaults = _load_email_config()
         st.session_state.setdefault("modelos", cfg_defaults.get("modelos", []))
         st.session_state.setdefault("preprocess", cfg_defaults.get("preprocess", []))
-        st.session_state.setdefault("email", cfg_defaults.get("email", ""))
+        st.session_state.setdefault(
+            "email",
+            cfg_defaults.get("email", email_defaults.get("to_addr", "")),
+        )
 
         if st.button("Reiniciar wizard"):
             if config_path.exists():
@@ -381,6 +403,50 @@ def _render_dashboard(results_dir: Path) -> None:
                             status.update(label="Execução falhou", state="error")
                             for etapa, msg in errors.items():
                                 st.error(f"Erro na etapa {etapa}: {msg}")
+
+    with settings_tab:
+        email_cfg = _load_email_config()
+        host = st.text_input("Host SMTP", email_cfg.get("host", ""))
+        port = st.number_input("Porta", value=int(email_cfg.get("port") or 587), step=1)
+        user = st.text_input("Usuário", email_cfg.get("user", ""))
+        password = st.text_input(
+            "Senha", value=email_cfg.get("password", ""), type="password"
+        )
+        default_email = st.text_input("E-mail padrão", email_cfg.get("to_addr", ""))
+        default_results = email_cfg.get("results_dir", str(results_dir))
+        if hasattr(st, "directory_picker"):
+            results_root = st.directory_picker(
+                "Diretório de resultados", default=default_results
+            )
+        else:
+            results_root = st.text_input(
+                "Diretório de resultados", value=default_results, key="results_root"
+            )
+            if st.button("Selecionar pasta"):
+                try:  # pragma: no cover - best effort
+                    import tkinter as tk
+                    from tkinter import filedialog
+
+                    tk.Tk().withdraw()
+                    selected = filedialog.askdirectory() or results_root
+                    st.session_state["results_root"] = selected
+                    results_root = selected
+                except Exception:
+                    st.warning("Seleção de pasta não suportada.")
+            results_root = st.session_state.get("results_root", results_root)
+
+        if st.button("Salvar configurações"):
+            _save_email_config(
+                {
+                    "host": host,
+                    "port": int(port),
+                    "user": user,
+                    "password": password,
+                    "to_addr": default_email,
+                    "results_dir": str(results_root),
+                }
+            )
+            st.success("Configurações salvas.")
 
     with prep_tab:
         uploaded = st.file_uploader(
