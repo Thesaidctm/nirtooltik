@@ -272,6 +272,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 "Arquivos de entrada",
                 type=["csv", "xlsx", "xls"],
                 accept_multiple_files=True,
+                help=f"Envie os dados de entrada. {ajuda_link}",
             )
             modelos = st.multiselect(
                 "Modelos",
@@ -286,7 +287,9 @@ def _render_dashboard(results_dir: Path) -> None:
                 help=f"Selecione os pré-processadores. {ajuda_link}",
             )
             email = st.text_input(
-                "E-mail", key="email", help="Endereço para notificações"
+                "E-mail",
+                key="email",
+                help=f"Endereço para notificações. {ajuda_link}",
             )
             submitted = st.form_submit_button("Executar")
 
