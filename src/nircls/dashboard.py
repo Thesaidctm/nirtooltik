@@ -263,17 +263,10 @@ def _render_dashboard(results_dir: Path) -> None:
         ajuda_link = "Consulte a [aba Ajuda](#ajuda)"
 
         with st.form("run_form"):
-            preparar = st.checkbox(
-                "Preparar",
-                help=f"Executar preparação dos dados. {ajuda_link}",
-            )
-            treinar = st.checkbox(
-                "Treinar",
-                help=f"Executar etapa de treino. {ajuda_link}",
-            )
-            validar = st.checkbox(
-                "Validar",
-                help=f"Executar validação cruzada. {ajuda_link}",
+            analises = st.multiselect(
+                "Análises",
+                options=["preparar", "treinar", "validar"],
+                help=f"Escolha as análises a executar. {ajuda_link}",
             )
             uploaded_files = st.file_uploader(
                 "Arquivos de entrada",
@@ -319,7 +312,7 @@ def _render_dashboard(results_dir: Path) -> None:
                     for k in ["modelos", "preprocess", "email"]
                 }
             )
-            if not any([preparar, treinar, validar]):
+            if not analises:
                 st.warning("Selecione ao menos uma análise.")
             elif not uploaded_files:
                 st.warning("Envie ao menos um arquivo de entrada.")
@@ -334,23 +327,20 @@ def _render_dashboard(results_dir: Path) -> None:
                         "models": [{"name": m} for m in modelos],
                         "preprocess": {"steps": list(preprocess)},
                         "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
+                        "notification_email": email or None,
                     }
                     try:
-                        ConfigModel(**cfg)
+                        cfg_model = ConfigModel(**cfg)
                     except ValidationError as exc:
                         st.error(f"Configuração inválida: {exc}")
                     else:
+                        cfg_dict = cfg_model.dict(exclude_none=True)
                         run_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
                         progress = st.progress(0)
                         status = st.status("Inicializando...")
                         errors: dict[str, str] = {}
                         try:
-                            total = 0
-                            steps = []
-                            if treinar or validar:
-                                steps = ["preparar", "treinar", "validar"]
-                            elif preparar:
-                                steps = ["preparar"]
+                            steps = list(analises)
                             total = len(steps)
                             completed = 0
 
@@ -359,7 +349,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                     label="Preparando dados...", state="running"
                                 )
                                 try:
-                                    prepare_inputs(cfg["data"], use_cache=False)
+                                    prepare_inputs(cfg_dict["data"], use_cache=False)
                                 except Exception as exc:
                                     errors["preparar"] = str(exc)
                                     raise
@@ -371,7 +361,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                     label="Treinando modelos...", state="running"
                                 )
                                 try:
-                                    train_and_save(cfg, run_dir / "train")
+                                    train_and_save(cfg_dict, run_dir / "train")
                                 except Exception as exc:
                                     errors["treinar"] = str(exc)
                                     raise
@@ -383,7 +373,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                     label="Validando modelos...", state="running"
                                 )
                                 try:
-                                    run_multiple_eval(cfg, run_dir / "cv")
+                                    run_multiple_eval(cfg_dict, run_dir / "cv")
                                 except Exception as exc:
                                     errors["validar"] = str(exc)
                                     raise
