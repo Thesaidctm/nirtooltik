@@ -1,27 +1,27 @@
 from __future__ import annotations
 
-from pathlib import Path
+import argparse
+import json
 import os
 import subprocess
 import sys
-import argparse
-import json
-import webbrowser
 import tempfile
+import webbrowser
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
-import plotly.io as pio
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 
-from nircls.io import prepare_inputs, summarize_dataset
-from nircls.pipeline import run_experiment
 from nircls.config_schema import ConfigModel, ValidationError
+from nircls.io import prepare_inputs, summarize_dataset
+from nircls.models.factory import MODEL_DESCRIPTIONS
+from nircls.pipeline import run_experiment
 from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.summarize import summarize_runs
-from nircls.models.factory import MODEL_DESCRIPTIONS
 
 
 def _figure_caption(stem: str) -> str:
@@ -110,9 +110,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 try:
                     import streamlit.components.v1 as components
 
-                    components.html(
-                        html_file.read_text(), height=600, scrolling=True
-                    )
+                    components.html(html_file.read_text(), height=600, scrolling=True)
                     st.caption(caption)
                 except Exception:
                     if png_file.exists():
@@ -148,6 +146,24 @@ def _render_dashboard(results_dir: Path) -> None:
     )
 
     with config_tab:
+        config_path = Path.home() / ".nircls" / "config.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        def _load_cfg() -> dict:
+            try:
+                with config_path.open() as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+
+        def _save_cfg(data: dict) -> None:
+            with config_path.open("w") as f:
+                json.dump(data, f, indent=2)
+
+        cfg_defaults = _load_cfg()
+        for key in ["input_path", "modelos", "preprocess", "email"]:
+            st.session_state.setdefault(key, cfg_defaults.get(key, ""))
+
         with st.form("run_form"):
             preparar = st.checkbox(
                 "Preparar", help="Executar preparação dos dados. Veja a aba Ajuda"
@@ -161,38 +177,56 @@ def _render_dashboard(results_dir: Path) -> None:
             )
             input_path = st.text_input(
                 "input_path",
+                key="input_path",
                 help="Arquivo ou glob de entrada. Consulte a aba Ajuda",
             )
             modelos = st.text_input(
                 "Modelos",
+                key="modelos",
                 help="Nomes dos modelos separados por vírgula. Veja a aba Ajuda",
             )
             preprocess = st.text_input(
                 "Preprocessadores",
+                key="preprocess",
                 help="Pré-processadores separados por vírgula. Veja a aba Ajuda",
             )
             email = st.text_input(
-                "E-mail", help="Endereço para notificações"
+                "E-mail", key="email", help="Endereço para notificações"
             )
             submitted = st.form_submit_button("Executar")
 
+        cols = st.columns(2)
+        if cols[0].button("Salvar"):
+            _save_cfg(
+                {
+                    k: st.session_state.get(k, "")
+                    for k in ["input_path", "modelos", "preprocess", "email"]
+                }
+            )
+            st.success("Configurações salvas.")
+        if cols[1].button("Carregar"):
+            loaded = _load_cfg()
+            for k in ["input_path", "modelos", "preprocess", "email"]:
+                st.session_state[k] = loaded.get(k, "")
+            st.experimental_rerun()
+
         if submitted:
+            _save_cfg(
+                {
+                    k: st.session_state.get(k, "")
+                    for k in ["input_path", "modelos", "preprocess", "email"]
+                }
+            )
             if not any([preparar, treinar, validar]):
                 st.warning("Selecione ao menos uma análise.")
             else:
                 cfg = {
                     "data": {"input_path": input_path},
                     "models": [
-                        {"name": m.strip()}
-                        for m in modelos.split(",")
-                        if m.strip()
+                        {"name": m.strip()} for m in modelos.split(",") if m.strip()
                     ],
                     "preprocess": {
-                        "steps": [
-                            s.strip()
-                            for s in preprocess.split(",")
-                            if s.strip()
-                        ]
+                        "steps": [s.strip() for s in preprocess.split(",") if s.strip()]
                     },
                     "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
                 }
@@ -201,9 +235,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 except ValidationError as exc:
                     st.error(f"Configuração inválida: {exc}")
                 else:
-                    run_dir = results_dir / datetime.now().strftime(
-                        "%Y%m%d_%H%M%S"
-                    )
+                    run_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
                     try:
                         with st.spinner("Executando..."):
                             if treinar or validar:
@@ -321,7 +353,9 @@ def _render_dashboard(results_dir: Path) -> None:
                                 if metrics:
                                     df = pd.DataFrame(metrics)
                                     if "n_components" in df.columns:
-                                        df["n_components"] = df["n_components"].astype("Int64")
+                                        df["n_components"] = df["n_components"].astype(
+                                            "Int64"
+                                        )
                                         cols = df.columns.tolist()
                                         if "model" in cols:
                                             cols.insert(
@@ -389,7 +423,9 @@ def _render_dashboard(results_dir: Path) -> None:
                                 if metrics:
                                     df = pd.DataFrame(metrics)
                                     if "n_components" in df.columns:
-                                        df["n_components"] = df["n_components"].astype("Int64")
+                                        df["n_components"] = df["n_components"].astype(
+                                            "Int64"
+                                        )
                                         cols = df.columns.tolist()
                                         if "model" in cols:
                                             cols.insert(
