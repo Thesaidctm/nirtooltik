@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 import subprocess
 import sys
@@ -32,6 +33,7 @@ from sklearn.model_selection import (
     ParameterGrid,
     RepeatedStratifiedKFold,
     StratifiedKFold,
+    cross_val_predict,
     train_test_split,
 )
 from sklearn.pipeline import Pipeline
@@ -318,9 +320,7 @@ def _save_metrics(
         val_csv = out_dir / "metrics_summary.csv"
         calib_csv = out_dir / "metrics_calibration.csv"
         val_df.to_csv(val_csv, mode="a", header=not val_csv.exists(), index=False)
-        calib_df.to_csv(
-            calib_csv, mode="a", header=not calib_csv.exists(), index=False
-        )
+        calib_df.to_csv(calib_csv, mode="a", header=not calib_csv.exists(), index=False)
         return
 
     with pd.ExcelWriter(out_dir / "metrics_summary.xlsx") as writer:
@@ -454,6 +454,7 @@ def _run_cv(
             "Arquivo de dados não encontrado. Verifique o caminho informado."
         ) from e
     summary = summarize_dataset(data)
+    is_loo = isinstance(outer, LeaveOneOut)
     rows: List[Dict[str, Any]] = []
     tgt_task = progress.add_task("Target", total=len(data))
     for ds in data:
@@ -492,6 +493,146 @@ def _run_cv(
             y_proba_all: List[np.ndarray] = []
             n_comp_list: List[int] = []
             best_steps_repr: Optional[List[str]] = None
+            if is_loo:
+                counts = np.bincount(y_enc)
+                inner_splits = int(min(inner_folds, counts.min()))
+                inner_splits = max(inner_splits, 2)
+                inner = StratifiedKFold(
+                    n_splits=inner_splits,
+                    shuffle=True,
+                    random_state=random_state,
+                )
+                gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=1)
+                gs.fit(X.values, y_enc)
+                n_comp = _get_n_components(gs.best_params_)
+                if n_comp is not None:
+                    n_comp_list.append(n_comp)
+                best = gs.best_estimator_
+                if best_steps_repr is None:
+                    best_steps_repr = [
+                        repr(v) for k, v in best.named_steps.items() if k != "clf"
+                    ]
+                calib_cfg = m_cfg.get("calibration")
+                if calib_cfg:
+                    best = CalibratedClassifierCV(
+                        estimator=best,
+                        method=calib_cfg.get("method", "sigmoid"),
+                        cv=calib_cfg.get("cv", 5),
+                    )
+                yhat = cross_val_predict(
+                    best, X.values, y_enc, cv=LeaveOneOut(), n_jobs=1
+                )
+                scores_val["F1-macro"].append(f1_score(y_enc, yhat, average="macro"))
+                scores_val["BalancedAcc"].append(balanced_accuracy_score(y_enc, yhat))
+                scores_val["Accuracy"].append(accuracy_score(y_enc, yhat))
+                proba_fn = getattr(best, "predict_proba", None)
+                if proba_fn is not None:
+                    proba = cross_val_predict(
+                        best,
+                        X.values,
+                        y_enc,
+                        cv=LeaveOneOut(),
+                        method="predict_proba",
+                        n_jobs=1,
+                    )
+                    y_proba_all.append(proba)
+                    brier = np.mean(
+                        [
+                            brier_score_loss((y_enc == k).astype(int), proba[:, k])
+                            for k in range(len(classes))
+                        ]
+                    )
+                    scores_val["Brier"].append(float(brier))
+                    scores_val["ECE"].append(
+                        expected_calibration_error(y_enc, proba, n_bins=15)
+                    )
+                best.fit(X.values, y_enc)
+                yhat_tr = best.predict(X.values)
+                scores_train["F1-macro"].append(
+                    f1_score(y_enc, yhat_tr, average="macro")
+                )
+                scores_train["BalancedAcc"].append(
+                    balanced_accuracy_score(y_enc, yhat_tr)
+                )
+                scores_train["Accuracy"].append(accuracy_score(y_enc, yhat_tr))
+                if proba_fn is not None:
+                    proba_tr = best.predict_proba(X.values)
+                    brier_tr = np.mean(
+                        [
+                            brier_score_loss((y_enc == k).astype(int), proba_tr[:, k])
+                            for k in range(len(classes))
+                        ]
+                    )
+                    scores_train["Brier"].append(float(brier_tr))
+                    scores_train["ECE"].append(
+                        expected_calibration_error(y_enc, proba_tr, n_bins=15)
+                    )
+                y_true_all.append(y_enc)
+                y_pred_all.append(yhat)
+                row = {
+                    "file": ds["file"],
+                    "target": ds["target"],
+                    "model": name,
+                    "calibrated": bool(m_cfg.get("calibration")),
+                }
+                row.update(
+                    {f"{k}_mean": float(np.mean(v)) for k, v in scores_val.items() if v}
+                )
+                row.update(
+                    {
+                        f"{k}_std": float(np.std(v, ddof=1))
+                        for k, v in scores_val.items()
+                        if v and len(v) > 1
+                    }
+                )
+                row.update(
+                    {
+                        f"train_{k}_mean": float(np.mean(v))
+                        for k, v in scores_train.items()
+                        if v
+                    }
+                )
+                row.update(
+                    {
+                        f"train_{k}_std": float(np.std(v, ddof=1))
+                        for k, v in scores_train.items()
+                        if v and len(v) > 1
+                    }
+                )
+                for m in ["Brier", "ECE"]:
+                    row.setdefault(f"{m}_mean", None)
+                    row.setdefault(f"{m}_std", None)
+                    row.setdefault(f"train_{m}_mean", None)
+                    row.setdefault(f"train_{m}_std", None)
+                if n_comp_list:
+                    row["n_components"] = int(np.median(n_comp_list))
+                if best_steps_repr is not None:
+                    row["preprocess_steps"] = best_steps_repr
+                rows.append(row)
+                _save_metrics(
+                    [row],
+                    out_dir,
+                    cfg.get("preprocess", {}).get("steps", []),
+                    append=True,
+                )
+                y_true = np.concatenate(y_true_all)
+                y_pred = np.concatenate(y_pred_all)
+                y_proba = np.vstack(y_proba_all) if y_proba_all else None
+                _save_plots(
+                    ds["file"],
+                    ds["target"],
+                    name,
+                    classes,
+                    out_dir,
+                    y_true,
+                    y_pred,
+                    y_proba,
+                    interactive=interactive,
+                )
+                progress.advance(model_task)
+                del gs, best, yhat, yhat_tr, y_true_all, y_pred_all, y_proba_all
+                gc.collect()
+                continue
             if cv_method == "spxy":
                 outer_splits = spxy_split(X.values, y_enc, outer.get_n_splits(X, y_enc))
             elif cv_method == "group":
@@ -670,6 +811,8 @@ def _run_cv(
                 interactive=interactive,
             )
             progress.advance(model_task)
+            del gs, best, y_true_all, y_pred_all, y_proba_all
+            gc.collect()
         progress.advance(tgt_task)
     _save_metrics(rows, out_dir, cfg.get("preprocess", {}).get("steps", []))
     if cfg.get("astm"):
