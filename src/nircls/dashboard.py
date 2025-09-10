@@ -164,31 +164,35 @@ def _render_dashboard(results_dir: Path) -> None:
         for key in ["input_path", "modelos", "preprocess", "email"]:
             st.session_state.setdefault(key, cfg_defaults.get(key, ""))
 
+        ajuda_link = "Consulte a [aba Ajuda](#ajuda)"
+
         with st.form("run_form"):
             preparar = st.checkbox(
-                "Preparar", help="Executar preparação dos dados. Veja a aba Ajuda"
+                "Preparar",
+                help=f"Executar preparação dos dados. {ajuda_link}",
             )
             treinar = st.checkbox(
-                "Treinar", help="Executar etapa de treino. Veja a aba Ajuda"
+                "Treinar",
+                help=f"Executar etapa de treino. {ajuda_link}",
             )
             validar = st.checkbox(
                 "Validar",
-                help="Executar validação cruzada. Veja a aba Ajuda",
+                help=f"Executar validação cruzada. {ajuda_link}",
             )
             input_path = st.text_input(
                 "input_path",
                 key="input_path",
-                help="Arquivo ou glob de entrada. Consulte a aba Ajuda",
+                help=f"Arquivo ou glob de entrada. {ajuda_link}",
             )
             modelos = st.text_input(
                 "Modelos",
                 key="modelos",
-                help="Nomes dos modelos separados por vírgula. Veja a aba Ajuda",
+                help=f"Nomes dos modelos separados por vírgula. {ajuda_link}",
             )
             preprocess = st.text_input(
                 "Preprocessadores",
                 key="preprocess",
-                help="Pré-processadores separados por vírgula. Veja a aba Ajuda",
+                help=f"Pré-processadores separados por vírgula. {ajuda_link}",
             )
             email = st.text_input("E-mail", help="Endereço para notificações")
             email = st.text_input(
@@ -520,15 +524,40 @@ def _render_dashboard(results_dir: Path) -> None:
                 st.dataframe(styled, use_container_width=True)
 
     with help_tab:
+        st.markdown("<a id='ajuda'></a>", unsafe_allow_html=True)
         st.subheader("Modelos disponíveis")
+        model_apps = {
+            "PLSDA": "Análises espectrais e quimiometria",
+            "SVM_RBF": "Classificação não linear",
+            "SVM_LINEAR": "Classificação linear de alta dimensionalidade",
+            "RF": "Dados tabulares com muitas variáveis",
+            "GB": "Classificação em dados estruturados",
+            "ET": "Ensembles de árvores para dados complexos",
+            "ADABOOST": "Boosting adaptativo",
+            "LOGREG": "Classificação binária simples",
+            "QDA": "Classes com covariâncias diferentes",
+            "XGBOOST": "Boosting gradiente otimizado",
+            "LGBM": "Grandes volumes de dados",
+            "CATBOOST": "Dados com muitas variáveis categóricas",
+            "MLP": "Padrões não lineares",
+            "DT": "Modelos interpretáveis",
+            "KNN": "Classificação baseada em proximidade",
+            "CNN1D": "Sinais espectrais unidimensionais",
+            "LSTM1D": "Séries temporais sequenciais",
+            "GAUSSIANNB": "Variáveis contínuas com hipótese gaussiana",
+            "NB": "Classificação probabilística simples",
+            "MULTINB": "Textos ou contagens discretas",
+            "BERNOULLINB": "Dados binários",
+        }
         help_df = pd.DataFrame(
-            [(k, v) for k, v in sorted(MODEL_DESCRIPTIONS.items())],
-            columns=["Modelo", "Descrição"],
+            [
+                (k, v, model_apps.get(k, "-"))
+                for k, v in sorted(MODEL_DESCRIPTIONS.items())
+            ],
+            columns=["Modelo", "Descrição", "Aplicações Típicas"],
         )
-        st.dataframe(help_df, hide_index=True)
-        st.caption(
-            "Aplicações típicas variam conforme o contexto; consulte a literatura especializada."
-        )
+        with st.expander("Tabela de modelos"):
+            st.dataframe(help_df, hide_index=True)
 
 
 if __name__ == "__main__":
