@@ -424,7 +424,7 @@ def _run_cv(
     *,
     random_state: int,
     interactive: bool = False,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
 ) -> None:
     """Run cross-validation for configured datasets and models.
 
@@ -444,6 +444,7 @@ def _run_cv(
         Number of parallel jobs for ``GridSearchCV``.
     """
 
+    n_jobs = max(1, n_jobs)
     logger.info("Starting cross-validation")
     try:
         data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
@@ -632,7 +633,17 @@ def _run_cv(
                     interactive=interactive,
                 )
                 progress.advance(model_task)
-                del gs, best, proba, proba_tr, yhat, yhat_tr, y_true_all, y_pred_all, y_proba_all
+                del (
+                    gs,
+                    best,
+                    proba,
+                    proba_tr,
+                    yhat,
+                    yhat_tr,
+                    y_true_all,
+                    y_pred_all,
+                    y_proba_all,
+                )
                 gc.collect()
                 continue
             if cv_method == "spxy":
@@ -817,7 +828,17 @@ def _run_cv(
                 interactive=interactive,
             )
             progress.advance(model_task)
-            del gs, best, proba, proba_tr, yhat, yhat_tr, y_true_all, y_pred_all, y_proba_all
+            del (
+                gs,
+                best,
+                proba,
+                proba_tr,
+                yhat,
+                yhat_tr,
+                y_true_all,
+                y_pred_all,
+                y_proba_all,
+            )
             gc.collect()
         progress.advance(tgt_task)
     _save_metrics(rows, out_dir, cfg.get("preprocess", {}).get("steps", []))
@@ -837,7 +858,7 @@ def _run_holdout(
     random_state: int,
     *,
     interactive: bool = False,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
 ) -> None:
     """Evaluate models using a single train/test split.
 
@@ -857,6 +878,7 @@ def _run_holdout(
         Number of parallel jobs for ``GridSearchCV``.
     """
 
+    n_jobs = max(1, n_jobs)
     try:
         data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
         _maybe_run_qc(cfg, data, out_dir)
@@ -1011,7 +1033,7 @@ def run_multiple_eval(
     *,
     random_state: int = 42,
     interactive: bool = False,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
     mlflow_uri: Optional[str] = None,
 ) -> List[Tuple[Path, Path]]:
     """Run evaluation for multiple cross-validation strategies.
@@ -1033,6 +1055,7 @@ def run_multiple_eval(
         for each evaluated strategy.
     """
 
+    n_jobs = max(1, n_jobs)
     _validate_cfg(cfg, need_data=True, need_cv=True, need_models=True)
     strategies = cfg.get("cv", {}).get("strategies", [])
     random_state = cfg.get("cv", {}).get("random_state", random_state)
@@ -1239,13 +1262,14 @@ def train_and_save(
     *,
     random_state: int = 42,
     interactive: bool = False,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
     mlflow_uri: Optional[str] = None,
     gs_verbose: int = 0,
     show_progress: bool = True,
 ) -> Tuple[Path, Path]:
     """Train final model and persist artefacts."""
 
+    n_jobs = max(1, n_jobs)
     logger.info("Starting training pipeline")
     try:
         mlflow_cm = nullcontext()
