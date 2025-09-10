@@ -8,6 +8,7 @@ import argparse
 import json
 import webbrowser
 import tempfile
+from datetime import datetime
 
 import pandas as pd
 import plotly.io as pio
@@ -15,6 +16,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from nircls.io import prepare_inputs, summarize_dataset
+from nircls.pipeline import run_experiment
+from nircls.config_schema import ConfigModel, ValidationError
+from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.summarize import summarize_runs
 
@@ -131,9 +135,85 @@ def _render_dashboard(results_dir: Path) -> None:
                         mime="text/html",
                     )
 
-    prep_tab, exec_tab, results_tab, summary_tab = st.tabs(
-        ["Preparar Dados", "Execução", "Resultados", "Resumo"]
+    config_tab, prep_tab, exec_tab, results_tab, summary_tab = st.tabs(
+        [
+            "Configurar & Executar",
+            "Preparar Dados",
+            "Execução",
+            "Resultados",
+            "Resumo",
+        ]
     )
+
+    with config_tab:
+        with st.form("run_form"):
+            preparar = st.checkbox(
+                "Preparar", help="Executar preparação dos dados"
+            )
+            treinar = st.checkbox(
+                "Treinar", help="Executar etapa de treino"
+            )
+            validar = st.checkbox(
+                "Validar", help="Executar validação cruzada"
+            )
+            input_path = st.text_input(
+                "input_path", help="Arquivo ou glob de entrada"
+            )
+            modelos = st.text_input(
+                "Modelos", help="Nomes dos modelos separados por vírgula"
+            )
+            preprocess = st.text_input(
+                "Preprocessadores",
+                help="Pré-processadores separados por vírgula",
+            )
+            email = st.text_input(
+                "E-mail", help="Endereço para notificações"
+            )
+            submitted = st.form_submit_button("Executar")
+
+        if submitted:
+            if not any([preparar, treinar, validar]):
+                st.warning("Selecione ao menos uma análise.")
+            else:
+                cfg = {
+                    "data": {"input_path": input_path},
+                    "models": [
+                        {"name": m.strip()}
+                        for m in modelos.split(",")
+                        if m.strip()
+                    ],
+                    "preprocess": {
+                        "steps": [
+                            s.strip()
+                            for s in preprocess.split(",")
+                            if s.strip()
+                        ]
+                    },
+                    "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
+                }
+                try:
+                    ConfigModel(**cfg)
+                except ValidationError as exc:
+                    st.error(f"Configuração inválida: {exc}")
+                else:
+                    run_dir = results_dir / datetime.now().strftime(
+                        "%Y%m%d_%H%M%S"
+                    )
+                    try:
+                        with st.spinner("Executando..."):
+                            if treinar or validar:
+                                run_experiment(cfg, run_dir)
+                            elif preparar:
+                                prepare_inputs(cfg["data"], use_cache=False)
+                        st.success("Execução concluída.")
+                        if email:
+                            enviar_email(
+                                "Execução concluída",
+                                "A execução foi concluída.",
+                                email,
+                            )
+                    except Exception as exc:
+                        st.error(f"Erro na execução: {exc}")
 
     with prep_tab:
         uploaded = st.file_uploader(
