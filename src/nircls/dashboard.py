@@ -218,28 +218,27 @@ def _render_dashboard(results_dir: Path) -> None:
                         file_name=html_file.name,
                         mime="text/html",
                     )
-    config_tab, prep_tab, exec_tab, results_tab, summary_tab, help_tab = st.tabs(
+
+    (
+        config_tab,
+        settings_tab,
+        prep_tab,
+        exec_tab,
+        results_tab,
+        summary_tab,
+        logs_tab,
+        help_tab,
+    ) = st.tabs(
         [
+            "Configurar & Executar",
             "Configurações",
             "Preparar Dados",
             "Execução",
             "Resultados",
             "Resumo",
+            "Logs",
             "Ajuda",
         ]
-
-    config_tab, settings_tab, prep_tab, exec_tab, results_tab, summary_tab, help_tab = (
-        st.tabs(
-            [
-                "Configurar & Executar",
-                "Configurações",
-                "Preparar Dados",
-                "Execução",
-                "Resultados",
-                "Resumo",
-                "Ajuda",
-            ]
-        )
     )
 
     with config_tab:
@@ -673,6 +672,18 @@ def _render_dashboard(results_dir: Path) -> None:
 
                 styled = display_df.style.apply(_highlight_best, axis=0)
                 st.dataframe(styled, use_container_width=True)
+
+    with logs_tab:
+        log_path = Path.home() / ".nircls" / "nircls.log"
+        if log_path.exists():
+            lines = log_path.read_text(encoding="utf-8").splitlines()[-200:]
+            st.text_area("Log", "\n".join(lines), height=300)
+            with log_path.open("rb") as f:
+                st.download_button(
+                    "Baixar log", f, file_name=log_path.name, mime="text/plain"
+                )
+        else:
+            st.info(f"Arquivo de log não encontrado em {log_path}")
 
     with help_tab:
         st.markdown("<a id='ajuda'></a>", unsafe_allow_html=True)
