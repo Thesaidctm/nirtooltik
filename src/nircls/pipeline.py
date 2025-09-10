@@ -497,6 +497,14 @@ def _run_cv(
             outer = GroupKFold(n_splits=n_splits)
         cv_method = cv_cfg.get("cv_method", "stratified").lower()
         inner_folds = cv_cfg.get("inner_folds", 3)
+        if inner_folds in (None, False):
+            inner_folds = 3
+        try:
+            inner_folds = int(inner_folds)
+        except (TypeError, ValueError) as exc:  # pragma: no cover - sanity check
+            raise ModelError("'inner_folds' must be an integer >= 2") from exc
+        if inner_folds < 2:
+            raise ModelError("'inner_folds' must be at least 2")
         models = build_pipeline_from_config(cfg)
         model_cfgs = cfg.get("models", [])
         model_task = progress.add_task("Model", total=len(models))
