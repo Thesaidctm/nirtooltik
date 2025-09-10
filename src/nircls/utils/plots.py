@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+import importlib.util
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from sklearn.metrics import roc_curve
 from sklearn.preprocessing import label_binarize
-logger = logging.getLogger(__name__)
+
 from .logging import logger
 
 
@@ -31,33 +31,31 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
     out_base.parent.mkdir(parents=True, exist_ok=True)
     out = out_base.with_suffix(".png")
     logger.debug("Exporting %s", out)
-    try:
-        logger.debug("Exporting figure to %s", out)
-        fig.write_image(out)
-        logger.debug("Exported %s", out)
-    except Exception:
-        logger.exception("Export failed for %s", out)
-        out.touch()
+
+    if importlib.util.find_spec("kaleido") is None:
+        logger.warning(
+            "Kaleido engine not found. Install with 'pip install -U kaleido' to enable static image export."
+        )
+    else:
+        try:
+            fig.write_image(out)
+            logger.debug("Exported %s", out)
+        except Exception as exc:  # pragma: no cover - small message
+            logger.warning("Export failed for %s: %s", out, exc)
+
     if interactive:
         html_out = out_base.with_suffix(".html")
         json_out = out_base.with_suffix(".json")
         try:
             fig.write_html(html_out, include_plotlyjs="cdn")
-            json_out.write_text(fig.to_json())
             logger.debug("Exported %s", html_out)
+        except Exception as exc:  # pragma: no cover - small message
+            logger.warning("Export failed for %s: %s", html_out, exc)
+        try:
+            json_out.write_text(fig.to_json())
             logger.debug("Exported %s", json_out)
-        except Exception:
-            logger.exception("Export failed for %s", html_out)
-            html_out.write_text("")
-            json_out.write_text("")
-            html_path = out_base.with_suffix(".html")
-            json_path = out_base.with_suffix(".json")
-            logger.debug("Exporting interactive figure to %s", html_path)
-            fig.write_html(html_path, include_plotlyjs="cdn")
-            json_path.write_text(fig.to_json())
-        except Exception:
-            html_path.write_text("")
-            json_path.write_text("")
+        except Exception as exc:  # pragma: no cover - small message
+            logger.warning("Export failed for %s: %s", json_out, exc)
 
 
 def plot_confusion(
