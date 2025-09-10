@@ -11,7 +11,6 @@ import os
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Optional
 
 from .logging import logger
 
@@ -73,43 +72,33 @@ def _save_config(cfg: dict) -> None:
         logger.debug("Could not write email config", exc_info=True)
 
 
-def enviar_email(
-    subject: str,
-    body: str,
-    to_addr: Optional[str] = None,
-    *,
-    to: Optional[str] = None,
-) -> None:
-    """Send an email notification using the configuration from :func:`_load_config`.
+def enviar_email(subject: str, body: str, to_addr: str) -> None:
+    """Send an email notification using credentials from :func:`_load_config`.
 
     Parameters
     ----------
     subject, body:
         Email subject and message body.
-    to_addr, to:
-        Destination address. ``to`` is kept for backwards compatibility and
-        overrides ``to_addr`` if provided.
+    to_addr:
+        Destination address.
     """
 
-    if to is not None:
-        to_addr = to
     cfg = _load_config()
     host = cfg.get("host")
     port = cfg.get("port")
     user = cfg.get("user")
     password = cfg.get("password")
     from_addr = cfg.get("from_addr") or user
-    to = to_addr or cfg.get("to_addr")
     use_tls = str(cfg.get("use_tls", "1")) not in {"0", "false", "False"}
 
-    if not all([host, port, user, password, to]):  # pragma: no cover - best effort
+    if not all([host, port, user, password, to_addr]):  # pragma: no cover - best effort
         logger.debug("Incomplete email configuration; skipping notification")
         return
 
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = from_addr
-    msg["To"] = to
+    msg["To"] = to_addr
     msg.set_content(body)
 
     try:  # pragma: no cover - network operations

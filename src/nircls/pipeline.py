@@ -1136,11 +1136,12 @@ def run_multiple_eval(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     email = cfg.get("notification_email")
-    enviar_email(
-        subject="Validação iniciada",
-        body="O processo de validação foi iniciado.",
-        to=email,
-    )
+    if email:
+        enviar_email(
+            subject="Validação iniciada",
+            body="O processo de validação foi iniciado.",
+            to_addr=email,
+        )
 
     with mlflow_cm:
         if mlflow_enabled:
@@ -1329,11 +1330,12 @@ def run_multiple_eval(
                 progress.advance(strat_task)
 
     email = cfg.get("notification_email")
-    enviar_email(
-        subject="Validação concluída",
-        body="A validação foi concluída.",
-        to=email,
-    )
+    if email:
+        enviar_email(
+            subject="Validação concluída",
+            body="A validação foi concluída.",
+            to_addr=email,
+        )
     return outputs
 
 
@@ -1353,6 +1355,7 @@ def train_and_save(
 
     n_jobs = max(1, n_jobs)
     logger.info("Starting training pipeline")
+    email = cfg.get("notification_email")
     try:
         mlflow_cm = nullcontext()
         if mlflow_uri:
@@ -1538,25 +1541,12 @@ def train_and_save(
     except Exception:
         logger.error("Training failed", exc_info=True)
         raise
-    enviar_email(
-        "Processamento X terminado",
-        "O processamento X foi concluído. Iniciando o Y…",
-    )
-    email_fn = globals().get("enviar_email")
-    if callable(email_fn):
-        email = cfg.get("notification_email")
-        kwargs = {
-            "subject": "Treinamento concluído",
-            "body": "Treinamento concluído. Iniciando validação...",
-        }
-        if email:
-            kwargs["to"] = email
-        email_fn(**kwargs)
-
-    enviar_email(
-        subject="Treinamento concluído",
-        body="Treinamento concluído. Iniciando validação...",
-    )
+    if email:
+        enviar_email(
+            subject="Treinamento concluído",
+            body="Treinamento concluído. Iniciando validação...",
+            to_addr=email,
+        )
 
     return out_dir / "metrics.json", out_dir / "figures"
 
@@ -1595,6 +1585,7 @@ def run_experiment(
         :func:`train_and_save` e :func:`run_multiple_eval`.
     """
 
+    email = cfg.get("notification_email")
     try:
         _validate_cfg(cfg, need_data=True, need_models=True, need_cv=True)
         prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
@@ -1622,7 +1613,8 @@ def run_experiment(
         return train_outputs, cv_outputs
     except Exception as exc:
         tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-        enviar_email("Erro no processamento", f"{exc}\n\n{tb}")
+        if email:
+            enviar_email("Erro no processamento", f"{exc}\n\n{tb}", to_addr=email)
         raise
 
 

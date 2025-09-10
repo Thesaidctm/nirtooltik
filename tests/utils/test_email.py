@@ -14,14 +14,13 @@ def test_enviar_email(monkeypatch):
     monkeypatch.setenv("NIRCLS_EMAIL_USER", "user@test")
     monkeypatch.setenv("NIRCLS_EMAIL_PASS", "pass")
     monkeypatch.setenv("NIRCLS_EMAIL_FROM", "from@test")
-    monkeypatch.setenv("NIRCLS_EMAIL_TO", "to@test")
 
     smtp_mock = MagicMock()
     smtp_cls = MagicMock(return_value=smtp_mock)
     smtp_mock.__enter__.return_value = smtp_mock
     monkeypatch.setattr(smtplib, "SMTP", smtp_cls)
 
-    enviar_email("subject", "body")
+    enviar_email("subject", "body", "to@test")
 
     smtp_cls.assert_called_once_with("smtp.test", 25)
     smtp_mock.starttls.assert_called_once()

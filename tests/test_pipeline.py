@@ -465,8 +465,8 @@ def test_run_multiple_eval_sends_notification_email(tmp_path, monkeypatch):
 
     calls = []
 
-    def fake_enviar_email(**kwargs):
-        calls.append(kwargs)
+    def fake_enviar_email(subject: str, body: str, to_addr: str) -> None:
+        calls.append((subject, body, to_addr))
 
     monkeypatch.setattr(
         "nircls.pipeline.enviar_email", fake_enviar_email, raising=False
@@ -475,4 +475,4 @@ def test_run_multiple_eval_sends_notification_email(tmp_path, monkeypatch):
     out_dir = tmp_path / "out"
     run_multiple_eval(cfg, out_dir, n_jobs=1)
     assert len(calls) == 2
-    assert all(call.get("to") == "user@example.com" for call in calls)
+    assert all(call[2] == "user@example.com" for call in calls)

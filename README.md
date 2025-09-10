@@ -701,12 +701,30 @@ export NIRCLS_EMAIL_HOST="smtp.exemplo.com"
 export NIRCLS_EMAIL_PORT="587"
 export NIRCLS_EMAIL_USER="usuario"
 export NIRCLS_EMAIL_PASS="senha"
-export NIRCLS_EMAIL_TO="destinatario@exemplo.com"
 ```
 
-Opcionalmente, defina `NIRCLS_EMAIL_FROM` e `NIRCLS_EMAIL_TLS` (`0` para
-desativar TLS). As mesmas chaves podem ser armazenadas em um arquivo JSON
-apontado por `NIRCLS_EMAIL_CONFIG` (padrão `~/.nircls_email.json`).
+As mesmas chaves podem ser armazenadas em um arquivo JSON apontado por
+`NIRCLS_EMAIL_CONFIG` (padrão `~/.nircls_email.json`):
+
+```json
+{
+  "host": "smtp.exemplo.com",
+  "port": 587,
+  "user": "usuario",
+  "password": "senha"
+}
+```
+
+Para enviar um e-mail diretamente, utilize:
+
+```python
+from nircls.utils.email import enviar_email
+
+enviar_email("Assunto", "Corpo da mensagem", "destinatario@exemplo.com")
+```
+
+Ao definir `notification_email` no arquivo YAML de configuração do experimento,
+a pipeline chamará `enviar_email` automaticamente.
 
 ## Créditos/Autoria
 
