@@ -31,6 +31,7 @@ from nircls.utils.email import _save_config as _save_email_config
 from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.palettes import Palette
+from nircls.utils.plots import _export
 from nircls.utils.summarize import summarize_runs
 from nircls.utils.update import check_latest_version
 from nircls.utils.zip import zip_dir
@@ -44,6 +45,8 @@ def _figure_caption(stem: str) -> str:
         "confusion": "Matriz de Confusão",
         "roc": "Curva ROC",
         "reliability": "Diagrama de Confiabilidade",
+        "class_counts": "Contagem de classes",
+        "mean_std": "Espectro médio ± desvio padrão",
     }.get(suffix, stem)
 
 
@@ -102,6 +105,7 @@ def _render_dashboard(results_dir: Path) -> None:
 
     results_dir = Path(results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
+    prep_fig_dir = results_dir / "prep_figures"
 
     st.set_page_config(page_title="nircls Dashboard", page_icon="🧪", layout="wide")
     config_path = Path.home() / ".nircls" / "config.json"
@@ -194,54 +198,60 @@ def _render_dashboard(results_dir: Path) -> None:
         if p.is_dir() and any(p.glob("**/metrics.json"))
     ]
 
-    def _display_figures(fig_dir: Path) -> None:
-        bases = {
-            p.with_suffix("")
-            for p in fig_dir.glob("*")
-            if p.suffix in {".png", ".json", ".html"}
-        }
-        for base in sorted(bases):
-            json_file = base.with_suffix(".json")
-            png_file = base.with_suffix(".png")
-            html_file = base.with_suffix(".html")
-            caption = _figure_caption(base.name)
-            if json_file.exists():
-                try:
-                    fig = pio.from_json(json_file.read_text())
-                except Exception:
-                    fig = None
-                if fig is not None:
-                    st.plotly_chart(fig, use_container_width=True)
-                    st.caption(caption)
+    def _display_figures(fig_dir: Path, prep_dir: Path | None = None) -> None:
+        dirs = [fig_dir]
+        if prep_dir is not None and prep_dir.exists() and prep_dir != fig_dir:
+            dirs.insert(0, prep_dir)
+        for current in dirs:
+            bases = {
+                p.with_suffix("")
+                for p in current.glob("*")
+                if p.suffix in {".png", ".json", ".html"}
+            }
+            for base in sorted(bases):
+                json_file = base.with_suffix(".json")
+                png_file = base.with_suffix(".png")
+                html_file = base.with_suffix(".html")
+                caption = _figure_caption(base.name)
+                if json_file.exists():
+                    try:
+                        fig = pio.from_json(json_file.read_text())
+                    except Exception:
+                        fig = None
+                    if fig is not None:
+                        st.plotly_chart(fig, use_container_width=True)
+                        st.caption(caption)
+                    elif png_file.exists():
+                        st.image(str(png_file), caption=caption)
+                elif html_file.exists():
+                    try:
+                        import streamlit.components.v1 as components
+
+                        components.html(
+                            html_file.read_text(), height=600, scrolling=True
+                        )
+                        st.caption(caption)
+                    except Exception:
+                        if png_file.exists():
+                            st.image(str(png_file), caption=caption)
                 elif png_file.exists():
                     st.image(str(png_file), caption=caption)
-            elif html_file.exists():
-                try:
-                    import streamlit.components.v1 as components
-
-                    components.html(html_file.read_text(), height=600, scrolling=True)
-                    st.caption(caption)
-                except Exception:
-                    if png_file.exists():
-                        st.image(str(png_file), caption=caption)
-            elif png_file.exists():
-                st.image(str(png_file), caption=caption)
-            if png_file.exists():
-                with png_file.open("rb") as f:
-                    st.download_button(
-                        f"Download {png_file.name}",
-                        f,
-                        file_name=png_file.name,
-                        mime="image/png",
-                    )
-            if html_file.exists():
-                with html_file.open("r") as f:
-                    st.download_button(
-                        f"Download {html_file.name}",
-                        f,
-                        file_name=html_file.name,
-                        mime="text/html",
-                    )
+                if png_file.exists():
+                    with png_file.open("rb") as f:
+                        st.download_button(
+                            f"Download {png_file.name}",
+                            f,
+                            file_name=png_file.name,
+                            mime="image/png",
+                        )
+                if html_file.exists():
+                    with html_file.open("r") as f:
+                        st.download_button(
+                            f"Download {html_file.name}",
+                            f,
+                            file_name=html_file.name,
+                            mime="text/html",
+                        )
 
     def _render_actions(run_dirs: list[Path]) -> None:
         for run in run_dirs:
@@ -633,6 +643,8 @@ def _render_dashboard(results_dir: Path) -> None:
             st.success(tr("Configurações salvas."))
 
     with prep_tab:
+        if prep_fig_dir.exists():
+            _display_figures(prep_fig_dir)
         uploaded = st.file_uploader(
             tr("Arquivo CSV ou XLSX"),
             type=["csv", "xlsx", "xls"],
@@ -721,6 +733,26 @@ def _render_dashboard(results_dir: Path) -> None:
                             counts.columns = ["class", "count"]
                             fig = px.bar(counts, x="class", y="count")
                             st.plotly_chart(fig, use_container_width=True)
+                            stem = ds["target"].replace(" ", "_")
+                            out_base = prep_fig_dir / f"{stem}__class_counts"
+                            _export(fig, out_base, interactive=True)
+                            png_file = out_base.with_suffix(".png")
+                            with png_file.open("rb") as f:
+                                st.download_button(
+                                    f"Download {png_file.name}",
+                                    f,
+                                    file_name=png_file.name,
+                                    mime="image/png",
+                                )
+                            html_file = out_base.with_suffix(".html")
+                            if html_file.exists():
+                                with html_file.open("r") as f:
+                                    st.download_button(
+                                        f"Download {html_file.name}",
+                                        f,
+                                        file_name=html_file.name,
+                                        mime="text/html",
+                                    )
                             mean = ds["X"].mean()
                             std = ds["X"].std()
                             wl = mean.index.astype(float)
@@ -750,6 +782,25 @@ def _render_dashboard(results_dir: Path) -> None:
                                 yaxis_title="Reflectância",
                             )
                             st.plotly_chart(fig2, use_container_width=True)
+                            out_base2 = prep_fig_dir / f"{stem}__mean_std"
+                            _export(fig2, out_base2, interactive=True)
+                            png_file = out_base2.with_suffix(".png")
+                            with png_file.open("rb") as f:
+                                st.download_button(
+                                    f"Download {png_file.name}",
+                                    f,
+                                    file_name=png_file.name,
+                                    mime="image/png",
+                                )
+                            html_file = out_base2.with_suffix(".html")
+                            if html_file.exists():
+                                with html_file.open("r") as f:
+                                    st.download_button(
+                                        f"Download {html_file.name}",
+                                        f,
+                                        file_name=html_file.name,
+                                        mime="text/html",
+                                    )
                     except Exception as exc:  # pragma: no cover - display error
                         st.error(tr("Erro ao preparar dados: {exc}").format(exc=exc))
                     finally:
@@ -803,7 +854,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                 )
                             fig_dir = strat_dir / "figures"
                             if fig_dir.exists():
-                                _display_figures(fig_dir)
+                                _display_figures(fig_dir, prep_fig_dir)
                             qc_path = strat_dir / "qc_report.json"
                             if qc_path.exists():
                                 try:
@@ -886,7 +937,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                 )
                             fig_dir = strat_dir / "figures"
                             if fig_dir.exists():
-                                _display_figures(fig_dir)
+                                _display_figures(fig_dir, prep_fig_dir)
             elif compare_runs:
                 st.warning(tr("Selecione ao menos duas execuções para comparar."))
 

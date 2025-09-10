@@ -427,6 +427,10 @@ produzidos:
 * `figures/` – gráficos de curva ROC, matriz de confusão e confiabilidade,
   além de `*.confusion.csv` com a matriz em formato tabular para análises
   externas.
+* `prep_figures/` – figuras geradas na aba de preparação de dados do
+  dashboard. São salvas em `results/prep_figures` e reutilizadas
+  automaticamente em sessões futuras, permitindo download sem necessidade de
+  novo processamento.
 * arquivos `shap_*.html` – figuras interativas de explicabilidade geradas com
   [SHAP](https://shap.readthedocs.io/) (quando a dependência opcional estiver
   instalada).
