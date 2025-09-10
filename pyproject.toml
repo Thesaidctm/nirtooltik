@@ -21,6 +21,7 @@ dependencies = [
   "rich",
   "pyyaml",
   "joblib",
+  "psutil",
   "openpyxl",
   "tqdm",
   "pydantic<2",

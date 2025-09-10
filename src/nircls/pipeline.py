@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import sklearn
 import yaml  # type: ignore[import-untyped]
+import psutil
 from joblib import dump, load
 from rich.console import Console
 from rich.progress import Progress
@@ -425,6 +426,7 @@ def _run_cv(
     random_state: int,
     interactive: bool = False,
     n_jobs: int = 1,
+    log_memory: bool = False,
 ) -> None:
     """Run cross-validation for configured datasets and models.
 
@@ -474,6 +476,10 @@ def _run_cv(
             progress.update(model_task, description=f"Model: {name}")
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
+            mem_start = None
+            if log_memory:
+                mem_start = psutil.Process().memory_info().rss / 1e6
+                logger.debug("memory start %.3f MB", mem_start)
             yscramble_iter = int(m_cfg.get("y_scramble_n_iter", 20))
             scores_val: Dict[str, List[float]] = {
                 "F1-macro": [],
@@ -605,6 +611,12 @@ def _run_cv(
                     row["n_components"] = int(np.median(n_comp_list))
                 if best_steps_repr is not None:
                     row["preprocess_steps"] = best_steps_repr
+                if log_memory:
+                    mem_end = psutil.Process().memory_info().rss / 1e6
+                    logger.debug("memory end %.3f MB", mem_end)
+                    if mem_start is not None:
+                        row["memory_mb_start"] = float(mem_start)
+                    row["memory_mb_end"] = float(mem_end)
                 rows.append(row)
                 _save_metrics(
                     [row],
@@ -656,6 +668,9 @@ def _run_cv(
             yhat = None
             yhat_tr = None
             for tr, te in outer_splits:
+                if log_memory:
+                    mem_fold_start = psutil.Process().memory_info().rss / 1e6
+                    logger.debug("fold start %.3f MB", mem_fold_start)
                 Xtr, Xte = X.iloc[tr].values, X.iloc[te].values
                 ytr, yte = y_enc[tr], y_enc[te]
                 fit_kwargs = {}
@@ -735,6 +750,9 @@ def _run_cv(
                 y_true_all.append(yte)
                 y_pred_all.append(yhat)
                 progress.advance(fold_task)
+                if log_memory:
+                    mem_fold_end = psutil.Process().memory_info().rss / 1e6
+                    logger.debug("fold end %.3f MB", mem_fold_end)
             row = {
                 "file": ds["file"],
                 "target": ds["target"],
@@ -800,6 +818,12 @@ def _run_cv(
                 row["n_components"] = int(np.median(n_comp_list))
             if best_steps_repr is not None:
                 row["preprocess_steps"] = best_steps_repr
+            if log_memory:
+                mem_end = psutil.Process().memory_info().rss / 1e6
+                logger.debug("memory end %.3f MB", mem_end)
+                if mem_start is not None:
+                    row["memory_mb_start"] = float(mem_start)
+                row["memory_mb_end"] = float(mem_end)
             rows.append(row)
             _save_metrics(
                 [row],
@@ -1029,6 +1053,7 @@ def run_multiple_eval(
     interactive: bool = False,
     n_jobs: int = 1,
     mlflow_uri: Optional[str] = None,
+    log_memory: bool = False,
 ) -> List[Tuple[Path, Path]]:
     """Run evaluation for multiple cross-validation strategies.
 
@@ -1130,6 +1155,7 @@ def run_multiple_eval(
                             random_state=random_state,
                             interactive=interactive,
                             n_jobs=n_jobs,
+                            log_memory=log_memory,
                         )
                         metrics = sub / "metrics.json"
                         figs = sub / "figures"
@@ -1174,6 +1200,7 @@ def run_multiple_eval(
                         random_state=random_state,
                         interactive=interactive,
                         n_jobs=n_jobs,
+                        log_memory=log_memory,
                     )
                     metrics = sub / "metrics.json"
                     figs = sub / "figures"
@@ -1260,6 +1287,7 @@ def train_and_save(
     mlflow_uri: Optional[str] = None,
     gs_verbose: int = 0,
     show_progress: bool = True,
+    log_memory: bool = False,
 ) -> Tuple[Path, Path]:
     """Train final model and persist artefacts."""
 
@@ -1316,6 +1344,10 @@ def train_and_save(
             model_cfg = cfg.get("models", [])[0] if cfg.get("models") else {}
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
+            mem_start = None
+            if log_memory:
+                mem_start = psutil.Process().memory_info().rss / 1e6
+                logger.debug("memory start %.3f MB", mem_start)
             cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
             train_task = progress.add_task("Treinando", total=None)
             fit_kwargs = {}
@@ -1393,6 +1425,12 @@ def train_and_save(
                 row["ECE_mean"] = float(
                     expected_calibration_error(y_enc, proba, n_bins=15)
                 )
+            if log_memory:
+                mem_end = psutil.Process().memory_info().rss / 1e6
+                logger.debug("memory end %.3f MB", mem_end)
+                if mem_start is not None:
+                    row["memory_mb_start"] = float(mem_start)
+                row["memory_mb_end"] = float(mem_end)
             _save_metrics([row], out_dir, cfg.get("preprocess", {}).get("steps", []))
             if cfg.get("astm"):
                 flags = check_astm_classification(
@@ -1450,6 +1488,7 @@ def run_experiment(
     interactive: bool = False,
     random_state: int = 42,
     n_jobs: int = -1,
+    log_memory: bool = False,
 ) -> Tuple[Tuple[Path, Path], List[Tuple[Path, Path]]]:
     """Execute um experimento completo usando a API de alto nível.
 
@@ -1486,6 +1525,7 @@ def run_experiment(
         random_state=random_state,
         interactive=interactive,
         n_jobs=n_jobs,
+        log_memory=log_memory,
     )
 
     cv_dir = out_dir / "cv"
@@ -1495,6 +1535,7 @@ def run_experiment(
         random_state=random_state,
         interactive=interactive,
         n_jobs=n_jobs,
+        log_memory=log_memory,
     )
 
     return train_outputs, cv_outputs
