@@ -290,6 +290,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Log memory usage during processing",
     )
+    parser.add_argument(
+        "--notification-email",
+        help="Email address to receive notifications",
+    )
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
     p_prep.add_argument("--config", required=True)
@@ -384,6 +388,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         except FileNotFoundError:
             print(t("config_not_found"), file=sys.stderr)
             return 1
+        if args.notification_email:
+            raw["notification_email"] = args.notification_email
         try:
             cfg = ConfigModel(**raw)
         except ValidationError as e:  # pragma: no cover - user feedback
@@ -534,6 +540,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     continue
                 models_cfg.append({"name": name})
             default_cfg["models"] = models_cfg
+        if args.notification_email:
+            default_cfg["notification_email"] = args.notification_email
         run_id = now_ts()
         _setup_run_logging(run_id)
         data_cfg = cast(Dict[str, Any], default_cfg["data"])
@@ -607,6 +615,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         raw["data"]["input_path"] = str(
             (demo_cfg.parent.parent / raw["data"]["input_path"]).resolve()
         )
+        if args.notification_email:
+            raw["notification_email"] = args.notification_email
         try:
             cfg = ConfigModel(**raw)
         except ValidationError as e:  # pragma: no cover - user feedback
@@ -726,6 +736,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         out_dir_str = (
             questionary.text(t("wizard_out_dir_prompt"), default=".").ask() or "."
         )
+        notification_email = questionary.text("Notification email (optional):").ask()
         out_path = Path(out_dir_str)
         out_path.mkdir(parents=True, exist_ok=True)
         cfg_dict = {
@@ -735,6 +746,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         if preprocess_steps:
             cfg_dict["preprocess"] = {"steps": preprocess_steps}
+        if notification_email:
+            cfg_dict["notification_email"] = notification_email
         cfg_file = out_path / "config.yaml"
         with open(cfg_file, "w") as f:
             yaml.safe_dump(cfg_dict, f)
