@@ -618,81 +618,117 @@ def _render_dashboard(results_dir: Path) -> None:
             enc = st.text_input("Codificação", st.session_state.get("encoding", ""))
             sep = st.text_input("Separador", st.session_state.get("sep", ","))
             decimal = st.text_input("Separador decimal", st.session_state.get("decimal", "."))
-            df = (
-                pd.read_csv(uploaded, encoding=enc or None, sep=sep, decimal=decimal)
-                if uploaded.name.lower().endswith(".csv")
-                else pd.read_excel(uploaded, decimal=decimal)
+            if uploaded.name.lower().endswith(".csv"):
+                df = pd.read_csv(
+                    uploaded,
+                    encoding=enc or None,
+                    sep=sep,
+                    decimal=decimal,
+                    nrows=100,
+                )
+                sheet = None
+            else:
+                xls = pd.ExcelFile(uploaded)
+                sheet = st.selectbox(tr("Planilha"), xls.sheet_names)
+                df = pd.read_excel(xls, sheet_name=sheet, decimal=decimal, nrows=100)
+            uploaded.seek(0)
+            st.subheader(tr("Pré-visualização"))
+            st.dataframe(df)
+            summary_cols = pd.DataFrame(
+                {"coluna": df.columns, "tipo": df.dtypes.astype(str)}
             )
+            st.subheader(tr("Resumo de colunas"))
+            st.dataframe(summary_cols)
             is_num = pd.api.types.is_numeric_dtype
             non_num = [c for c in df.columns if not is_num(df[c])]
             target_col = st.selectbox(tr("Coluna alvo"), non_num)
+            group_col = st.selectbox(tr("Coluna de grupos"), [""] + non_num)
             spectral_input = st.text_input(tr("Faixa espectral (mín,max)"))
             if target_col and st.button(tr("Processar")):
-                with tempfile.NamedTemporaryFile(
-                    "wb", delete=False, suffix=Path(uploaded.name).suffix
-                ) as tmp:
-                    tmp.write(uploaded.getbuffer())
-                    tmp_path = Path(tmp.name)
-                cfg = {
-                    "input_path": str(tmp_path),
-                    "target_col": target_col,
-                    "encoding": enc or None,
-                    "sep": sep,
-                    "decimal": decimal,
-                }
-                if spectral_input:
+                max_size = 50 * 1024 * 1024
+                if uploaded.size > max_size:
+                    st.error(tr("Arquivo maior que 50 MB"))
+                else:
+                    progress = st.progress(0)
+                    with tempfile.NamedTemporaryFile(
+                        "wb", delete=False, suffix=Path(uploaded.name).suffix
+                    ) as tmp:
+                        uploaded.seek(0)
+                        total = uploaded.size or 1
+                        chunk = 1 << 20
+                        written = 0
+                        while True:
+                            data = uploaded.read(chunk)
+                            if not data:
+                                break
+                            tmp.write(data)
+                            written += len(data)
+                            progress.progress(int(written / total * 100))
+                        tmp_path = Path(tmp.name)
+                    cfg = {
+                        "input_path": str(tmp_path),
+                        "target_col": target_col,
+                        "encoding": enc or None,
+                        "sep": sep,
+                        "decimal": decimal,
+                    }
+                    if sheet is not None:
+                        cfg["sheet_name"] = sheet
+                    if group_col:
+                        cfg["group_col"] = group_col
+                    if spectral_input:
+                        try:
+                            lo, hi = map(float, spectral_input.split(","))
+                            cfg["spectral_range"] = [lo, hi]
+                        except Exception:
+                            st.error(tr("Formato inválido de faixa espectral"))
                     try:
-                        lo, hi = map(float, spectral_input.split(","))
-                        cfg["spectral_range"] = [lo, hi]
-                    except Exception:
-                        st.error(tr("Formato inválido de faixa espectral"))
-                try:
-                    ds_list = prepare_inputs(cfg, use_cache=False)
-                    summary = summarize_dataset(ds_list)
-                    st.subheader(tr("Resumo do conjunto"))
-                    st.dataframe(summary)
-                    for ds in ds_list:
-                        st.markdown(f"### {ds['target']}")
-                        head_df = ds["X"].copy()
-                        head_df[ds["target"]] = ds["Y"]
-                        st.dataframe(head_df.head())
-                        counts = ds["Y"].value_counts().reset_index()
-                        counts.columns = ["class", "count"]
-                        fig = px.bar(counts, x="class", y="count")
-                        st.plotly_chart(fig, use_container_width=True)
-                        mean = ds["X"].mean()
-                        std = ds["X"].std()
-                        wl = mean.index.astype(float)
-                        fig2 = go.Figure()
-                        fig2.add_trace(go.Scatter(x=wl, y=mean, name="mean"))
-                        fig2.add_trace(
-                            go.Scatter(
-                                x=wl,
-                                y=mean + std,
-                                name="+sd",
-                                line=dict(width=0),
-                                showlegend=False,
+                        ds_list = prepare_inputs(cfg, use_cache=False)
+                        summary = summarize_dataset(ds_list)
+                        st.subheader(tr("Resumo do conjunto"))
+                        st.dataframe(summary)
+                        for ds in ds_list:
+                            st.markdown(f"### {ds['target']}")
+                            head_df = ds["X"].copy()
+                            head_df[ds["target"]] = ds["Y"]
+                            st.dataframe(head_df.head())
+                            counts = ds["Y"].value_counts().reset_index()
+                            counts.columns = ["class", "count"]
+                            fig = px.bar(counts, x="class", y="count")
+                            st.plotly_chart(fig, use_container_width=True)
+                            mean = ds["X"].mean()
+                            std = ds["X"].std()
+                            wl = mean.index.astype(float)
+                            fig2 = go.Figure()
+                            fig2.add_trace(go.Scatter(x=wl, y=mean, name="mean"))
+                            fig2.add_trace(
+                                go.Scatter(
+                                    x=wl,
+                                    y=mean + std,
+                                    name="+sd",
+                                    line=dict(width=0),
+                                    showlegend=False,
+                                )
                             )
-                        )
-                        fig2.add_trace(
-                            go.Scatter(
-                                x=wl,
-                                y=mean - std,
-                                name="-sd",
-                                fill="tonexty",
-                                line=dict(width=0),
-                                showlegend=False,
+                            fig2.add_trace(
+                                go.Scatter(
+                                    x=wl,
+                                    y=mean - std,
+                                    name="-sd",
+                                    fill="tonexty",
+                                    line=dict(width=0),
+                                    showlegend=False,
+                                )
                             )
-                        )
-                        fig2.update_layout(
-                            xaxis_title="Comprimento de onda",
-                            yaxis_title="Reflectância",
-                        )
-                        st.plotly_chart(fig2, use_container_width=True)
-                except Exception as exc:  # pragma: no cover - display error
-                    st.error(tr("Erro ao preparar dados: {exc}").format(exc=exc))
-                finally:
-                    tmp_path.unlink(missing_ok=True)
+                            fig2.update_layout(
+                                xaxis_title="Comprimento de onda",
+                                yaxis_title="Reflectância",
+                            )
+                            st.plotly_chart(fig2, use_container_width=True)
+                    except Exception as exc:  # pragma: no cover - display error
+                        st.error(tr("Erro ao preparar dados: {exc}").format(exc=exc))
+                    finally:
+                        tmp_path.unlink(missing_ok=True)
 
     with exec_tab:
         if not run_dirs:
