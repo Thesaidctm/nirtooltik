@@ -59,7 +59,6 @@ from .report import generate_scientific_report
 from .utils.compliance import check_astm_classification
 from .utils.email import enviar_email
 from .utils.errors import DataError, ModelError
-from .utils.email import enviar_email
 from .utils.logging import log_versions, logger
 from .utils.misc import RESULTS_DIR, file_hash
 from .utils.plots import plot_confusion, plot_reliability, plot_roc_ovr
@@ -1136,7 +1135,12 @@ def run_multiple_eval(
     steps_cfg = cfg.get("preprocess", {}).get("steps", [])
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    enviar_email("Processamento Y iniciou", "O processamento Y foi iniciado.")
+    email = cfg.get("notification_email")
+    enviar_email(
+        subject="Validação iniciada",
+        body="O processo de validação foi iniciado.",
+        to=email,
+    )
 
     with mlflow_cm:
         if mlflow_enabled:
@@ -1165,22 +1169,6 @@ def run_multiple_eval(
 
         outputs: List[Tuple[Path, Path]] = []
         logger.info("Running evaluation for %d CV strategies", len(strategies))
-
-        email_fn = globals().get("enviar_email")
-        if callable(email_fn):
-            email = cfg.get("notification_email")
-            kwargs = {
-                "subject": "Validação iniciada",
-                "body": "O processo de validação foi iniciado.",
-            }
-            if email:
-                kwargs["to"] = email
-            email_fn(**kwargs)
-
-        enviar_email(
-            subject="Validação iniciada",
-            body="O processo de validação foi iniciado.",
-        )
 
         with Progress(console=Console(stderr=True)) as progress:
             strat_task = progress.add_task("CV strategy", total=len(strategies))
@@ -1340,20 +1328,11 @@ def run_multiple_eval(
                     )
                 progress.advance(strat_task)
 
-    email_fn = globals().get("enviar_email")
-    if callable(email_fn):
-        email = cfg.get("notification_email")
-        kwargs = {
-            "subject": "Validação concluída",
-            "body": "A validação foi concluída.",
-        }
-        if email:
-            kwargs["to"] = email
-        email_fn(**kwargs)
-
+    email = cfg.get("notification_email")
     enviar_email(
         subject="Validação concluída",
         body="A validação foi concluída.",
+        to=email,
     )
     return outputs
 
