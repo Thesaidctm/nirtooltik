@@ -25,6 +25,7 @@ dependencies = [
   "openpyxl",
   "tqdm",
   "keyring",
+  "requests",
   "pydantic<2",
   "plotly",
   "kaleido",
