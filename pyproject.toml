@@ -48,7 +48,7 @@ nircls-dashboard = "nircls.dashboard:main"
 # Third-party packages can register their builders here
 
 [tool.setuptools.package-data]
-nircls = ["run_dashboard.sh", "run_dashboard.bat"]
+nircls = ["run_dashboard.sh", "run_dashboard.bat", ".streamlit/config.toml"]
 
 
 [tool.black]

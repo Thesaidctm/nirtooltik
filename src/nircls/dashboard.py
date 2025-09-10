@@ -1,27 +1,27 @@
 from __future__ import annotations
 
-from pathlib import Path
+import argparse
+import json
 import os
 import subprocess
 import sys
-import argparse
-import json
-import webbrowser
 import tempfile
+import webbrowser
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
-import plotly.io as pio
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 
-from nircls.io import prepare_inputs, summarize_dataset
-from nircls.pipeline import run_experiment
 from nircls.config_schema import ConfigModel, ValidationError
+from nircls.io import prepare_inputs, summarize_dataset
+from nircls.models.factory import MODEL_DESCRIPTIONS
+from nircls.pipeline import run_experiment
 from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.summarize import summarize_runs
-from nircls.models.factory import MODEL_DESCRIPTIONS
 
 
 def _figure_caption(stem: str) -> str:
@@ -75,7 +75,7 @@ def _render_dashboard(results_dir: Path) -> None:
     results_dir = Path(results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    st.set_page_config(page_title="nircls Dashboard")
+    st.set_page_config(page_title="nircls Dashboard", page_icon="🧪", layout="wide")
     st.title("nircls Dashboard")
     st.info("Execute `nircls run-all` antes de abrir o dashboard.")
 
@@ -110,9 +110,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 try:
                     import streamlit.components.v1 as components
 
-                    components.html(
-                        html_file.read_text(), height=600, scrolling=True
-                    )
+                    components.html(html_file.read_text(), height=600, scrolling=True)
                     st.caption(caption)
                 except Exception:
                     if png_file.exists():
@@ -171,9 +169,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 "Preprocessadores",
                 help="Pré-processadores separados por vírgula. Veja a aba Ajuda",
             )
-            email = st.text_input(
-                "E-mail", help="Endereço para notificações"
-            )
+            email = st.text_input("E-mail", help="Endereço para notificações")
             submitted = st.form_submit_button("Executar")
 
         if submitted:
@@ -183,16 +179,10 @@ def _render_dashboard(results_dir: Path) -> None:
                 cfg = {
                     "data": {"input_path": input_path},
                     "models": [
-                        {"name": m.strip()}
-                        for m in modelos.split(",")
-                        if m.strip()
+                        {"name": m.strip()} for m in modelos.split(",") if m.strip()
                     ],
                     "preprocess": {
-                        "steps": [
-                            s.strip()
-                            for s in preprocess.split(",")
-                            if s.strip()
-                        ]
+                        "steps": [s.strip() for s in preprocess.split(",") if s.strip()]
                     },
                     "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
                 }
@@ -201,9 +191,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 except ValidationError as exc:
                     st.error(f"Configuração inválida: {exc}")
                 else:
-                    run_dir = results_dir / datetime.now().strftime(
-                        "%Y%m%d_%H%M%S"
-                    )
+                    run_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
                     try:
                         with st.spinner("Executando..."):
                             if treinar or validar:
@@ -321,7 +309,9 @@ def _render_dashboard(results_dir: Path) -> None:
                                 if metrics:
                                     df = pd.DataFrame(metrics)
                                     if "n_components" in df.columns:
-                                        df["n_components"] = df["n_components"].astype("Int64")
+                                        df["n_components"] = df["n_components"].astype(
+                                            "Int64"
+                                        )
                                         cols = df.columns.tolist()
                                         if "model" in cols:
                                             cols.insert(
@@ -389,7 +379,9 @@ def _render_dashboard(results_dir: Path) -> None:
                                 if metrics:
                                     df = pd.DataFrame(metrics)
                                     if "n_components" in df.columns:
-                                        df["n_components"] = df["n_components"].astype("Int64")
+                                        df["n_components"] = df["n_components"].astype(
+                                            "Int64"
+                                        )
                                         cols = df.columns.tolist()
                                         if "model" in cols:
                                             cols.insert(
