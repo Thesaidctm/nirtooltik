@@ -18,7 +18,7 @@ import plotly.io as pio
 from nircls.config_schema import ConfigModel, ValidationError
 from nircls.io import prepare_inputs, summarize_dataset
 from nircls.models.factory import MODEL_DESCRIPTIONS
-from nircls.pipeline import run_experiment
+from nircls.pipeline import run_multiple_eval, train_and_save
 from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.summarize import summarize_runs
@@ -237,12 +237,50 @@ def _render_dashboard(results_dir: Path) -> None:
                     st.error(f"Configuração inválida: {exc}")
                 else:
                     run_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
+                    progress = st.progress(0)
+                    status = st.status("Inicializando...")
+                    errors: dict[str, str] = {}
                     try:
-                        with st.spinner("Executando..."):
-                            if treinar or validar:
-                                run_experiment(cfg, run_dir)
-                            elif preparar:
+                        total = 0
+                        steps = []
+                        if treinar or validar:
+                            steps = ["preparar", "treinar", "validar"]
+                        elif preparar:
+                            steps = ["preparar"]
+                        total = len(steps)
+                        completed = 0
+
+                        if "preparar" in steps:
+                            status.update(label="Preparando dados...", state="running")
+                            try:
                                 prepare_inputs(cfg["data"], use_cache=False)
+                            except Exception as exc:
+                                errors["preparar"] = str(exc)
+                                raise
+                            completed += 1
+                            progress.progress(int(completed / total * 100))
+
+                        if "treinar" in steps:
+                            status.update(label="Treinando modelos...", state="running")
+                            try:
+                                train_and_save(cfg, run_dir / "train")
+                            except Exception as exc:
+                                errors["treinar"] = str(exc)
+                                raise
+                            completed += 1
+                            progress.progress(int(completed / total * 100))
+
+                        if "validar" in steps:
+                            status.update(label="Validando modelos...", state="running")
+                            try:
+                                run_multiple_eval(cfg, run_dir / "cv")
+                            except Exception as exc:
+                                errors["validar"] = str(exc)
+                                raise
+                            completed += 1
+                            progress.progress(int(completed / total * 100))
+
+                        status.update(label="Execução concluída.", state="complete")
                         st.success("Execução concluída.")
                         if email:
                             enviar_email(
@@ -250,8 +288,10 @@ def _render_dashboard(results_dir: Path) -> None:
                                 "A execução foi concluída.",
                                 email,
                             )
-                    except Exception as exc:
-                        st.error(f"Erro na execução: {exc}")
+                    except Exception:
+                        status.update(label="Execução falhou", state="error")
+                        for etapa, msg in errors.items():
+                            st.error(f"Erro na etapa {etapa}: {msg}")
 
     with prep_tab:
         uploaded = st.file_uploader(
