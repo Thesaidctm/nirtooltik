@@ -440,3 +440,39 @@ def test_train_and_save_model_incompatible(monkeypatch, tmp_path, method):
     monkeypatch.setattr("nircls.pipeline.build_pipeline_from_config", raise_model_error)
     with pytest.raises(ModelError, match="modelo incompatível"):
         train_and_save(cfg, tmp_path, n_jobs=1)
+
+
+def test_run_multiple_eval_sends_notification_email(tmp_path, monkeypatch):
+    rng = np.random.RandomState(0)
+    X = rng.rand(12, 4)
+    y = np.array(["A"] * 6 + ["B"] * 6)
+    df = pd.DataFrame(X, columns=[str(i) for i in range(4)])
+    df["target"] = y
+    data_file = tmp_path / "data.csv"
+    df.to_csv(data_file, index=False)
+
+    cfg = {
+        "notification_email": "user@example.com",
+        "data": {"input_path": str(data_file), "target_cols": ["target"]},
+        "models": [
+            {"name": "PLSDA", "grid": {"n_components": [2], "method": ["logreg"]}}
+        ],
+        "cv": {
+            "random_state": 0,
+            "strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}],
+        },
+    }
+
+    calls = []
+
+    def fake_enviar_email(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "nircls.pipeline.enviar_email", fake_enviar_email, raising=False
+    )
+
+    out_dir = tmp_path / "out"
+    run_multiple_eval(cfg, out_dir, n_jobs=1)
+    assert len(calls) == 2
+    assert all(call.get("to") == "user@example.com" for call in calls)
