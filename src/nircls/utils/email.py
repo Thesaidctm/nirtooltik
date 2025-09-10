@@ -1,4 +1,8 @@
-"""Utility functions for sending email notifications."""
+"""Helpers for sending email notifications.
+
+The credentials and target addresses are resolved from environment
+variables or a JSON configuration file as handled by :func:`_load_config`.
+"""
 
 from __future__ import annotations
 
@@ -76,7 +80,7 @@ def enviar_email(
     *,
     to: Optional[str] = None,
 ) -> None:
-    """Send an email notification.
+    """Send an email notification using the configuration from :func:`_load_config`.
 
     Parameters
     ----------
