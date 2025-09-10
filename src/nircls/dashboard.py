@@ -6,11 +6,11 @@ import inspect
 import json
 import os
 import pkgutil
+import shutil
 import subprocess
 import sys
 import tempfile
 import webbrowser
-import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -224,9 +224,7 @@ def _render_dashboard(results_dir: Path) -> None:
 
     def _render_actions(run_dirs: list[Path]) -> None:
         for run in run_dirs:
-            name_col, new_col, ren_col, del_col, zip_col = st.columns(
-                [3, 3, 1, 1, 1]
-            )
+            name_col, new_col, ren_col, del_col, zip_col = st.columns([3, 3, 1, 1, 1])
             name_col.write(run.name)
             new_name = new_col.text_input(
                 "Novo nome", value=run.name, key=f"rename_input_{run.name}"
@@ -248,6 +246,33 @@ def _render_dashboard(results_dir: Path) -> None:
                 mime="application/zip",
                 key=f"zip_{run.name}",
             )
+
+    def _read_log_updates(path: Path, state_key: str = "log_pos") -> list[str]:
+        """Read new log lines incrementally.
+
+        Parameters
+        ----------
+        path:
+            Location of the log file.
+        state_key:
+            ``st.session_state`` key used to track the last read position.
+
+        Returns
+        -------
+        list[str]
+            Newly read lines from ``path``.
+        """
+
+        pos = st.session_state.get(state_key, 0)
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                f.seek(pos)
+                data = f.read()
+                st.session_state[state_key] = f.tell()
+        except FileNotFoundError:
+            st.session_state[state_key] = 0
+            data = ""
+        return data.splitlines()
 
     (
         config_tab,
@@ -436,6 +461,15 @@ def _render_dashboard(results_dir: Path) -> None:
         )
         default_email = st.text_input("E-mail padrão", email_cfg.get("to_addr", ""))
         default_results = email_cfg.get("results_dir", str(results_dir))
+        refresh_default = float(email_cfg.get("log_refresh_secs", 0))
+        st.number_input(
+            "Frequência de atualização dos logs (s)",
+            value=refresh_default,
+            min_value=0.0,
+            step=1.0,
+            key="log_refresh_secs",
+            help="0 desativa atualização automática.",
+        )
         if hasattr(st, "directory_picker"):
             results_root = st.directory_picker(
                 "Diretório de resultados", default=default_results
@@ -465,6 +499,9 @@ def _render_dashboard(results_dir: Path) -> None:
                     "user": user,
                     "to_addr": default_email,
                     "results_dir": str(results_root),
+                    "log_refresh_secs": float(
+                        st.session_state.get("log_refresh_secs", 0)
+                    ),
                 }
             )
             if password:
@@ -704,15 +741,31 @@ def _render_dashboard(results_dir: Path) -> None:
 
     with logs_tab:
         log_path = Path.home() / ".nircls" / "nircls.log"
+        refresh_secs = st.session_state.get("log_refresh_secs", 0.0)
+        placeholder = st.empty()
+        try:
+            from streamlit_autorefresh import st_autorefresh
+
+            if refresh_secs > 0:
+                st_autorefresh(interval=int(refresh_secs * 1000), key="log_refresh")
+            else:
+                st.button("Atualizar")
+        except Exception:
+            st.button("Atualizar")
+
         if log_path.exists():
-            lines = log_path.read_text(encoding="utf-8").splitlines()[-200:]
-            st.text_area("Log", "\n".join(lines), height=300)
+            buffer = st.session_state.setdefault("log_buffer", [])
+            buffer.extend(_read_log_updates(log_path))
+            st.session_state["log_buffer"] = buffer[-200:]
+            placeholder.text_area(
+                "Log", "\n".join(st.session_state["log_buffer"]), height=300
+            )
             with log_path.open("rb") as f:
                 st.download_button(
                     "Baixar log", f, file_name=log_path.name, mime="text/plain"
                 )
         else:
-            st.info(f"Arquivo de log não encontrado em {log_path}")
+            placeholder.info(f"Arquivo de log não encontrado em {log_path}")
 
     with help_tab:
         st.markdown("<a id='ajuda'></a>", unsafe_allow_html=True)
