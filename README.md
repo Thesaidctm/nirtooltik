@@ -661,7 +661,7 @@ Em outra máquina:
 
 ### Geração de instaladores
 
-Para distribuir o dashboard como executável único ou instalador para Windows, utilize o script `scripts/build_app.py`.
+Para distribuir o dashboard como executável único, utilize o script `scripts/build_dashboard.py`. Para gerar um instalador do `nircls` para Windows, utilize `scripts/build_cli.py`.
 
 **Pré-requisitos**
 
@@ -670,22 +670,22 @@ Para distribuir o dashboard como executável único ou instalador para Windows, 
 
 **Como executar**
 
-- Unix/macOS:
+- Dashboard:
 
   ```bash
-  python scripts/build_app.py
+  python scripts/build_dashboard.py
   ```
 
-- Windows:
+- CLI (apenas no Windows):
 
   ```powershell
-  python scripts/build_app.py --windows
+  python scripts/build_cli.py
   ```
 
 **Artefatos**
 
 - `dist/nircls-dashboard`: executável único do dashboard.
-- `dist/nircls-setup.exe`: instalador para Windows.
+- `dist/nircls-<versão>-setup.exe`: instalador para Windows.
 
 **Diretórios embutidos**
 
