@@ -262,7 +262,7 @@ def _make_preprocess(
 
 
 def build_pipeline_from_config(
-    cfg: Dict[str, Any]
+    cfg: Dict[str, Any],
 ) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
     _validate_cfg(cfg, need_models=True)
     steps_cfg = cfg.get("preprocess", {}).get("steps", [])
@@ -1180,6 +1180,7 @@ def run_multiple_eval(
         enviar_email(
             subject="Validação iniciada",
             body="O processo de validação foi iniciado.",
+        )
 
         with Progress(console=Console(stderr=True)) as progress:
             strat_task = progress.add_task("CV strategy", total=len(strategies))
@@ -1338,21 +1339,22 @@ def run_multiple_eval(
                         f"Estratégia de validação desconhecida: {stype}. Use 'kfold', 'loo' ou 'holdout'."
                     )
                 progress.advance(strat_task)
-    enviar_email("Processamento Y concluído", "O processamento Y foi concluído.")
-        email_fn = globals().get("enviar_email")
-        if callable(email_fn):
-            email = cfg.get("notification_email")
-            kwargs = {
-                "subject": "Validação concluída",
-                "body": "A validação foi concluída.",
-            }
-            if email:
-                kwargs["to"] = email
-            email_fn(**kwargs)
-        enviar_email(
-            subject="Validação concluída",
-            body="A validação foi concluída.",
-        )
+
+    email_fn = globals().get("enviar_email")
+    if callable(email_fn):
+        email = cfg.get("notification_email")
+        kwargs = {
+            "subject": "Validação concluída",
+            "body": "A validação foi concluída.",
+        }
+        if email:
+            kwargs["to"] = email
+        email_fn(**kwargs)
+
+    enviar_email(
+        subject="Validação concluída",
+        body="A validação foi concluída.",
+    )
     return outputs
 
 

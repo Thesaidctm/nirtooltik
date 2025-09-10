@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import importlib
+import inspect
 import json
 import os
+import pkgutil
 import subprocess
 import sys
 import tempfile
@@ -15,6 +18,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
 
+import nircls.preprocessors as preprocessors
 from nircls.config_schema import ConfigModel, ValidationError
 from nircls.io import prepare_inputs, summarize_dataset
 from nircls.models.factory import MODEL_DESCRIPTIONS
@@ -33,6 +37,18 @@ def _figure_caption(stem: str) -> str:
         "roc": "Curva ROC",
         "reliability": "Diagrama de Confiabilidade",
     }.get(suffix, stem)
+
+
+def _get_preprocessor_names() -> list[str]:
+    """Discover available preprocessing steps."""
+
+    names: list[str] = []
+    for _, mod_name, _ in pkgutil.iter_modules(preprocessors.__path__):
+        module = importlib.import_module(f"{preprocessors.__name__}.{mod_name}")
+        for name, obj in inspect.getmembers(module, inspect.isclass):
+            if obj.__module__ == module.__name__:
+                names.append(name)
+    return sorted(names)
 
 
 def run_dashboard(results_dir: str | Path) -> int:
@@ -161,8 +177,9 @@ def _render_dashboard(results_dir: Path) -> None:
                 json.dump(data, f, indent=2)
 
         cfg_defaults = _load_cfg()
-        for key in ["input_path", "modelos", "preprocess", "email"]:
-            st.session_state.setdefault(key, cfg_defaults.get(key, ""))
+        st.session_state.setdefault("modelos", cfg_defaults.get("modelos", []))
+        st.session_state.setdefault("preprocess", cfg_defaults.get("preprocess", []))
+        st.session_state.setdefault("email", cfg_defaults.get("email", ""))
 
         ajuda_link = "Consulte a [aba Ajuda](#ajuda)"
 
@@ -179,22 +196,23 @@ def _render_dashboard(results_dir: Path) -> None:
                 "Validar",
                 help=f"Executar validação cruzada. {ajuda_link}",
             )
-            input_path = st.text_input(
-                "input_path",
-                key="input_path",
-                help=f"Arquivo ou glob de entrada. {ajuda_link}",
+            uploaded_files = st.file_uploader(
+                "Arquivos de entrada",
+                type=["csv", "xlsx", "xls"],
+                accept_multiple_files=True,
             )
-            modelos = st.text_input(
+            modelos = st.multiselect(
                 "Modelos",
+                options=sorted(MODEL_DESCRIPTIONS),
                 key="modelos",
-                help=f"Nomes dos modelos separados por vírgula. {ajuda_link}",
+                help=f"Selecione os modelos. {ajuda_link}",
             )
-            preprocess = st.text_input(
+            preprocess = st.multiselect(
                 "Preprocessadores",
+                options=_get_preprocessor_names(),
                 key="preprocess",
-                help=f"Pré-processadores separados por vírgula. {ajuda_link}",
+                help=f"Selecione os pré-processadores. {ajuda_link}",
             )
-            email = st.text_input("E-mail", help="Endereço para notificações")
             email = st.text_input(
                 "E-mail", key="email", help="Endereço para notificações"
             )
@@ -204,98 +222,107 @@ def _render_dashboard(results_dir: Path) -> None:
         if cols[0].button("Salvar"):
             _save_cfg(
                 {
-                    k: st.session_state.get(k, "")
-                    for k in ["input_path", "modelos", "preprocess", "email"]
+                    k: st.session_state.get(k, [] if k != "email" else "")
+                    for k in ["modelos", "preprocess", "email"]
                 }
             )
             st.success("Configurações salvas.")
         if cols[1].button("Carregar"):
             loaded = _load_cfg()
-            for k in ["input_path", "modelos", "preprocess", "email"]:
-                st.session_state[k] = loaded.get(k, "")
+            for k in ["modelos", "preprocess", "email"]:
+                st.session_state[k] = loaded.get(k, [] if k != "email" else "")
             st.experimental_rerun()
 
         if submitted:
             _save_cfg(
                 {
-                    k: st.session_state.get(k, "")
-                    for k in ["input_path", "modelos", "preprocess", "email"]
+                    k: st.session_state.get(k, [] if k != "email" else "")
+                    for k in ["modelos", "preprocess", "email"]
                 }
             )
             if not any([preparar, treinar, validar]):
                 st.warning("Selecione ao menos uma análise.")
+            elif not uploaded_files:
+                st.warning("Envie ao menos um arquivo de entrada.")
             else:
-                cfg = {
-                    "data": {"input_path": input_path},
-                    "models": [
-                        {"name": m.strip()} for m in modelos.split(",") if m.strip()
-                    ],
-                    "preprocess": {
-                        "steps": [s.strip() for s in preprocess.split(",") if s.strip()]
-                    },
-                    "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
-                }
-                try:
-                    ConfigModel(**cfg)
-                except ValidationError as exc:
-                    st.error(f"Configuração inválida: {exc}")
-                else:
-                    run_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
-                    progress = st.progress(0)
-                    status = st.status("Inicializando...")
-                    errors: dict[str, str] = {}
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmpdir_path = Path(tmpdir)
+                    for up in uploaded_files:
+                        dest = tmpdir_path / up.name
+                        dest.write_bytes(up.getbuffer())
+                    cfg = {
+                        "data": {"input_path": str(tmpdir_path / "*")},
+                        "models": [{"name": m} for m in modelos],
+                        "preprocess": {"steps": list(preprocess)},
+                        "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
+                    }
                     try:
-                        total = 0
-                        steps = []
-                        if treinar or validar:
-                            steps = ["preparar", "treinar", "validar"]
-                        elif preparar:
-                            steps = ["preparar"]
-                        total = len(steps)
-                        completed = 0
+                        ConfigModel(**cfg)
+                    except ValidationError as exc:
+                        st.error(f"Configuração inválida: {exc}")
+                    else:
+                        run_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
+                        progress = st.progress(0)
+                        status = st.status("Inicializando...")
+                        errors: dict[str, str] = {}
+                        try:
+                            total = 0
+                            steps = []
+                            if treinar or validar:
+                                steps = ["preparar", "treinar", "validar"]
+                            elif preparar:
+                                steps = ["preparar"]
+                            total = len(steps)
+                            completed = 0
 
-                        if "preparar" in steps:
-                            status.update(label="Preparando dados...", state="running")
-                            try:
-                                prepare_inputs(cfg["data"], use_cache=False)
-                            except Exception as exc:
-                                errors["preparar"] = str(exc)
-                                raise
-                            completed += 1
-                            progress.progress(int(completed / total * 100))
+                            if "preparar" in steps:
+                                status.update(
+                                    label="Preparando dados...", state="running"
+                                )
+                                try:
+                                    prepare_inputs(cfg["data"], use_cache=False)
+                                except Exception as exc:
+                                    errors["preparar"] = str(exc)
+                                    raise
+                                completed += 1
+                                progress.progress(int(completed / total * 100))
 
-                        if "treinar" in steps:
-                            status.update(label="Treinando modelos...", state="running")
-                            try:
-                                train_and_save(cfg, run_dir / "train")
-                            except Exception as exc:
-                                errors["treinar"] = str(exc)
-                                raise
-                            completed += 1
-                            progress.progress(int(completed / total * 100))
+                            if "treinar" in steps:
+                                status.update(
+                                    label="Treinando modelos...", state="running"
+                                )
+                                try:
+                                    train_and_save(cfg, run_dir / "train")
+                                except Exception as exc:
+                                    errors["treinar"] = str(exc)
+                                    raise
+                                completed += 1
+                                progress.progress(int(completed / total * 100))
 
-                        if "validar" in steps:
-                            status.update(label="Validando modelos...", state="running")
-                            try:
-                                run_multiple_eval(cfg, run_dir / "cv")
-                            except Exception as exc:
-                                errors["validar"] = str(exc)
-                                raise
-                            completed += 1
-                            progress.progress(int(completed / total * 100))
+                            if "validar" in steps:
+                                status.update(
+                                    label="Validando modelos...", state="running"
+                                )
+                                try:
+                                    run_multiple_eval(cfg, run_dir / "cv")
+                                except Exception as exc:
+                                    errors["validar"] = str(exc)
+                                    raise
+                                completed += 1
+                                progress.progress(int(completed / total * 100))
 
-                        status.update(label="Execução concluída.", state="complete")
-                        st.success("Execução concluída.")
-                        if email:
-                            enviar_email(
-                                "Execução concluída",
-                                "A execução foi concluída.",
-                                email,
-                            )
-                    except Exception:
-                        status.update(label="Execução falhou", state="error")
-                        for etapa, msg in errors.items():
-                            st.error(f"Erro na etapa {etapa}: {msg}")
+                            status.update(label="Execução concluída.", state="complete")
+                            st.success("Execução concluída.")
+                            if email:
+                                enviar_email(
+                                    "Execução concluída",
+                                    "A execução foi concluída.",
+                                    email,
+                                )
+                        except Exception:
+                            status.update(label="Execução falhou", state="error")
+                            for etapa, msg in errors.items():
+                                st.error(f"Erro na etapa {etapa}: {msg}")
 
     with prep_tab:
         uploaded = st.file_uploader(
