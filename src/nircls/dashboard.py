@@ -30,6 +30,7 @@ from nircls.utils.email import _save_config as _save_email_config
 from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.summarize import summarize_runs
+from nircls.utils.update import check_latest_version
 from nircls.utils.zip import zip_dir
 
 
@@ -103,6 +104,20 @@ def _render_dashboard(results_dir: Path) -> None:
     st.set_page_config(page_title="nircls Dashboard", page_icon="🧪", layout="wide")
     config_path = Path.home() / ".nircls" / "config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with config_path.open() as f:
+            _initial_cfg = json.load(f)
+    except Exception:
+        _initial_cfg = {}
+    if _initial_cfg.get("check_updates", True):
+        import nircls
+
+        latest = check_latest_version(nircls.__version__)
+        if latest:
+            st.info(
+                f"Nova versão disponível: {latest}. "
+                f"[Baixar](https://github.com/Thesaidctm/nirtooltik/releases/tag/{latest})"
+            )
 
     def _load_cfg() -> dict:
         try:
@@ -350,12 +365,14 @@ def _render_dashboard(results_dir: Path) -> None:
 
         cols = st.columns(2)
         if cols[0].button("Salvar"):
-            _save_cfg(
+            cfg = _load_cfg()
+            cfg.update(
                 {
                     k: st.session_state.get(k, [] if k != "email" else "")
                     for k in ["modelos", "preprocess", "email"]
                 }
             )
+            _save_cfg(cfg)
             st.success("Configurações salvas.")
         if cols[1].button("Carregar"):
             loaded = _load_cfg()
@@ -364,12 +381,14 @@ def _render_dashboard(results_dir: Path) -> None:
             st.experimental_rerun()
 
         if submitted:
-            _save_cfg(
+            cfg = _load_cfg()
+            cfg.update(
                 {
                     k: st.session_state.get(k, [] if k != "email" else "")
                     for k in ["modelos", "preprocess", "email"]
                 }
             )
+            _save_cfg(cfg)
             if not analises:
                 st.warning("Selecione ao menos uma análise.")
             elif not uploaded_files:
@@ -453,6 +472,11 @@ def _render_dashboard(results_dir: Path) -> None:
 
     with settings_tab:
         email_cfg = _load_email_config()
+        cfg = _load_cfg()
+        check_updates = st.checkbox(
+            "Verificar atualizações automaticamente",
+            cfg.get("check_updates", True),
+        )
         host = st.text_input("Host SMTP", email_cfg.get("host", ""))
         port = st.number_input("Porta", value=int(email_cfg.get("port") or 587), step=1)
         user = st.text_input("Usuário", email_cfg.get("user", ""))
@@ -504,6 +528,8 @@ def _render_dashboard(results_dir: Path) -> None:
                     ),
                 }
             )
+            cfg["check_updates"] = check_updates
+            _save_cfg(cfg)
             if password:
                 try:  # pragma: no cover - best effort
                     keyring.set_password("nircls", user, password)
