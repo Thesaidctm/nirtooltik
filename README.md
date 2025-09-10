@@ -659,6 +659,38 @@ Em outra máquina:
    ```
 3. Utilize os utilitários do `nircls` a partir do diretório extraído.
 
+### Geração de instaladores
+
+Para distribuir o dashboard como executável único ou instalador para Windows, utilize o script `scripts/build_app.py`.
+
+**Pré-requisitos**
+
+- `pyinstaller` para criação do executável.
+- `pynsist` e [NSIS](https://nsis.sourceforge.io/) para o instalador do Windows.
+
+**Como executar**
+
+- Unix/macOS:
+
+  ```bash
+  python scripts/build_app.py
+  ```
+
+- Windows:
+
+  ```powershell
+  python scripts/build_app.py --windows
+  ```
+
+**Artefatos**
+
+- `dist/nircls-dashboard`: executável único do dashboard.
+- `dist/nircls-setup.exe`: instalador para Windows.
+
+**Diretórios embutidos**
+
+Os diretórios `.streamlit`, `models` e `templates` são incorporados ao executável. Atualize-os antes de gerar os instaladores para que as modificações sejam incluídas.
+
 ## Notificações por e-mail
 
 Para receber alertas automáticos de início e término do treinamento ou
