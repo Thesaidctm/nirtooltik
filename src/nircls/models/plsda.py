@@ -44,7 +44,8 @@ class PLSDA(BaseEstimator, ClassifierMixin):
         self.clf = self._make_clf()
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "PLSDA":
-        Y = np.eye(len(np.unique(y)))[y]
+        classes, y_int = np.unique(y, return_inverse=True)
+        Y = np.eye(len(classes))[y_int]
         self.pls.fit(X, Y)
         self.n_components_ = self.pls.x_scores_.shape[1]
         max_comp = min(X.shape[0] - 1, X.shape[1])
