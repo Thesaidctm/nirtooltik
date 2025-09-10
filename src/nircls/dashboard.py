@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import webbrowser
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from nircls.utils.email import _save_config as _save_email_config
 from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.summarize import summarize_runs
+from nircls.utils.zip import zip_dir
 
 
 def _figure_caption(stem: str) -> str:
@@ -219,6 +221,33 @@ def _render_dashboard(results_dir: Path) -> None:
                         file_name=html_file.name,
                         mime="text/html",
                     )
+
+    def _render_actions(run_dirs: list[Path]) -> None:
+        for run in run_dirs:
+            name_col, new_col, ren_col, del_col, zip_col = st.columns(
+                [3, 3, 1, 1, 1]
+            )
+            name_col.write(run.name)
+            new_name = new_col.text_input(
+                "Novo nome", value=run.name, key=f"rename_input_{run.name}"
+            )
+            if ren_col.button("Renomear", key=f"rename_btn_{run.name}"):
+                new_path = run.with_name(new_name.strip())
+                if new_name and new_path != run:
+                    run.rename(new_path)
+                    st.experimental_rerun()
+            if del_col.button("Excluir", key=f"delete_{run.name}"):
+                if st.confirm_dialog(f"Excluir {run.name}?"):
+                    shutil.rmtree(run)
+                    st.experimental_rerun()
+            zip_buffer = zip_dir(run)
+            zip_col.download_button(
+                "ZIP",
+                zip_buffer,
+                file_name=f"{run.name}.zip",
+                mime="application/zip",
+                key=f"zip_{run.name}",
+            )
 
     (
         config_tab,
@@ -597,6 +626,7 @@ def _render_dashboard(results_dir: Path) -> None:
         if not run_dirs:
             st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
         else:
+            _render_actions(run_dirs)
             compare_runs = st.multiselect(
                 "Selecione execuções para comparar",
                 run_dirs,
@@ -639,6 +669,7 @@ def _render_dashboard(results_dir: Path) -> None:
         if not run_dirs:
             st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
         else:
+            _render_actions(run_dirs)
             summary = summarize_runs(results_dir)
             if summary.empty:
                 st.warning("Nenhuma métrica agregada encontrada.")
@@ -685,6 +716,11 @@ def _render_dashboard(results_dir: Path) -> None:
 
     with help_tab:
         st.markdown("<a id='ajuda'></a>", unsafe_allow_html=True)
+        st.subheader("Gerenciamento de execuções")
+        st.markdown(
+            "Nas abas **Resultados** e **Resumo**, utilize a coluna de ações para "
+            "renomear, excluir (com confirmação) ou baixar um arquivo ZIP de cada execução."
+        )
         st.subheader("Modelos disponíveis")
         model_apps = {
             "PLSDA": "Análises espectrais e quimiometria",
