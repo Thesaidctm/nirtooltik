@@ -21,6 +21,7 @@ from nircls.config_schema import ConfigModel, ValidationError
 from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.summarize import summarize_runs
+from nircls.models.factory import MODEL_DESCRIPTIONS
 
 
 def _figure_caption(stem: str) -> str:
@@ -135,36 +136,40 @@ def _render_dashboard(results_dir: Path) -> None:
                         mime="text/html",
                     )
 
-    config_tab, prep_tab, exec_tab, results_tab, summary_tab = st.tabs(
+    config_tab, prep_tab, exec_tab, results_tab, summary_tab, help_tab = st.tabs(
         [
             "Configurar & Executar",
             "Preparar Dados",
             "Execução",
             "Resultados",
             "Resumo",
+            "Ajuda",
         ]
     )
 
     with config_tab:
         with st.form("run_form"):
             preparar = st.checkbox(
-                "Preparar", help="Executar preparação dos dados"
+                "Preparar", help="Executar preparação dos dados. Veja a aba Ajuda"
             )
             treinar = st.checkbox(
-                "Treinar", help="Executar etapa de treino"
+                "Treinar", help="Executar etapa de treino. Veja a aba Ajuda"
             )
             validar = st.checkbox(
-                "Validar", help="Executar validação cruzada"
+                "Validar",
+                help="Executar validação cruzada. Veja a aba Ajuda",
             )
             input_path = st.text_input(
-                "input_path", help="Arquivo ou glob de entrada"
+                "input_path",
+                help="Arquivo ou glob de entrada. Consulte a aba Ajuda",
             )
             modelos = st.text_input(
-                "Modelos", help="Nomes dos modelos separados por vírgula"
+                "Modelos",
+                help="Nomes dos modelos separados por vírgula. Veja a aba Ajuda",
             )
             preprocess = st.text_input(
                 "Preprocessadores",
-                help="Pré-processadores separados por vírgula",
+                help="Pré-processadores separados por vírgula. Veja a aba Ajuda",
             )
             email = st.text_input(
                 "E-mail", help="Endereço para notificações"
@@ -436,6 +441,17 @@ def _render_dashboard(results_dir: Path) -> None:
 
                 styled = display_df.style.apply(_highlight_best, axis=0)
                 st.dataframe(styled, use_container_width=True)
+
+    with help_tab:
+        st.subheader("Modelos disponíveis")
+        help_df = pd.DataFrame(
+            [(k, v) for k, v in sorted(MODEL_DESCRIPTIONS.items())],
+            columns=["Modelo", "Descrição"],
+        )
+        st.dataframe(help_df, hide_index=True)
+        st.caption(
+            "Aplicações típicas variam conforme o contexto; consulte a literatura especializada."
+        )
 
 
 if __name__ == "__main__":
