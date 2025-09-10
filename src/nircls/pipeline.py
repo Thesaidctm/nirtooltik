@@ -505,10 +505,11 @@ def _run_cv(
                 )
                 gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=1)
                 gs.fit(X.values, y_enc)
-                n_comp = _get_n_components(gs.best_params_)
+                best_params = gs.best_params_
+                n_comp = _get_n_components(best_params)
                 if n_comp is not None:
                     n_comp_list.append(n_comp)
-                best = gs.best_estimator_
+                best = pipe.set_params(**best_params)
                 if best_steps_repr is None:
                     best_steps_repr = [
                         repr(v) for k, v in best.named_steps.items() if k != "clf"
@@ -520,35 +521,29 @@ def _run_cv(
                         method=calib_cfg.get("method", "sigmoid"),
                         cv=calib_cfg.get("cv", 5),
                     )
-                yhat = cross_val_predict(
-                    best, X.values, y_enc, cv=LeaveOneOut(), n_jobs=1
+                proba = cross_val_predict(
+                    best,
+                    X.values,
+                    y_enc,
+                    cv=LeaveOneOut(),
+                    method="predict_proba",
+                    n_jobs=1,
                 )
+                yhat = np.argmax(proba, axis=1)
                 scores_val["F1-macro"].append(f1_score(y_enc, yhat, average="macro"))
                 scores_val["BalancedAcc"].append(balanced_accuracy_score(y_enc, yhat))
                 scores_val["Accuracy"].append(accuracy_score(y_enc, yhat))
-                proba_fn = getattr(best, "predict_proba", None)
-                proba = None
-                proba_tr = None
-                if proba_fn is not None:
-                    proba = cross_val_predict(
-                        best,
-                        X.values,
-                        y_enc,
-                        cv=LeaveOneOut(),
-                        method="predict_proba",
-                        n_jobs=1,
-                    )
-                    y_proba_all.append(proba)
-                    brier = np.mean(
-                        [
-                            brier_score_loss((y_enc == k).astype(int), proba[:, k])
-                            for k in range(len(classes))
-                        ]
-                    )
-                    scores_val["Brier"].append(float(brier))
-                    scores_val["ECE"].append(
-                        expected_calibration_error(y_enc, proba, n_bins=15)
-                    )
+                y_proba_all.append(proba)
+                brier = np.mean(
+                    [
+                        brier_score_loss((y_enc == k).astype(int), proba[:, k])
+                        for k in range(len(classes))
+                    ]
+                )
+                scores_val["Brier"].append(float(brier))
+                scores_val["ECE"].append(
+                    expected_calibration_error(y_enc, proba, n_bins=15)
+                )
                 best.fit(X.values, y_enc)
                 yhat_tr = best.predict(X.values)
                 scores_train["F1-macro"].append(
@@ -558,18 +553,17 @@ def _run_cv(
                     balanced_accuracy_score(y_enc, yhat_tr)
                 )
                 scores_train["Accuracy"].append(accuracy_score(y_enc, yhat_tr))
-                if proba_fn is not None:
-                    proba_tr = best.predict_proba(X.values)
-                    brier_tr = np.mean(
-                        [
-                            brier_score_loss((y_enc == k).astype(int), proba_tr[:, k])
-                            for k in range(len(classes))
-                        ]
-                    )
-                    scores_train["Brier"].append(float(brier_tr))
-                    scores_train["ECE"].append(
-                        expected_calibration_error(y_enc, proba_tr, n_bins=15)
-                    )
+                proba_tr = best.predict_proba(X.values)
+                brier_tr = np.mean(
+                    [
+                        brier_score_loss((y_enc == k).astype(int), proba_tr[:, k])
+                        for k in range(len(classes))
+                    ]
+                )
+                scores_train["Brier"].append(float(brier_tr))
+                scores_train["ECE"].append(
+                    expected_calibration_error(y_enc, proba_tr, n_bins=15)
+                )
                 y_true_all.append(y_enc)
                 y_pred_all.append(yhat)
                 row = {
