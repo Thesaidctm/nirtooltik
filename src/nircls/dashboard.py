@@ -22,6 +22,7 @@ import plotly.io as pio
 
 import nircls.preprocessors as preprocessors
 from nircls.config_schema import ConfigModel, ValidationError
+from nircls.i18n import tr
 from nircls.io import prepare_inputs, summarize_dataset
 from nircls.models.factory import MODEL_DESCRIPTIONS
 from nircls.pipeline import run_multiple_eval, train_and_save
@@ -109,6 +110,7 @@ def _render_dashboard(results_dir: Path) -> None:
             _initial_cfg = json.load(f)
     except Exception:
         _initial_cfg = {}
+    st.session_state.setdefault("language", _initial_cfg.get("language", "pt"))
     if _initial_cfg.get("check_updates", True):
         import nircls
 
@@ -131,18 +133,18 @@ def _render_dashboard(results_dir: Path) -> None:
             json.dump(data, f, indent=2)
 
     def _run_wizard() -> None:
-        st.title("nircls Dashboard")
-        st.header("Configuração inicial")
+        st.title(tr("nircls Dashboard"))
+        st.header(tr("Configuração inicial"))
         step = st.session_state.get("wizard_step", 0)
         data = st.session_state.setdefault("wizard_data", {})
         if step == 0:
             with st.form("wiz_modelos"):
                 modelos = st.multiselect(
-                    "Modelos",
+                    tr("Modelos"),
                     options=sorted(MODEL_DESCRIPTIONS),
                     default=data.get("modelos", []),
                 )
-                submitted = st.form_submit_button("Próximo")
+                submitted = st.form_submit_button(tr("Próximo"))
             if submitted:
                 data["modelos"] = modelos
                 st.session_state["wizard_step"] = 1
@@ -150,11 +152,11 @@ def _render_dashboard(results_dir: Path) -> None:
         elif step == 1:
             with st.form("wiz_preprocess"):
                 preprocess = st.multiselect(
-                    "Preprocessadores",
+                    tr("Preprocessadores"),
                     options=_get_preprocessor_names(),
                     default=data.get("preprocess", []),
                 )
-                submitted = st.form_submit_button("Próximo")
+                submitted = st.form_submit_button(tr("Próximo"))
             if submitted:
                 data["preprocess"] = preprocess
                 st.session_state["wizard_step"] = 2
@@ -162,11 +164,11 @@ def _render_dashboard(results_dir: Path) -> None:
         else:
             with st.form("wiz_email"):
                 email = st.text_input(
-                    "E-mail",
+                    tr("E-mail"),
                     value=data.get("email", ""),
-                    help="Endereço para notificações",
+                    help=tr("Endereço para notificações"),
                 )
-                submitted = st.form_submit_button("Concluir")
+                submitted = st.form_submit_button(tr("Concluir"))
             if submitted:
                 data["email"] = email
                 _save_cfg(data)
@@ -179,8 +181,8 @@ def _render_dashboard(results_dir: Path) -> None:
         _run_wizard()
         return
 
-    st.title("nircls Dashboard")
-    st.info("Execute `nircls run-all` antes de abrir o dashboard.")
+    st.title(tr("nircls Dashboard"))
+    st.info(tr("Execute `nircls run-all` antes de abrir o dashboard."))
 
     run_dirs = [
         p
@@ -300,14 +302,14 @@ def _render_dashboard(results_dir: Path) -> None:
         help_tab,
     ) = st.tabs(
         [
-            "Configurar & Executar",
-            "Configurações",
-            "Preparar Dados",
-            "Execução",
-            "Resultados",
-            "Resumo",
-            "Logs",
-            "Ajuda",
+            tr("Configurar & Executar"),
+            tr("Configurações"),
+            tr("Preparar Dados"),
+            tr("Execução"),
+            tr("Resultados"),
+            tr("Resumo"),
+            tr("Logs"),
+            tr("Ajuda"),
         ]
     )
 
@@ -321,7 +323,19 @@ def _render_dashboard(results_dir: Path) -> None:
             cfg_defaults.get("email", email_defaults.get("to_addr", "")),
         )
 
-        if st.button("Reiniciar wizard"):
+        language = st.selectbox(
+            tr("Idioma"),
+            ["pt", "en"],
+            index=["pt", "en"].index(st.session_state.get("language", "pt")),
+        )
+        if language != st.session_state.get("language"):
+            st.session_state["language"] = language
+            cfg = _load_cfg()
+            cfg["language"] = language
+            _save_cfg(cfg)
+            st.experimental_rerun()
+
+        if st.button(tr("Reiniciar wizard")):
             if config_path.exists():
                 try:
                     config_path.unlink()
@@ -334,37 +348,47 @@ def _render_dashboard(results_dir: Path) -> None:
 
         with st.form("run_form"):
             analises = st.multiselect(
-                "Análises",
+                tr("Análises"),
                 options=["preparar", "treinar", "validar"],
-                help=f"Escolha as análises a executar. {ajuda_link}",
+                help=tr("Escolha as análises a executar. {ajuda_link}").format(
+                    ajuda_link=ajuda_link
+                ),
             )
             uploaded_files = st.file_uploader(
-                "Arquivos de entrada",
+                tr("Arquivos de entrada"),
                 type=["csv", "xlsx", "xls"],
                 accept_multiple_files=True,
-                help=f"Envie os dados de entrada. {ajuda_link}",
+                help=tr("Envie os dados de entrada. {ajuda_link}").format(
+                    ajuda_link=ajuda_link
+                ),
             )
             modelos = st.multiselect(
-                "Modelos",
+                tr("Modelos"),
                 options=sorted(MODEL_DESCRIPTIONS),
                 key="modelos",
-                help=f"Selecione os modelos. {ajuda_link}",
+                help=tr("Selecione os modelos. {ajuda_link}").format(
+                    ajuda_link=ajuda_link
+                ),
             )
             preprocess = st.multiselect(
-                "Preprocessadores",
+                tr("Preprocessadores"),
                 options=_get_preprocessor_names(),
                 key="preprocess",
-                help=f"Selecione os pré-processadores. {ajuda_link}",
+                help=tr("Selecione os pré-processadores. {ajuda_link}").format(
+                    ajuda_link=ajuda_link
+                ),
             )
             email = st.text_input(
-                "E-mail",
+                tr("E-mail"),
                 key="email",
-                help=f"Endereço para notificações. {ajuda_link}",
+                help=tr("Endereço para notificações. {ajuda_link}").format(
+                    ajuda_link=ajuda_link
+                ),
             )
-            submitted = st.form_submit_button("Executar")
+            submitted = st.form_submit_button(tr("Executar"))
 
         cols = st.columns(2)
-        if cols[0].button("Salvar"):
+        if cols[0].button(tr("Salvar")):
             cfg = _load_cfg()
             cfg.update(
                 {
@@ -373,8 +397,8 @@ def _render_dashboard(results_dir: Path) -> None:
                 }
             )
             _save_cfg(cfg)
-            st.success("Configurações salvas.")
-        if cols[1].button("Carregar"):
+            st.success(tr("Configurações salvas."))
+        if cols[1].button(tr("Carregar")):
             loaded = _load_cfg()
             for k in ["modelos", "preprocess", "email"]:
                 st.session_state[k] = loaded.get(k, [] if k != "email" else "")
@@ -390,9 +414,9 @@ def _render_dashboard(results_dir: Path) -> None:
             )
             _save_cfg(cfg)
             if not analises:
-                st.warning("Selecione ao menos uma análise.")
+                st.warning(tr("Selecione ao menos uma análise."))
             elif not uploaded_files:
-                st.warning("Envie ao menos um arquivo de entrada.")
+                st.warning(tr("Envie ao menos um arquivo de entrada."))
             else:
                 with tempfile.TemporaryDirectory() as tmpdir:
                     tmpdir_path = Path(tmpdir)
@@ -409,12 +433,12 @@ def _render_dashboard(results_dir: Path) -> None:
                     try:
                         cfg_model = ConfigModel(**cfg)
                     except ValidationError as exc:
-                        st.error(f"Configuração inválida: {exc}")
+                        st.error(tr("Configuração inválida: {exc}").format(exc=exc))
                     else:
                         cfg_dict = cfg_model.dict(exclude_none=True)
                         run_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
                         progress = st.progress(0)
-                        status = st.status("Inicializando...")
+                        status = st.status(tr("Inicializando..."))
                         errors: dict[str, str] = {}
                         try:
                             steps = list(analises)
@@ -423,7 +447,7 @@ def _render_dashboard(results_dir: Path) -> None:
 
                             if "preparar" in steps:
                                 status.update(
-                                    label="Preparando dados...", state="running"
+                                    label=tr("Preparando dados..."), state="running"
                                 )
                                 try:
                                     prepare_inputs(cfg_dict["data"], use_cache=False)
@@ -435,7 +459,7 @@ def _render_dashboard(results_dir: Path) -> None:
 
                             if "treinar" in steps:
                                 status.update(
-                                    label="Treinando modelos...", state="running"
+                                    label=tr("Treinando modelos..."), state="running"
                                 )
                                 try:
                                     train_and_save(cfg_dict, run_dir / "train")
@@ -447,7 +471,7 @@ def _render_dashboard(results_dir: Path) -> None:
 
                             if "validar" in steps:
                                 status.update(
-                                    label="Validando modelos...", state="running"
+                                    label=tr("Validando modelos..."), state="running"
                                 )
                                 try:
                                     run_multiple_eval(cfg_dict, run_dir / "cv")
@@ -457,52 +481,60 @@ def _render_dashboard(results_dir: Path) -> None:
                                 completed += 1
                                 progress.progress(int(completed / total * 100))
 
-                            status.update(label="Execução concluída.", state="complete")
-                            st.success("Execução concluída.")
+                            status.update(
+                                label=tr("Execução concluída."), state="complete"
+                            )
+                            st.success(tr("Execução concluída."))
                             if email:
                                 enviar_email(
-                                    "Execução concluída",
-                                    "A execução foi concluída.",
+                                    tr("Execução concluída."),
+                                    tr("A execução foi concluída."),
                                     email,
                                 )
                         except Exception:
-                            status.update(label="Execução falhou", state="error")
+                            status.update(label=tr("Execução falhou"), state="error")
                             for etapa, msg in errors.items():
-                                st.error(f"Erro na etapa {etapa}: {msg}")
+                                st.error(
+                                    tr("Erro na etapa {etapa}: {msg}").format(
+                                        etapa=etapa, msg=msg
+                                    )
+                                )
 
     with settings_tab:
         email_cfg = _load_email_config()
         cfg = _load_cfg()
         check_updates = st.checkbox(
-            "Verificar atualizações automaticamente",
+            tr("Verificar atualizações automaticamente"),
             cfg.get("check_updates", True),
         )
-        host = st.text_input("Host SMTP", email_cfg.get("host", ""))
-        port = st.number_input("Porta", value=int(email_cfg.get("port") or 587), step=1)
-        user = st.text_input("Usuário", email_cfg.get("user", ""))
-        password = st.text_input(
-            "Senha", value=email_cfg.get("password", ""), type="password"
+        host = st.text_input(tr("Host SMTP"), email_cfg.get("host", ""))
+        port = st.number_input(
+            tr("Porta"), value=int(email_cfg.get("port") or 587), step=1
         )
-        default_email = st.text_input("E-mail padrão", email_cfg.get("to_addr", ""))
+        user = st.text_input(tr("Usuário"), email_cfg.get("user", ""))
+        password = st.text_input(
+            tr("Senha"), value=email_cfg.get("password", ""), type="password"
+        )
+        default_email = st.text_input(tr("E-mail padrão"), email_cfg.get("to_addr", ""))
         default_results = email_cfg.get("results_dir", str(results_dir))
         refresh_default = float(email_cfg.get("log_refresh_secs", 0))
         st.number_input(
-            "Frequência de atualização dos logs (s)",
+            tr("Frequência de atualização dos logs (s)"),
             value=refresh_default,
             min_value=0.0,
             step=1.0,
             key="log_refresh_secs",
-            help="0 desativa atualização automática.",
+            help=tr("0 desativa atualização automática."),
         )
         if hasattr(st, "directory_picker"):
             results_root = st.directory_picker(
-                "Diretório de resultados", default=default_results
+                tr("Diretório de resultados"), default=default_results
             )
         else:
             results_root = st.text_input(
-                "Diretório de resultados", value=default_results, key="results_root"
+                tr("Diretório de resultados"), value=default_results, key="results_root"
             )
-            if st.button("Selecionar pasta"):
+            if st.button(tr("Selecionar pasta")):
                 try:  # pragma: no cover - best effort
                     import tkinter as tk
                     from tkinter import filedialog
@@ -512,10 +544,10 @@ def _render_dashboard(results_dir: Path) -> None:
                     st.session_state["results_root"] = selected
                     results_root = selected
                 except Exception:
-                    st.warning("Seleção de pasta não suportada.")
+                    st.warning(tr("Seleção de pasta não suportada."))
             results_root = st.session_state.get("results_root", results_root)
 
-        if st.button("Salvar configurações"):
+        if st.button(tr("Salvar configurações")):
             _save_email_config(
                 {
                     "host": host,
@@ -534,12 +566,12 @@ def _render_dashboard(results_dir: Path) -> None:
                 try:  # pragma: no cover - best effort
                     keyring.set_password("nircls", user, password)
                 except Exception:
-                    st.warning("Falha ao salvar a senha no keyring.")
-            st.success("Configurações salvas.")
+                    st.warning(tr("Falha ao salvar a senha no keyring."))
+            st.success(tr("Configurações salvas."))
 
     with prep_tab:
         uploaded = st.file_uploader(
-            "Arquivo CSV ou XLSX",
+            tr("Arquivo CSV ou XLSX"),
             type=["csv", "xlsx", "xls"],
         )
         if uploaded is not None:
@@ -550,9 +582,9 @@ def _render_dashboard(results_dir: Path) -> None:
             )
             is_num = pd.api.types.is_numeric_dtype
             non_num = [c for c in df.columns if not is_num(df[c])]
-            target_col = st.selectbox("Coluna alvo", non_num)
-            spectral_input = st.text_input("Faixa espectral (mín,max)")
-            if target_col and st.button("Processar"):
+            target_col = st.selectbox(tr("Coluna alvo"), non_num)
+            spectral_input = st.text_input(tr("Faixa espectral (mín,max)"))
+            if target_col and st.button(tr("Processar")):
                 with tempfile.NamedTemporaryFile(
                     "wb", delete=False, suffix=Path(uploaded.name).suffix
                 ) as tmp:
@@ -564,11 +596,11 @@ def _render_dashboard(results_dir: Path) -> None:
                         lo, hi = map(float, spectral_input.split(","))
                         cfg["spectral_range"] = [lo, hi]
                     except Exception:
-                        st.error("Formato inválido de faixa espectral")
+                        st.error(tr("Formato inválido de faixa espectral"))
                 try:
                     ds_list = prepare_inputs(cfg, use_cache=False)
                     summary = summarize_dataset(ds_list)
-                    st.subheader("Resumo do conjunto")
+                    st.subheader(tr("Resumo do conjunto"))
                     st.dataframe(summary)
                     for ds in ds_list:
                         st.markdown(f"### {ds['target']}")
@@ -609,21 +641,25 @@ def _render_dashboard(results_dir: Path) -> None:
                         )
                         st.plotly_chart(fig2, use_container_width=True)
                 except Exception as exc:  # pragma: no cover - display error
-                    st.error(f"Erro ao preparar dados: {exc}")
+                    st.error(tr("Erro ao preparar dados: {exc}").format(exc=exc))
                 finally:
                     tmp_path.unlink(missing_ok=True)
 
     with exec_tab:
         if not run_dirs:
-            st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
+            st.warning(
+                tr("Nenhuma execução encontrada em {results_dir}/.").format(
+                    results_dir=results_dir
+                )
+            )
         else:
             selected = st.multiselect(
-                "Selecione execuções",
+                tr("Selecione execuções"),
                 run_dirs,
                 format_func=lambda p: p.name,
             )
             if not selected:
-                st.info("Selecione uma ou mais execuções.")
+                st.info(tr("Selecione uma ou mais execuções."))
             else:
                 cols = st.columns(len(selected))
                 for col, run in zip(cols, selected):
@@ -650,7 +686,11 @@ def _render_dashboard(results_dir: Path) -> None:
                                         df = df[cols]
                                     st.dataframe(df)
                             except Exception as exc:  # pragma: no cover - display error
-                                st.error(f"Erro ao carregar métricas: {exc}")
+                                st.error(
+                                    tr("Erro ao carregar métricas: {exc}").format(
+                                        exc=exc
+                                    )
+                                )
                             fig_dir = strat_dir / "figures"
                             if fig_dir.exists():
                                 _display_figures(fig_dir)
@@ -683,15 +723,23 @@ def _render_dashboard(results_dir: Path) -> None:
                                 except (
                                     Exception
                                 ) as exc:  # pragma: no cover - display error
-                                    st.error(f"Erro ao carregar relatório QC: {exc}")
+                                    st.error(
+                                        tr(
+                                            "Erro ao carregar relatório QC: {exc}"
+                                        ).format(exc=exc)
+                                    )
 
     with results_tab:
         if not run_dirs:
-            st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
+            st.warning(
+                tr("Nenhuma execução encontrada em {results_dir}/.").format(
+                    results_dir=results_dir
+                )
+            )
         else:
             _render_actions(run_dirs)
             compare_runs = st.multiselect(
-                "Selecione execuções para comparar",
+                tr("Selecione execuções para comparar"),
                 run_dirs,
                 format_func=lambda p: p.name,
             )
@@ -721,21 +769,29 @@ def _render_dashboard(results_dir: Path) -> None:
                                         df = df[cols]
                                     st.dataframe(df)
                             except Exception as exc:  # pragma: no cover
-                                st.error(f"Erro ao carregar métricas: {exc}")
+                                st.error(
+                                    tr("Erro ao carregar métricas: {exc}").format(
+                                        exc=exc
+                                    )
+                                )
                             fig_dir = strat_dir / "figures"
                             if fig_dir.exists():
                                 _display_figures(fig_dir)
             elif compare_runs:
-                st.warning("Selecione ao menos duas execuções para comparar.")
+                st.warning(tr("Selecione ao menos duas execuções para comparar."))
 
     with summary_tab:
         if not run_dirs:
-            st.warning(f"Nenhuma execução encontrada em {results_dir}/.")
+            st.warning(
+                tr("Nenhuma execução encontrada em {results_dir}/.").format(
+                    results_dir=results_dir
+                )
+            )
         else:
             _render_actions(run_dirs)
             summary = summarize_runs(results_dir)
             if summary.empty:
-                st.warning("Nenhuma métrica agregada encontrada.")
+                st.warning(tr("Nenhuma métrica agregada encontrada."))
             else:
                 summary["run"] = summary["run"].str.split("/").str[0]
                 num_cols = summary.select_dtypes("number").columns
@@ -775,32 +831,38 @@ def _render_dashboard(results_dir: Path) -> None:
             if refresh_secs > 0:
                 st_autorefresh(interval=int(refresh_secs * 1000), key="log_refresh")
             else:
-                st.button("Atualizar")
+                st.button(tr("Atualizar"))
         except Exception:
-            st.button("Atualizar")
+            st.button(tr("Atualizar"))
 
         if log_path.exists():
             buffer = st.session_state.setdefault("log_buffer", [])
             buffer.extend(_read_log_updates(log_path))
             st.session_state["log_buffer"] = buffer[-200:]
             placeholder.text_area(
-                "Log", "\n".join(st.session_state["log_buffer"]), height=300
+                tr("Log"), "\n".join(st.session_state["log_buffer"]), height=300
             )
             with log_path.open("rb") as f:
                 st.download_button(
-                    "Baixar log", f, file_name=log_path.name, mime="text/plain"
+                    tr("Baixar log"), f, file_name=log_path.name, mime="text/plain"
                 )
         else:
-            placeholder.info(f"Arquivo de log não encontrado em {log_path}")
+            placeholder.info(
+                tr("Arquivo de log não encontrado em {log_path}").format(
+                    log_path=log_path
+                )
+            )
 
     with help_tab:
         st.markdown("<a id='ajuda'></a>", unsafe_allow_html=True)
-        st.subheader("Gerenciamento de execuções")
+        st.subheader(tr("Gerenciamento de execuções"))
         st.markdown(
-            "Nas abas **Resultados** e **Resumo**, utilize a coluna de ações para "
-            "renomear, excluir (com confirmação) ou baixar um arquivo ZIP de cada execução."
+            tr("Nas abas **Resultados** e **Resumo**, utilize a coluna de ações para ")
+            + tr(
+                "renomear, excluir (com confirmação) ou baixar um arquivo ZIP de cada execução."
+            )
         )
-        st.subheader("Modelos disponíveis")
+        st.subheader(tr("Modelos disponíveis"))
         model_apps = {
             "PLSDA": "Análises espectrais e quimiometria",
             "SVM_RBF": "Classificação não linear",
@@ -831,7 +893,7 @@ def _render_dashboard(results_dir: Path) -> None:
             ],
             columns=["Modelo", "Descrição", "Aplicações Típicas"],
         )
-        with st.expander("Tabela de modelos"):
+        with st.expander(tr("Tabela de modelos")):
             st.dataframe(help_df, hide_index=True)
 
 
