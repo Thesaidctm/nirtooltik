@@ -266,6 +266,54 @@ def test_nested_crossval_report(tmp_path, method):
     assert (strat_dir / "report.md").exists()
 
 
+def _simple_dataset(tmp_path):
+    rng = np.random.RandomState(0)
+    X = rng.rand(20, 4)
+    y = np.array(["A"] * 10 + ["B"] * 10)
+    df = pd.DataFrame(X, columns=[str(i) for i in range(4)])
+    df["target"] = y
+    data_file = tmp_path / "data.csv"
+    df.to_csv(data_file, index=False)
+    return data_file
+
+
+def _simple_cfg(data_file, inner_folds_cfg):
+    cv_cfg = {
+        "random_state": 0,
+        "strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}],
+    }
+    if inner_folds_cfg != "missing":
+        cv_cfg["inner_folds"] = inner_folds_cfg
+    return {
+        "data": {"input_path": str(data_file), "target_cols": ["target"]},
+        "models": [
+            {"name": "PLSDA", "grid": {"n_components": [2], "method": ["logreg"]}}
+        ],
+        "cv": cv_cfg,
+    }
+
+
+@pytest.mark.parametrize("inner_folds_cfg", ["missing", None])
+def test_inner_folds_defaults_without_error(tmp_path, inner_folds_cfg):
+    data_file = _simple_dataset(tmp_path)
+    cfg = _simple_cfg(data_file, inner_folds_cfg)
+    run_multiple_eval(cfg, tmp_path / "inner_default", n_jobs=1)
+
+
+def test_inner_folds_too_small_raises(tmp_path):
+    data_file = _simple_dataset(tmp_path)
+    cfg = _simple_cfg(data_file, 1)
+    with pytest.raises(ModelError, match="inner_folds"):
+        run_multiple_eval(cfg, tmp_path / "inner_invalid", n_jobs=1)
+
+
+def test_inner_folds_invalid_type_raises(tmp_path):
+    data_file = _simple_dataset(tmp_path)
+    cfg = _simple_cfg(data_file, "foo")
+    with pytest.raises(DataError, match="inner_folds"):
+        run_multiple_eval(cfg, tmp_path / "inner_invalid_type", n_jobs=1)
+
+
 def test_predict_with_model_outputs_y_pred_only_when_y_missing(tmp_path):
     rng = np.random.RandomState(0)
     X = rng.rand(10, 4)
