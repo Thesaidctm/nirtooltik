@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.metrics import roc_curve
 from sklearn.preprocessing import label_binarize
 
 from .logging import logger
+from .palettes import PALETTE_MAP, Palette
 
 
 def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
@@ -64,7 +65,7 @@ def plot_confusion(
     out_base: Path,
     interactive: bool = False,
     *,
-    colorscale: Any = [[0, "white"], [1, "#0d47a1"]],
+    palette: Palette = Palette.VIRIDIS,
 ) -> None:
     """Plot and export a confusion matrix with raw counts.
 
@@ -76,13 +77,13 @@ def plot_confusion(
     ----------
     cm, classes, out_base, interactive:
         See original function.
-    colorscale:
-        Plotly colorscale applied to the heatmap. Defaults to a white-to-blue
-        palette.
+    palette:
+        Name of the color palette applied to the heatmap.
     """
 
     cm = np.asarray(cm)
     labels = cm.astype(str)
+    colorscale = px.colors.make_colorscale(PALETTE_MAP[palette])
     heatmap = go.Heatmap(
         z=cm,
         x=classes,
@@ -111,7 +112,13 @@ def plot_confusion(
 
 
 def plot_roc_ovr(
-    y_true, y_proba, classes, out_base: Path, interactive: bool = False
+    y_true,
+    y_proba,
+    classes,
+    out_base: Path,
+    interactive: bool = False,
+    *,
+    palette: Palette = Palette.VIRIDIS,
 ) -> None:
     """Plot one-vs-rest ROC curves for multi-class or binary problems."""
 
@@ -133,10 +140,15 @@ def plot_roc_ovr(
             y=[0, 1],
             mode="lines",
             name="Chance",
-            line=dict(dash="dash"),
+            line=dict(dash="dash", color="gray"),
         )
     )
-    fig.update_layout(xaxis_title="FPR", yaxis_title="TPR", title="ROC OvR")
+    fig.update_layout(
+        xaxis_title="FPR",
+        yaxis_title="TPR",
+        title="ROC OvR",
+        colorway=PALETTE_MAP[palette],
+    )
     _export(fig, out_base, interactive)
 
 
@@ -146,6 +158,8 @@ def plot_reliability(
     out_base: Path,
     n_bins: int = 10,
     interactive: bool = False,
+    *,
+    palette: Palette = Palette.VIRIDIS,
 ) -> None:
     """Plot reliability diagram (confidence vs accuracy)."""
 
@@ -169,7 +183,7 @@ def plot_reliability(
             y=[0, 1],
             mode="lines",
             name="Perfect",
-            line=dict(dash="dash"),
+            line=dict(dash="dash", color="gray"),
         )
     )
     if mids:
@@ -180,5 +194,6 @@ def plot_reliability(
         title="Reliability Diagram",
         xaxis=dict(range=[0, 1]),
         yaxis=dict(range=[0, 1]),
+        colorway=PALETTE_MAP[palette],
     )
     _export(fig, out_base, interactive)

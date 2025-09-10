@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, Field, ValidationError, root_validator
 
 from .utils.misc import RESULTS_DIR
+from .utils.palettes import Palette
 
 
 class DataConfig(BaseModel):
@@ -24,15 +25,9 @@ class DataConfig(BaseModel):
     group_col: Optional[str] = Field(
         None, description="Column name with group labels for grouped CV"
     )
-    encoding: Optional[str] = Field(
-        None, description="File encoding for tabular input"
-    )
-    sep: Optional[str] = Field(
-        ",", description="Field separator for CSV files"
-    )
-    decimal: Optional[str] = Field(
-        ".", description="Decimal separator"
-    )
+    encoding: Optional[str] = Field(None, description="File encoding for tabular input")
+    sep: Optional[str] = Field(",", description="Field separator for CSV files")
+    decimal: Optional[str] = Field(".", description="Decimal separator")
     spectral_range: Optional[Union[List[float], tuple[float, float]]] = Field(
         None, description="Lower and upper wavelength limits"
     )
@@ -134,6 +129,7 @@ class ConfigModel(BaseModel):
     models: Optional[List[ModelConfig]] = None
     astm: bool = False
     use_cache: bool = True
+    palette: Palette = Palette.VIRIDIS
     notification_email: Optional[str] = Field(
         None,
         description="Email address for notifications",
@@ -152,4 +148,5 @@ __all__ = [
     "ModelConfig",
     "ConfigModel",
     "ValidationError",
+    "Palette",
 ]
