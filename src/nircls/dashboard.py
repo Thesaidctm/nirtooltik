@@ -75,7 +75,7 @@ def _render_dashboard(results_dir: Path) -> None:
     results_dir = Path(results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    st.set_page_config(page_title="nircls Dashboard")
+    st.set_page_config(page_title="nircls Dashboard", page_icon="🧪", layout="wide")
     st.title("nircls Dashboard")
     st.info("Execute `nircls run-all` antes de abrir o dashboard.")
 
@@ -190,6 +190,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 key="preprocess",
                 help="Pré-processadores separados por vírgula. Veja a aba Ajuda",
             )
+            email = st.text_input("E-mail", help="Endereço para notificações")
             email = st.text_input(
                 "E-mail", key="email", help="Endereço para notificações"
             )
