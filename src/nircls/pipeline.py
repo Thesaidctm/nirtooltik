@@ -1160,6 +1160,12 @@ def run_multiple_eval(
 
         outputs: List[Tuple[Path, Path]] = []
         logger.info("Running evaluation for %d CV strategies", len(strategies))
+        email_fn = globals().get("enviar_email")
+        if callable(email_fn):
+            email_fn(
+                subject="Validação iniciada",
+                body="O processo de validação foi iniciado.",
+            )
         with Progress(console=Console(stderr=True)) as progress:
             strat_task = progress.add_task("CV strategy", total=len(strategies))
             for strat in strategies:
@@ -1317,6 +1323,12 @@ def run_multiple_eval(
                         f"Estratégia de validação desconhecida: {stype}. Use 'kfold', 'loo' ou 'holdout'."
                     )
                 progress.advance(strat_task)
+        email_fn = globals().get("enviar_email")
+        if callable(email_fn):
+            email_fn(
+                subject="Validação concluída",
+                body="A validação foi concluída.",
+            )
     return outputs
 
 
@@ -1521,6 +1533,12 @@ def train_and_save(
     except Exception:
         logger.error("Training failed", exc_info=True)
         raise
+    email_fn = globals().get("enviar_email")
+    if callable(email_fn):
+        email_fn(
+            subject="Treinamento concluído",
+            body="Treinamento concluído. Iniciando validação...",
+        )
     return out_dir / "metrics.json", out_dir / "figures"
 
 
