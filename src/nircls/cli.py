@@ -260,15 +260,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--run", choices=["one", "all"], default="all", help=t("run_help")
     )
-    parser.add_argument(
-        "--seed", type=int, default=42, help=t("seed_help")
-    )
-    parser.add_argument(
-        "--mlflow", help=t("mlflow_help")
-    )
-    parser.add_argument(
-        "--n-jobs", type=int, default=-1, help=t("n_jobs_help")
-    )
+    parser.add_argument("--seed", type=int, default=42, help=t("seed_help"))
+    parser.add_argument("--mlflow", help=t("mlflow_help"))
+    parser.add_argument("--n-jobs", type=int, default=1, help=t("n_jobs_help"))
     parser.add_argument(
         "--log-level",
         default="INFO",
@@ -362,7 +356,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         setup_logging(level=log_level, log_file=log_path)
         return log_path
 
-    n_jobs = args.n_jobs
+    n_jobs = max(1, args.n_jobs)
     cv_verbose = args.cv_verbose
     mlflow_uri = args.mlflow
     if mlflow_uri:
@@ -487,7 +481,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 out_dir,
                 interactive=args.interactive,
                 random_state=args.seed,
-                n_jobs=args.n_jobs,
+                n_jobs=n_jobs,
                 mlflow_uri=mlflow_uri,
             )
         except DataError as e:
@@ -574,7 +568,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 default_cfg,
                 cv_dir,
                 random_state=args.seed,
-                n_jobs=args.n_jobs,
+                n_jobs=n_jobs,
                 mlflow_uri=mlflow_uri,
             )
         except (DataError, ModelError) as e:
@@ -657,7 +651,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cfg.dict(),
                 cv_dir,
                 random_state=args.seed,
-                n_jobs=args.n_jobs,
+                n_jobs=n_jobs,
                 mlflow_uri=mlflow_uri,
             )
             for metrics_path, figs_dir in outputs:
@@ -764,7 +758,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     cfg_obj.dict(),
                     cv_dir,
                     random_state=args.seed,
-                    n_jobs=args.n_jobs,
+                    n_jobs=n_jobs,
                     mlflow_uri=mlflow_uri,
                 )
                 for metrics_path, figs_dir in outputs:
