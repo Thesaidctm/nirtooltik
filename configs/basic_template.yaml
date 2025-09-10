@@ -17,3 +17,7 @@ models:
     grid: {n_components: [5], method: [logreg, lda]}
     # y_scramble_n_iter: 5  # reduz iterações de Y-scrambling (0 desativa)
     # overfit_check: false  # desativa Y-scrambling por completo
+
+# Para receber notificações por e-mail configure as variáveis de ambiente
+# NIRCLS_EMAIL_HOST, NIRCLS_EMAIL_PORT, NIRCLS_EMAIL_USER, NIRCLS_EMAIL_PASS e
+# NIRCLS_EMAIL_TO.
