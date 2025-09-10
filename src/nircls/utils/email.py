@@ -12,6 +12,8 @@ import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 
+import keyring
+
 from .logging import logger
 
 
@@ -33,6 +35,7 @@ def _load_config() -> dict:
     if cfg_path:
         try:
             cfg = json.loads(Path(cfg_path).read_text(encoding="utf-8"))
+            cfg.pop("password", None)
         except Exception:  # pragma: no cover - best effort
             logger.debug("Could not read email config", exc_info=True)
             cfg = {}
@@ -41,13 +44,21 @@ def _load_config() -> dict:
             "host": os.getenv("NIRCLS_EMAIL_HOST", cfg.get("host")),
             "port": os.getenv("NIRCLS_EMAIL_PORT", cfg.get("port")),
             "user": os.getenv("NIRCLS_EMAIL_USER", cfg.get("user")),
-            "password": os.getenv("NIRCLS_EMAIL_PASS", cfg.get("password")),
             "from_addr": os.getenv("NIRCLS_EMAIL_FROM", cfg.get("from_addr")),
             "to_addr": os.getenv("NIRCLS_EMAIL_TO", cfg.get("to_addr")),
             "use_tls": os.getenv("NIRCLS_EMAIL_TLS", str(cfg.get("use_tls", "1"))),
             "results_dir": os.getenv("NIRCLS_RESULTS", cfg.get("results_dir")),
         }
     )
+
+    password = os.getenv("NIRCLS_EMAIL_PASS")
+    if not password and cfg.get("user"):
+        try:  # pragma: no cover - best effort
+            password = keyring.get_password("nircls", cfg["user"])
+        except Exception:
+            logger.debug("Could not read password from keyring", exc_info=True)
+    if password:
+        cfg["password"] = password
     return cfg
 
 
@@ -60,6 +71,7 @@ def _save_config(cfg: dict) -> None:
         Dictionary with configuration fields to save.
     """
 
+    password = cfg.pop("password", None)
     cfg_path = os.getenv("NIRCLS_EMAIL_CONFIG")
     if cfg_path is None:
         cfg_path = Path.home() / ".nircls_email.json"
@@ -70,6 +82,11 @@ def _save_config(cfg: dict) -> None:
         cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     except Exception:  # pragma: no cover - best effort
         logger.debug("Could not write email config", exc_info=True)
+    if password and cfg.get("user"):
+        try:  # pragma: no cover - best effort
+            keyring.set_password("nircls", cfg["user"], password)
+        except Exception:  # pragma: no cover - best effort
+            logger.debug("Could not store password in keyring", exc_info=True)
 
 
 def enviar_email(subject: str, body: str, to_addr: str) -> None:

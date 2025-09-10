@@ -13,6 +13,7 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
+import keyring
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -433,11 +434,15 @@ def _render_dashboard(results_dir: Path) -> None:
                     "host": host,
                     "port": int(port),
                     "user": user,
-                    "password": password,
                     "to_addr": default_email,
                     "results_dir": str(results_root),
                 }
             )
+            if password:
+                try:  # pragma: no cover - best effort
+                    keyring.set_password("nircls", user, password)
+                except Exception:
+                    st.warning("Falha ao salvar a senha no keyring.")
             st.success("Configurações salvas.")
 
     with prep_tab:
