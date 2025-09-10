@@ -125,6 +125,11 @@ class ConfigModel(BaseModel):
     models: Optional[List[ModelConfig]] = None
     astm: bool = False
     use_cache: bool = True
+    notification_email: Optional[str] = Field(
+        None,
+        description="Email address for notifications",
+        regex=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+    )
 
     class Config:
         extra = "forbid"

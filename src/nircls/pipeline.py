@@ -57,6 +57,7 @@ from .preprocessors.spectro import (
 )
 from .report import generate_scientific_report
 from .utils.compliance import check_astm_classification
+from .utils.email import enviar_email
 from .utils.errors import DataError, ModelError
 from .utils.email import enviar_email
 from .utils.logging import log_versions, logger
@@ -1164,6 +1165,22 @@ def run_multiple_eval(
 
         outputs: List[Tuple[Path, Path]] = []
         logger.info("Running evaluation for %d CV strategies", len(strategies))
+
+        email_fn = globals().get("enviar_email")
+        if callable(email_fn):
+            email = cfg.get("notification_email")
+            kwargs = {
+                "subject": "Validação iniciada",
+                "body": "O processo de validação foi iniciado.",
+            }
+            if email:
+                kwargs["to"] = email
+            email_fn(**kwargs)
+
+        enviar_email(
+            subject="Validação iniciada",
+            body="O processo de validação foi iniciado.",
+
         with Progress(console=Console(stderr=True)) as progress:
             strat_task = progress.add_task("CV strategy", total=len(strategies))
             for strat in strategies:
@@ -1322,6 +1339,20 @@ def run_multiple_eval(
                     )
                 progress.advance(strat_task)
     enviar_email("Processamento Y concluído", "O processamento Y foi concluído.")
+        email_fn = globals().get("enviar_email")
+        if callable(email_fn):
+            email = cfg.get("notification_email")
+            kwargs = {
+                "subject": "Validação concluída",
+                "body": "A validação foi concluída.",
+            }
+            if email:
+                kwargs["to"] = email
+            email_fn(**kwargs)
+        enviar_email(
+            subject="Validação concluída",
+            body="A validação foi concluída.",
+        )
     return outputs
 
 
@@ -1530,6 +1561,22 @@ def train_and_save(
         "Processamento X terminado",
         "O processamento X foi concluído. Iniciando o Y…",
     )
+    email_fn = globals().get("enviar_email")
+    if callable(email_fn):
+        email = cfg.get("notification_email")
+        kwargs = {
+            "subject": "Treinamento concluído",
+            "body": "Treinamento concluído. Iniciando validação...",
+        }
+        if email:
+            kwargs["to"] = email
+        email_fn(**kwargs)
+
+    enviar_email(
+        subject="Treinamento concluído",
+        body="Treinamento concluído. Iniciando validação...",
+    )
+
     return out_dir / "metrics.json", out_dir / "figures"
 
 

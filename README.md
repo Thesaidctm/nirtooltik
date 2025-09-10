@@ -67,7 +67,8 @@ nircls run-all --config configs/eucalipto_spxy.yaml --all-models --all-preproces
 16. [Testes](#testes)
 17. [Docker](#docker)
 18. [Empacotamento para distribuição](#empacotamento-para-distribuicao)
-19. [Créditos/Autoria](#creditosautoria)
+19. [Notificações por e-mail](#notificacoes-por-e-mail)
+20. [Créditos/Autoria](#creditosautoria)
 
 ## Requisitos
 
@@ -657,6 +658,23 @@ Em outra máquina:
    pip install -r requirements.txt
    ```
 3. Utilize os utilitários do `nircls` a partir do diretório extraído.
+
+## Notificações por e-mail
+
+Para receber alertas automáticos de início e término do treinamento ou
+validação, configure as credenciais de SMTP via variáveis de ambiente:
+
+```bash
+export NIRCLS_EMAIL_HOST="smtp.exemplo.com"
+export NIRCLS_EMAIL_PORT="587"
+export NIRCLS_EMAIL_USER="usuario"
+export NIRCLS_EMAIL_PASS="senha"
+export NIRCLS_EMAIL_TO="destinatario@exemplo.com"
+```
+
+Opcionalmente, defina `NIRCLS_EMAIL_FROM` e `NIRCLS_EMAIL_TLS` (`0` para
+desativar TLS). As mesmas chaves podem ser armazenadas em um arquivo JSON
+apontado por `NIRCLS_EMAIL_CONFIG` (padrão `~/.nircls_email.json`).
 
 ## Créditos/Autoria
 
