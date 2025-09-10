@@ -146,6 +146,24 @@ def _render_dashboard(results_dir: Path) -> None:
     )
 
     with config_tab:
+        config_path = Path.home() / ".nircls" / "config.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        def _load_cfg() -> dict:
+            try:
+                with config_path.open() as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+
+        def _save_cfg(data: dict) -> None:
+            with config_path.open("w") as f:
+                json.dump(data, f, indent=2)
+
+        cfg_defaults = _load_cfg()
+        for key in ["input_path", "modelos", "preprocess", "email"]:
+            st.session_state.setdefault(key, cfg_defaults.get(key, ""))
+
         with st.form("run_form"):
             preparar = st.checkbox(
                 "Preparar", help="Executar preparação dos dados. Veja a aba Ajuda"
@@ -159,20 +177,47 @@ def _render_dashboard(results_dir: Path) -> None:
             )
             input_path = st.text_input(
                 "input_path",
+                key="input_path",
                 help="Arquivo ou glob de entrada. Consulte a aba Ajuda",
             )
             modelos = st.text_input(
                 "Modelos",
+                key="modelos",
                 help="Nomes dos modelos separados por vírgula. Veja a aba Ajuda",
             )
             preprocess = st.text_input(
                 "Preprocessadores",
+                key="preprocess",
                 help="Pré-processadores separados por vírgula. Veja a aba Ajuda",
             )
             email = st.text_input("E-mail", help="Endereço para notificações")
+            email = st.text_input(
+                "E-mail", key="email", help="Endereço para notificações"
+            )
             submitted = st.form_submit_button("Executar")
 
+        cols = st.columns(2)
+        if cols[0].button("Salvar"):
+            _save_cfg(
+                {
+                    k: st.session_state.get(k, "")
+                    for k in ["input_path", "modelos", "preprocess", "email"]
+                }
+            )
+            st.success("Configurações salvas.")
+        if cols[1].button("Carregar"):
+            loaded = _load_cfg()
+            for k in ["input_path", "modelos", "preprocess", "email"]:
+                st.session_state[k] = loaded.get(k, "")
+            st.experimental_rerun()
+
         if submitted:
+            _save_cfg(
+                {
+                    k: st.session_state.get(k, "")
+                    for k in ["input_path", "modelos", "preprocess", "email"]
+                }
+            )
             if not any([preparar, treinar, validar]):
                 st.warning("Selecione ao menos uma análise.")
             else:
