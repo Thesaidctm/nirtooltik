@@ -700,18 +700,25 @@ validação, configure as credenciais de SMTP via variáveis de ambiente:
 export NIRCLS_EMAIL_HOST="smtp.exemplo.com"
 export NIRCLS_EMAIL_PORT="587"
 export NIRCLS_EMAIL_USER="usuario"
+# opcional: definir a senha na variável de ambiente
 export NIRCLS_EMAIL_PASS="senha"
 ```
 
-As mesmas chaves podem ser armazenadas em um arquivo JSON apontado por
+A senha também pode ser armazenada de forma segura com o
+[`keyring`](https://pypi.org/project/keyring/):
+
+```bash
+python -c "import keyring; keyring.set_password('nircls', 'usuario', 'senha')"
+```
+
+As demais chaves podem ser salvas em um arquivo JSON apontado por
 `NIRCLS_EMAIL_CONFIG` (padrão `~/.nircls_email.json`):
 
 ```json
 {
   "host": "smtp.exemplo.com",
   "port": 587,
-  "user": "usuario",
-  "password": "senha"
+  "user": "usuario"
 }
 ```
 
