@@ -89,6 +89,7 @@ def read_tabular(
     encoding: Optional[str] = None,
     sep: str = ",",
     decimal: str = ".",
+    sheet_name: str | int | None = None,
 ) -> Tuple[pd.DataFrame, List[Tuple[str, pd.Series]], Optional[pd.Series]]:
     if not path.is_file() or path.suffix.lower() not in {".csv", ".xls", ".xlsx"}:
         raise DataError("Caminho é um diretório ou possui formato não suportado")
@@ -99,7 +100,10 @@ def read_tabular(
                 read_kwargs["encoding"] = encoding
             df = pd.read_csv(path, **read_kwargs)
         else:
-            df = pd.read_excel(path, decimal=decimal)
+            read_kwargs = {"decimal": decimal}
+            if sheet_name is not None:
+                read_kwargs["sheet_name"] = sheet_name
+            df = pd.read_excel(path, **read_kwargs)
     except (FileNotFoundError, PermissionError) as e:
         raise DataError(str(e)) from e
     if target_cols in [None, "all"]:
@@ -188,6 +192,7 @@ def prepare_inputs(
                 encoding=data_cfg.get("encoding"),
                 sep=data_cfg.get("sep", ","),
                 decimal=data_cfg.get("decimal", "."),
+                sheet_name=data_cfg.get("sheet_name"),
             )
         X = _filter_range(X, sp)
         if X.empty:
