@@ -258,19 +258,21 @@ def _render_dashboard(results_dir: Path) -> None:
                             mime="text/html",
                         )
 
-    def _render_actions(run_dirs: list[Path]) -> None:
+    def _render_actions(run_dirs: list[Path], key_prefix: str = "") -> None:
         for run in run_dirs:
             name_col, new_col, ren_col, del_col, zip_col = st.columns([3, 3, 1, 1, 1])
             name_col.write(run.name)
             new_name = new_col.text_input(
-                "Novo nome", value=run.name, key=f"rename_input_{run.name}"
+                "Novo nome",
+                value=run.name,
+                key=f"{key_prefix}rename_input_{run.name}",
             )
-            if ren_col.button("Renomear", key=f"rename_btn_{run.name}"):
+            if ren_col.button("Renomear", key=f"{key_prefix}rename_btn_{run.name}"):
                 new_path = run.with_name(new_name.strip())
                 if new_name and new_path != run:
                     run.rename(new_path)
                     st.rerun()
-            if del_col.button("Excluir", key=f"delete_{run.name}"):
+            if del_col.button("Excluir", key=f"{key_prefix}delete_{run.name}"):
                 if st.confirm_dialog(f"Excluir {run.name}?"):
                     shutil.rmtree(run)
                     st.rerun()
@@ -280,7 +282,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 zip_buffer,
                 file_name=f"{run.name}.zip",
                 mime="application/zip",
-                key=f"zip_{run.name}",
+                key=f"{key_prefix}zip_{run.name}",
             )
 
     def _read_log_updates(path: Path, state_key: str = "log_pos") -> list[str]:
@@ -914,7 +916,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 )
             )
         else:
-            _render_actions(run_dirs)
+            _render_actions(run_dirs, key_prefix="results_")
             compare_runs = st.multiselect(
                 tr("Selecione execuções para comparar"),
                 run_dirs,
@@ -965,7 +967,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 )
             )
         else:
-            _render_actions(run_dirs)
+            _render_actions(run_dirs, key_prefix="summary_")
             summary = summarize_runs(results_dir)
             if summary.empty:
                 st.warning(tr("Nenhuma métrica agregada encontrada."))
