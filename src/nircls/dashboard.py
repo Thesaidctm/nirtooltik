@@ -115,12 +115,10 @@ def _render_dashboard(results_dir: Path) -> None:
     except Exception:
         _initial_cfg = {}
 
-    theme = _initial_cfg.get("theme", "light")
     st.set_page_config(
         page_title="nircls Dashboard",
         page_icon="🧪",
         layout="wide",
-        theme=theme,
     )
     st.session_state.setdefault("language", _initial_cfg.get("language", "pt"))
     st.session_state.setdefault(
