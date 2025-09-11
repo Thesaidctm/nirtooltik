@@ -234,6 +234,7 @@ def _render_dashboard(results_dir: Path) -> None:
                             f,
                             file_name=png_file.name,
                             mime="image/png",
+                            key=f"download_{png_file}",
                         )
                 if html_file.exists():
                     with html_file.open("r") as f:
@@ -242,6 +243,7 @@ def _render_dashboard(results_dir: Path) -> None:
                             f,
                             file_name=html_file.name,
                             mime="text/html",
+                            key=f"download_{html_file}",
                         )
 
     def _render_actions(run_dirs: list[Path], key_prefix: str = "") -> None:
@@ -747,6 +749,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                     f,
                                     file_name=png_file.name,
                                     mime="image/png",
+                                    key=f"download_{png_file}",
                                 )
                             html_file = out_base.with_suffix(".html")
                             if html_file.exists():
@@ -756,6 +759,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                         f,
                                         file_name=html_file.name,
                                         mime="text/html",
+                                        key=f"download_{html_file}",
                                     )
                             mean = ds["X"].mean()
                             std = ds["X"].std()
@@ -795,6 +799,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                     f,
                                     file_name=png_file.name,
                                     mime="image/png",
+                                    key=f"download_{png_file}",
                                 )
                             html_file = out_base2.with_suffix(".html")
                             if html_file.exists():
@@ -804,6 +809,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                         f,
                                         file_name=html_file.name,
                                         mime="text/html",
+                                        key=f"download_{html_file}",
                                     )
                     except Exception as exc:  # pragma: no cover - display error
                         st.error(tr("Erro ao preparar dados: {exc}").format(exc=exc))
@@ -1009,7 +1015,11 @@ def _render_dashboard(results_dir: Path) -> None:
             )
             with log_path.open("rb") as f:
                 st.download_button(
-                    tr("Baixar log"), f, file_name=log_path.name, mime="text/plain"
+                    tr("Baixar log"),
+                    f,
+                    file_name=log_path.name,
+                    mime="text/plain",
+                    key=f"download_{log_path}",
                 )
         else:
             placeholder.info(
