@@ -75,5 +75,10 @@
   "Log": "Log",
   "Baixar log": "Download log",
   "Nas abas **Resultados** e **Resumo**, utilize a coluna de ações para ": "In the **Results** and **Summary** tabs, use the actions column to ",
-  "renomear, excluir (com confirmação) ou baixar um arquivo ZIP de cada execução.": "rename, delete (with confirmation) or download a ZIP of each run."
+  "renomear, excluir (com confirmação) ou baixar um arquivo ZIP de cada execução.": "rename, delete (with confirmation) or download a ZIP of each run.",
+  "Configurações CSV": "CSV settings",
+  "PCA": "PCA",
+  "Rodar PCA": "Run PCA",
+  "Nenhuma coluna numérica encontrada.": "No numeric columns found.",
+  "Erro ao executar PCA: {exc}": "Error running PCA: {exc}"
 }
