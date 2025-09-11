@@ -61,6 +61,7 @@ from .utils.email import enviar_email
 from .utils.errors import DataError, ModelError
 from .utils.logging import log_versions, logger
 from .utils.misc import RESULTS_DIR, file_hash
+from .utils.palettes import Palette
 from .utils.plots import plot_confusion, plot_reliability, plot_roc_ovr
 from .utils.qc import detect_identical_spectra, find_duplicates, pca_outliers
 from .utils.split import spxy_split
@@ -374,6 +375,7 @@ def _save_plots(
     y_proba: Optional[np.ndarray] = None,
     *,
     interactive: bool = False,
+    palette: Palette = Palette.VIRIDIS,
 ) -> None:
     """Save confusion matrix and optional ROC/reliability plots.
 
@@ -390,6 +392,7 @@ def _save_plots(
         classes,
         out_fig / f"{stem}__{target}__{model}__confusion",
         interactive=interactive,
+        palette=palette,
     )
     if y_proba is not None:
         plot_roc_ovr(
@@ -398,12 +401,14 @@ def _save_plots(
             classes,
             out_fig / f"{stem}__{target}__{model}__roc",
             interactive=interactive,
+            palette=palette,
         )
         plot_reliability(
             y_true,
             y_proba,
             out_fig / f"{stem}__{target}__{model}__reliability",
             interactive=interactive,
+            palette=palette,
         )
 
 
@@ -674,6 +679,7 @@ def _run_cv(
                     y_pred,
                     y_proba,
                     interactive=interactive,
+                    palette=Palette(cfg.get("palette", Palette.VIRIDIS)),
                 )
                 progress.advance(model_task)
                 del (
@@ -881,6 +887,7 @@ def _run_cv(
                 y_pred,
                 y_proba,
                 interactive=interactive,
+                palette=Palette(cfg.get("palette", Palette.VIRIDIS)),
             )
             progress.advance(model_task)
             del (
@@ -1080,6 +1087,7 @@ def _run_holdout(
                 yhat,
                 proba,
                 interactive=interactive,
+                palette=Palette(cfg.get("palette", Palette.VIRIDIS)),
             )
             del best, proba, proba_tr, yhat, yhat_tr
             gc.collect()
@@ -1511,6 +1519,7 @@ def train_and_save(
                 yhat,
                 proba,
                 interactive=interactive,
+                palette=Palette(cfg.get("palette", Palette.VIRIDIS)),
             )
             del best, proba, yhat
             gc.collect()

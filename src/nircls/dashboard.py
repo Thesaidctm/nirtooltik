@@ -30,6 +30,7 @@ from nircls.utils.email import _load_config as _load_email_config
 from nircls.utils.email import _save_config as _save_email_config
 from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
+from nircls.utils.palettes import Palette
 from nircls.utils.plots import _export
 from nircls.utils.summarize import summarize_runs
 from nircls.utils.update import check_latest_version
@@ -115,6 +116,9 @@ def _render_dashboard(results_dir: Path) -> None:
     except Exception:
         _initial_cfg = {}
     st.session_state.setdefault("language", _initial_cfg.get("language", "pt"))
+    st.session_state.setdefault(
+        "palette", _initial_cfg.get("palette", Palette.VIRIDIS.value)
+    )
     if _initial_cfg.get("check_updates", True):
         import nircls
 
@@ -335,6 +339,9 @@ def _render_dashboard(results_dir: Path) -> None:
         st.session_state.setdefault("encoding", cfg_defaults.get("encoding", ""))
         st.session_state.setdefault("sep", cfg_defaults.get("sep", ","))
         st.session_state.setdefault("decimal", cfg_defaults.get("decimal", "."))
+        st.session_state.setdefault(
+            "palette", cfg_defaults.get("palette", Palette.VIRIDIS.value)
+        )
 
         language = st.selectbox(
             tr("Idioma"),
@@ -347,6 +354,16 @@ def _render_dashboard(results_dir: Path) -> None:
             cfg["language"] = language
             _save_cfg(cfg)
             st.experimental_rerun()
+
+        palette = st.selectbox(
+            tr("Paleta de cores"),
+            [p.value for p in Palette],
+            index=[p.value for p in Palette].index(
+                st.session_state.get("palette", Palette.VIRIDIS.value)
+            ),
+        )
+        if palette != st.session_state.get("palette"):
+            st.session_state["palette"] = palette
 
         if st.button(tr("Reiniciar wizard")):
             if config_path.exists():
@@ -426,6 +443,7 @@ def _render_dashboard(results_dir: Path) -> None:
                     "encoding": st.session_state.get("encoding", ""),
                     "sep": st.session_state.get("sep", ","),
                     "decimal": st.session_state.get("decimal", "."),
+                    "palette": st.session_state.get("palette", Palette.VIRIDIS.value),
                 }
             )
             _save_cfg(cfg)
@@ -439,6 +457,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 ("encoding", ""),
                 ("sep", ","),
                 ("decimal", "."),
+                ("palette", Palette.VIRIDIS.value),
             ]:
                 st.session_state[k] = loaded.get(k, default)
             st.experimental_rerun()
@@ -453,6 +472,7 @@ def _render_dashboard(results_dir: Path) -> None:
                     "encoding": st.session_state.get("encoding", ""),
                     "sep": st.session_state.get("sep", ","),
                     "decimal": st.session_state.get("decimal", "."),
+                    "palette": st.session_state.get("palette", Palette.VIRIDIS.value),
                 }
             )
             _save_cfg(cfg)
@@ -479,6 +499,9 @@ def _render_dashboard(results_dir: Path) -> None:
                         "preprocess": {"steps": list(preprocess)},
                         "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
                         "notification_email": email or None,
+                        "palette": st.session_state.get(
+                            "palette", Palette.VIRIDIS.value
+                        ),
                     }
                     try:
                         cfg_model = ConfigModel(**cfg)
