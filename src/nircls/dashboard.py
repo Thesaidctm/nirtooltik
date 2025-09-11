@@ -107,7 +107,6 @@ def _render_dashboard(results_dir: Path) -> None:
     results_dir.mkdir(parents=True, exist_ok=True)
     prep_fig_dir = results_dir / "prep_figures"
 
-    st.set_page_config(page_title="nircls Dashboard", page_icon="🧪", layout="wide")
     config_path = Path.home() / ".nircls" / "config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -115,6 +114,14 @@ def _render_dashboard(results_dir: Path) -> None:
             _initial_cfg = json.load(f)
     except Exception:
         _initial_cfg = {}
+
+    theme = _initial_cfg.get("theme", "light")
+    st.set_page_config(
+        page_title="nircls Dashboard",
+        page_icon="🧪",
+        layout="wide",
+        theme=theme,
+    )
     st.session_state.setdefault("language", _initial_cfg.get("language", "pt"))
     st.session_state.setdefault(
         "palette", _initial_cfg.get("palette", Palette.VIRIDIS.value)
@@ -580,6 +587,16 @@ def _render_dashboard(results_dir: Path) -> None:
             tr("Verificar atualizações automaticamente"),
             cfg.get("check_updates", True),
         )
+        themes = {tr("Claro"): "light", tr("Escuro"): "dark"}
+        current_theme = cfg.get("theme", "light")
+        labels = list(themes.keys())
+        values = list(themes.values())
+        try:
+            theme_index = values.index(current_theme)
+        except ValueError:
+            theme_index = 0
+        selected_label = st.selectbox(tr("Tema"), labels, index=theme_index)
+        theme = themes[selected_label]
         host = st.text_input(tr("Host SMTP"), email_cfg.get("host", ""))
         port = st.number_input(
             tr("Porta"), value=int(email_cfg.get("port") or 587), step=1
@@ -634,6 +651,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 }
             )
             cfg["check_updates"] = check_updates
+            cfg["theme"] = theme
             _save_cfg(cfg)
             if password:
                 try:  # pragma: no cover - best effort
