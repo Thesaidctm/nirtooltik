@@ -75,5 +75,10 @@
   "Log": "Log",
   "Baixar log": "Baixar log",
   "Nas abas **Resultados** e **Resumo**, utilize a coluna de ações para ": "Nas abas **Resultados** e **Resumo**, utilize a coluna de ações para ",
-  "renomear, excluir (com confirmação) ou baixar um arquivo ZIP de cada execução.": "renomear, excluir (com confirmação) ou baixar um arquivo ZIP de cada execução."
+  "renomear, excluir (com confirmação) ou baixar um arquivo ZIP de cada execução.": "renomear, excluir (com confirmação) ou baixar um arquivo ZIP de cada execução.",
+  "Configurações CSV": "Configurações CSV",
+  "PCA": "PCA",
+  "Rodar PCA": "Rodar PCA",
+  "Nenhuma coluna numérica encontrada.": "Nenhuma coluna numérica encontrada.",
+  "Erro ao executar PCA: {exc}": "Erro ao executar PCA: {exc}"
 }

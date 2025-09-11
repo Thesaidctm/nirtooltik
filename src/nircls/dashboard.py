@@ -33,6 +33,7 @@ from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.palettes import Palette
 from nircls.utils.plots import _export
 from nircls.utils.summarize import summarize_runs
+from nircls.utils.qc import pca_outliers
 from nircls.utils.update import check_latest_version
 from nircls.utils.zip import zip_dir
 
@@ -307,6 +308,7 @@ def _render_dashboard(results_dir: Path) -> None:
         exec_tab,
         results_tab,
         summary_tab,
+        pca_tab,
         logs_tab,
         help_tab,
     ) = st.tabs(
@@ -317,6 +319,7 @@ def _render_dashboard(results_dir: Path) -> None:
             tr("Execução"),
             tr("Resultados"),
             tr("Resumo"),
+            tr("PCA"),
             tr("Logs"),
             tr("Ajuda"),
         ]
@@ -403,21 +406,25 @@ def _render_dashboard(results_dir: Path) -> None:
                     ajuda_link=ajuda_link
                 ),
             )
-            encoding = st.text_input(
-                "Codificação",
-                key="encoding",
-                help=f"Codificação dos arquivos CSV. {ajuda_link}",
-            )
-            sep = st.text_input(
-                "Separador",
-                key="sep",
-                help=f"Separador de campos do CSV. {ajuda_link}",
-            )
-            decimal = st.text_input(
-                "Separador decimal",
-                key="decimal",
-                help=f"Caractere usado como separador decimal. {ajuda_link}",
-            )
+            encoding = st.session_state.get("encoding", "")
+            sep = st.session_state.get("sep", ",")
+            decimal = st.session_state.get("decimal", ".")
+            if st.checkbox(tr("Configurações CSV")):
+                encoding = st.text_input(
+                    "Codificação",
+                    key="encoding",
+                    help=f"Codificação dos arquivos CSV. {ajuda_link}",
+                )
+                sep = st.text_input(
+                    "Separador",
+                    key="sep",
+                    help=f"Separador de campos do CSV. {ajuda_link}",
+                )
+                decimal = st.text_input(
+                    "Separador decimal",
+                    key="decimal",
+                    help=f"Caractere usado como separador decimal. {ajuda_link}",
+                )
             email = st.text_input(
                 tr("E-mail (opcional)"),
                 key="email",
@@ -991,6 +998,29 @@ def _render_dashboard(results_dir: Path) -> None:
 
                 styled = display_df.style.apply(_highlight_best, axis=0)
                 st.dataframe(styled, use_container_width=True)
+
+    with pca_tab:
+        st.subheader(tr("PCA"))
+        pca_file = st.file_uploader(
+            tr("Arquivo CSV ou XLSX"),
+            type=["csv", "xlsx", "xls"],
+            key="pca_file",
+        )
+        if pca_file is not None and st.button(tr("Rodar PCA")):
+            try:
+                if pca_file.name.lower().endswith((".xlsx", ".xls")):
+                    df = pd.read_excel(pca_file)
+                else:
+                    df = pd.read_csv(pca_file)
+                numeric = df.select_dtypes(include="number")
+                if numeric.empty:
+                    st.warning(tr("Nenhuma coluna numérica encontrada."))
+                else:
+                    res = pca_outliers(numeric)
+                    fig = px.scatter(res, x="PC1", y="PC2")
+                    st.plotly_chart(fig, use_container_width=True)
+            except Exception as exc:  # pragma: no cover - display error
+                st.error(tr("Erro ao executar PCA: {exc}").format(exc=exc))
 
     with logs_tab:
         log_path = Path.home() / ".nircls" / "nircls.log"
