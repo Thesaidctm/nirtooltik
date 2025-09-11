@@ -74,7 +74,7 @@ nircls run-all --config configs/eucalipto_spxy.yaml --all-models --all-preproces
 
 Requer Python 3.9 ou superior. Principais dependências: `numpy`, `pandas`,
 `scikit-learn`, `scipy`, `matplotlib`, `seaborn`, `pyyaml`, `rich`, `joblib`,
-`openpyxl`, `tqdm` e `requests`. Pacotes opcionais incluem `xgboost`, `lightgbm`,
+`openpyxl`, `tqdm`, `requests` e `streamlit`. Pacotes opcionais incluem `xgboost`, `lightgbm`,
 `catboost`, `torch`, `questionary`, `mlflow` e `dvc`.
 
 Para exportar relatórios em PDF é necessário instalar dependências extras:

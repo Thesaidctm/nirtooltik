@@ -29,6 +29,7 @@ dependencies = [
   "pydantic<2",
   "plotly",
   "kaleido",
+  "streamlit>=1.25",
 ]
 
 [project.optional-dependencies]
