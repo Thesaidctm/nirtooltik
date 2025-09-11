@@ -156,7 +156,7 @@ def _render_dashboard(results_dir: Path) -> None:
             if submitted:
                 data["modelos"] = modelos
                 st.session_state["wizard_step"] = 1
-                st.experimental_rerun()
+                st.rerun()
         elif step == 1:
             with st.form("wiz_preprocess"):
                 preprocess = st.multiselect(
@@ -168,7 +168,7 @@ def _render_dashboard(results_dir: Path) -> None:
             if submitted:
                 data["preprocess"] = preprocess
                 st.session_state["wizard_step"] = 2
-                st.experimental_rerun()
+                st.rerun()
         else:
             with st.form("wiz_email"):
                 email = st.text_input(
@@ -183,7 +183,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 st.session_state.pop("wizard_step", None)
                 st.session_state.pop("wizard_data", None)
                 st.session_state.pop("run_wizard", None)
-                st.experimental_rerun()
+                st.rerun()
 
     if st.session_state.get("run_wizard") or not config_path.exists():
         _run_wizard()
@@ -264,11 +264,11 @@ def _render_dashboard(results_dir: Path) -> None:
                 new_path = run.with_name(new_name.strip())
                 if new_name and new_path != run:
                     run.rename(new_path)
-                    st.experimental_rerun()
+                    st.rerun()
             if del_col.button("Excluir", key=f"delete_{run.name}"):
                 if st.confirm_dialog(f"Excluir {run.name}?"):
                     shutil.rmtree(run)
-                    st.experimental_rerun()
+                    st.rerun()
             zip_buffer = zip_dir(run)
             zip_col.download_button(
                 "ZIP",
@@ -353,7 +353,7 @@ def _render_dashboard(results_dir: Path) -> None:
             cfg = _load_cfg()
             cfg["language"] = language
             _save_cfg(cfg)
-            st.experimental_rerun()
+            st.rerun()
 
         palette = st.selectbox(
             tr("Paleta de cores"),
@@ -372,7 +372,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 except OSError:
                     pass
             st.session_state["run_wizard"] = True
-            st.experimental_rerun()
+            st.rerun()
 
         ajuda_link = "Consulte a [aba Ajuda](#ajuda)"
 
@@ -460,7 +460,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 ("palette", Palette.VIRIDIS.value),
             ]:
                 st.session_state[k] = loaded.get(k, default)
-            st.experimental_rerun()
+            st.rerun()
 
         if submitted:
             cfg = _load_cfg()
