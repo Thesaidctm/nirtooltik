@@ -148,47 +148,33 @@ def _render_dashboard(results_dir: Path) -> None:
     def _run_wizard() -> None:
         st.title(tr("nircls Dashboard"))
         st.header(tr("Configuração inicial"))
-        step = st.session_state.get("wizard_step", 0)
-        data = st.session_state.setdefault("wizard_data", {})
-        if step == 0:
-            with st.form("wiz_modelos"):
-                modelos = st.multiselect(
-                    tr("Modelos"),
-                    options=sorted(MODEL_DESCRIPTIONS),
-                    default=data.get("modelos", []),
-                )
-                submitted = st.form_submit_button(tr("Próximo"))
-            if submitted:
-                data["modelos"] = modelos
-                st.session_state["wizard_step"] = 1
-                st.rerun()
-        elif step == 1:
-            with st.form("wiz_preprocess"):
-                preprocess = st.multiselect(
-                    tr("Preprocessadores"),
-                    options=_get_preprocessor_names(),
-                    default=data.get("preprocess", []),
-                )
-                submitted = st.form_submit_button(tr("Próximo"))
-            if submitted:
-                data["preprocess"] = preprocess
-                st.session_state["wizard_step"] = 2
-                st.rerun()
-        else:
-            with st.form("wiz_email"):
-                email = st.text_input(
-                    tr("E-mail"),
-                    value=data.get("email", ""),
-                    help=tr("Endereço para notificações"),
-                )
-                submitted = st.form_submit_button(tr("Concluir"))
-            if submitted:
+        cfg = _load_cfg()
+        with st.form("wiz_setup"):
+            modelos = st.multiselect(
+                tr("Modelos"),
+                options=sorted(MODEL_DESCRIPTIONS),
+                default=cfg.get("modelos", []),
+            )
+            preprocess = st.multiselect(
+                tr("Preprocessadores"),
+                options=_get_preprocessor_names(),
+                default=cfg.get("preprocess", []),
+            )
+            email = st.text_input(
+                tr("E-mail (opcional)"),
+                value=cfg.get("email", ""),
+                help=tr("Endereço para notificações"),
+            )
+            submitted = st.form_submit_button(tr("Salvar"))
+        if submitted:
+            data = {"modelos": modelos, "preprocess": preprocess}
+            if email:
                 data["email"] = email
-                _save_cfg(data)
-                st.session_state.pop("wizard_step", None)
-                st.session_state.pop("wizard_data", None)
-                st.session_state.pop("run_wizard", None)
-                st.rerun()
+            _save_cfg(data)
+            st.session_state.pop("wizard_step", None)
+            st.session_state.pop("wizard_data", None)
+            st.session_state.pop("run_wizard", None)
+            st.rerun()
 
     if st.session_state.get("run_wizard") or not config_path.exists():
         _run_wizard()
@@ -431,7 +417,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 help=f"Caractere usado como separador decimal. {ajuda_link}",
             )
             email = st.text_input(
-                tr("E-mail"),
+                tr("E-mail (opcional)"),
                 key="email",
                 help=tr("Endereço para notificações. {ajuda_link}").format(
                     ajuda_link=ajuda_link
