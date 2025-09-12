@@ -325,7 +325,7 @@ distribuição de classes e curvas espectrais) antes do treinamento.
 
    A pasta indicada armazenará os artefatos gerados.
 
-2. Na aba **Preparar Dados**, envie o arquivo CSV/XLSX, escolha a coluna alvo e
+2. Na aba **Preparar Dados**, envie o arquivo XLSX, escolha a coluna alvo e
    opcionalmente informe o intervalo espectral. Ao enviar o formulário a função
    `prepare_inputs` processa os dados e apresenta uma prévia, gráfico de barras
    com a contagem por classe e curvas espectrais (média ± desvio padrão).
