@@ -29,6 +29,7 @@ def test_export_interactive_success(tmp_path, monkeypatch):
     _export(fig, out_base, interactive=True)
 
     assert (tmp_path / "plot.png").exists()
+    assert (tmp_path / "plot.svg").exists()
     assert (tmp_path / "plot.html").exists()
     assert (tmp_path / "plot.json").exists()
 
@@ -53,6 +54,7 @@ def test_export_static_missing_kaleido(tmp_path, monkeypatch, caplog):
 
     assert called is False
     assert not (tmp_path / "plot.png").exists()
+    assert not (tmp_path / "plot.svg").exists()
     assert "Kaleido engine not found" in caplog.text
 
 
@@ -73,6 +75,7 @@ def test_export_static_write_image_error(tmp_path, monkeypatch, caplog):
 
     assert "Export failed for" in caplog.text
     assert not (tmp_path / "plot.png").exists()
+    assert not (tmp_path / "plot.svg").exists()
 
 
 def test_export_interactive_html_error(tmp_path, monkeypatch, caplog):
@@ -96,6 +99,7 @@ def test_export_interactive_html_error(tmp_path, monkeypatch, caplog):
         _export(fig, out_base, interactive=True)
 
     assert (tmp_path / "plot.png").exists()
+    assert (tmp_path / "plot.svg").exists()
     assert (tmp_path / "plot.json").exists()
     assert not (tmp_path / "plot.html").exists()
     assert "Export failed for" in caplog.text

@@ -198,11 +198,12 @@ def _render_dashboard(results_dir: Path) -> None:
             bases = {
                 p.with_suffix("")
                 for p in current.glob("*")
-                if p.suffix in {".png", ".json", ".html"}
+                if p.suffix in {".png", ".svg", ".json", ".html"}
             }
             for base in sorted(bases):
                 json_file = base.with_suffix(".json")
                 png_file = base.with_suffix(".png")
+                svg_file = base.with_suffix(".svg")
                 html_file = base.with_suffix(".html")
                 caption = _figure_caption(base.name)
                 if json_file.exists():
@@ -215,6 +216,8 @@ def _render_dashboard(results_dir: Path) -> None:
                         st.caption(caption)
                     elif png_file.exists():
                         st.image(str(png_file), caption=caption)
+                    elif svg_file.exists():
+                        st.image(str(svg_file), caption=caption)
                 elif html_file.exists():
                     try:
                         import streamlit.components.v1 as components
@@ -226,8 +229,12 @@ def _render_dashboard(results_dir: Path) -> None:
                     except Exception:
                         if png_file.exists():
                             st.image(str(png_file), caption=caption)
+                        elif svg_file.exists():
+                            st.image(str(svg_file), caption=caption)
                 elif png_file.exists():
                     st.image(str(png_file), caption=caption)
+                elif svg_file.exists():
+                    st.image(str(svg_file), caption=caption)
                 if png_file.exists():
                     with png_file.open("rb") as f:
                         st.download_button(
@@ -236,6 +243,15 @@ def _render_dashboard(results_dir: Path) -> None:
                             file_name=png_file.name,
                             mime="image/png",
                             key=f"download_{png_file}",
+                        )
+                if svg_file.exists():
+                    with svg_file.open("rb") as f:
+                        st.download_button(
+                            f"Download {svg_file.name}",
+                            f,
+                            file_name=svg_file.name,
+                            mime="image/svg+xml",
+                            key=f"download_{svg_file}",
                         )
                 if html_file.exists():
                     with html_file.open("r") as f:
@@ -763,6 +779,16 @@ def _render_dashboard(results_dir: Path) -> None:
                                     mime="image/png",
                                     key=f"download_{png_file}",
                                 )
+                            svg_file = out_base.with_suffix(".svg")
+                            if svg_file.exists():
+                                with svg_file.open("rb") as f:
+                                    st.download_button(
+                                        f"Download {svg_file.name}",
+                                        f,
+                                        file_name=svg_file.name,
+                                        mime="image/svg+xml",
+                                        key=f"download_{svg_file}",
+                                    )
                             html_file = out_base.with_suffix(".html")
                             if html_file.exists():
                                 with html_file.open("r") as f:
@@ -813,6 +839,16 @@ def _render_dashboard(results_dir: Path) -> None:
                                     mime="image/png",
                                     key=f"download_{png_file}",
                                 )
+                            svg_file = out_base2.with_suffix(".svg")
+                            if svg_file.exists():
+                                with svg_file.open("rb") as f:
+                                    st.download_button(
+                                        f"Download {svg_file.name}",
+                                        f,
+                                        file_name=svg_file.name,
+                                        mime="image/svg+xml",
+                                        key=f"download_{svg_file}",
+                                    )
                             html_file = out_base2.with_suffix(".html")
                             if html_file.exists():
                                 with html_file.open("r") as f:
