@@ -343,6 +343,11 @@ distribuição de classes e curvas espectrais) antes do treinamento.
    informado, apresenta uma tabela agregada de métricas e permite selecionar
    duas ou mais execuções para comparar métricas e figuras lado a lado.
 
+6. Na aba **PCA**, envie um arquivo com colunas numéricas para detectar
+   outliers. Caso alguma coluna esteja como texto, utilize `pandas.to_numeric`
+   ou defina o parâmetro `dtype` ao ler o arquivo para convertê-la antes do
+   envio.
+
 Com essas etapas é possível conduzir um experimento completo apenas pela
 interface web.
 

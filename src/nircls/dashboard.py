@@ -32,8 +32,8 @@ from nircls.utils.email import enviar_email
 from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.palettes import Palette
 from nircls.utils.plots import _export
-from nircls.utils.summarize import summarize_runs
 from nircls.utils.qc import pca_outliers
+from nircls.utils.summarize import summarize_runs
 from nircls.utils.update import check_latest_version
 from nircls.utils.zip import zip_dir
 
@@ -1009,6 +1009,12 @@ def _render_dashboard(results_dir: Path) -> None:
             type=["csv", "xlsx", "xls"],
             key="pca_file",
         )
+        st.caption(
+            tr(
+                "O arquivo deve possuir colunas numéricas. "
+                "Converta valores textuais com `pandas.to_numeric` antes do envio."
+            )
+        )
         if pca_file is not None and st.button(tr("Rodar PCA")):
             try:
                 if pca_file.name.lower().endswith((".xlsx", ".xls")):
@@ -1018,6 +1024,8 @@ def _render_dashboard(results_dir: Path) -> None:
                 numeric = df.select_dtypes(include="number")
                 if numeric.empty:
                     st.warning(tr("Nenhuma coluna numérica encontrada."))
+                    st.dataframe(df.head(), width="stretch")
+                    st.write(df.dtypes)
                 else:
                     res = pca_outliers(numeric)
                     fig = px.scatter(res, x="PC1", y="PC2")
