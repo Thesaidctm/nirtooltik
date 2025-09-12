@@ -4,6 +4,7 @@ MarkupSafe==3.0.2
 PyYAML==6.0.2
 Pygments==2.19.2
 SecretStorage==3.4.0
+SQLAlchemy==2.0.43
 altair==5.5.0
 attrs==25.3.0
 blinker==1.9.0
