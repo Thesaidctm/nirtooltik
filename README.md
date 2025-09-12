@@ -328,7 +328,8 @@ distribuição de classes e curvas espectrais) antes do treinamento.
 2. Na aba **Preparar Dados**, envie o arquivo XLSX, escolha a coluna alvo e
    opcionalmente informe o intervalo espectral. Ao enviar o formulário a função
    `prepare_inputs` processa os dados e apresenta uma prévia, gráfico de barras
-   com a contagem por classe e curvas espectrais (média ± desvio padrão).
+   com a contagem por classe e curvas espectrais (média ± desvio padrão). As
+   figuras geradas podem ser baixadas em PNG, SVG ou HTML.
 
 3. Em **Treinar**, selecione o modelo desejado e forneça um grid de parâmetros
    em JSON. O botão *Treinar* chama `train_and_save` e grava o modelo treinado na
