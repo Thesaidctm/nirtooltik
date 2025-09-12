@@ -355,8 +355,6 @@ def _render_dashboard(results_dir: Path) -> None:
             "email",
             cfg_defaults.get("email", email_defaults.get("to_addr", "")),
         )
-        st.session_state.setdefault("encoding", cfg_defaults.get("encoding", ""))
-        st.session_state.setdefault("sep", cfg_defaults.get("sep", ","))
         st.session_state.setdefault("decimal", cfg_defaults.get("decimal", "."))
         st.session_state.setdefault(
             "palette", cfg_defaults.get("palette", Palette.VIRIDIS.value)
@@ -405,7 +403,7 @@ def _render_dashboard(results_dir: Path) -> None:
             )
             uploaded_files = st.file_uploader(
                 tr("Arquivos de entrada"),
-                type=["csv", "xlsx", "xls"],
+                type=["xlsx", "xls"],
                 accept_multiple_files=True,
                 help=tr("Envie os dados de entrada. {ajuda_link}").format(
                     ajuda_link=ajuda_link
@@ -427,25 +425,11 @@ def _render_dashboard(results_dir: Path) -> None:
                     ajuda_link=ajuda_link
                 ),
             )
-            encoding = st.session_state.get("encoding", "")
-            sep = st.session_state.get("sep", ",")
-            decimal = st.session_state.get("decimal", ".")
-            if st.checkbox(tr("Configurações CSV")):
-                encoding = st.text_input(
-                    "Codificação",
-                    key="encoding",
-                    help=f"Codificação dos arquivos CSV. {ajuda_link}",
-                )
-                sep = st.text_input(
-                    "Separador",
-                    key="sep",
-                    help=f"Separador de campos do CSV. {ajuda_link}",
-                )
-                decimal = st.text_input(
-                    "Separador decimal",
-                    key="decimal",
-                    help=f"Caractere usado como separador decimal. {ajuda_link}",
-                )
+            decimal = st.text_input(
+                "Separador decimal",
+                key="decimal",
+                help=f"Caractere usado como separador decimal. {ajuda_link}",
+            )
             email = st.text_input(
                 tr("E-mail (opcional)"),
                 key="email",
@@ -463,8 +447,6 @@ def _render_dashboard(results_dir: Path) -> None:
                     "modelos": st.session_state.get("modelos", []),
                     "preprocess": st.session_state.get("preprocess", []),
                     "email": st.session_state.get("email", ""),
-                    "encoding": st.session_state.get("encoding", ""),
-                    "sep": st.session_state.get("sep", ","),
                     "decimal": st.session_state.get("decimal", "."),
                     "palette": st.session_state.get("palette", Palette.VIRIDIS.value),
                 }
@@ -477,8 +459,6 @@ def _render_dashboard(results_dir: Path) -> None:
                 ("modelos", []),
                 ("preprocess", []),
                 ("email", ""),
-                ("encoding", ""),
-                ("sep", ","),
                 ("decimal", "."),
                 ("palette", Palette.VIRIDIS.value),
             ]:
@@ -492,8 +472,6 @@ def _render_dashboard(results_dir: Path) -> None:
                     "modelos": st.session_state.get("modelos", []),
                     "preprocess": st.session_state.get("preprocess", []),
                     "email": st.session_state.get("email", ""),
-                    "encoding": st.session_state.get("encoding", ""),
-                    "sep": st.session_state.get("sep", ","),
                     "decimal": st.session_state.get("decimal", "."),
                     "palette": st.session_state.get("palette", Palette.VIRIDIS.value),
                 }
@@ -510,10 +488,6 @@ def _render_dashboard(results_dir: Path) -> None:
                         dest = tmpdir_path / up.name
                         dest.write_bytes(up.getbuffer())
                     data_cfg = {"input_path": str(tmpdir_path / "*")}
-                    if encoding:
-                        data_cfg["encoding"] = encoding
-                    if sep:
-                        data_cfg["sep"] = sep
                     if decimal:
                         data_cfg["decimal"] = decimal
                     cfg = {
@@ -680,28 +654,16 @@ def _render_dashboard(results_dir: Path) -> None:
         if prep_fig_dir.exists():
             _display_figures(prep_fig_dir)
         uploaded = st.file_uploader(
-            tr("Arquivo CSV ou XLSX"),
-            type=["csv", "xlsx", "xls"],
+            tr("Arquivo XLSX"),
+            type=["xlsx", "xls"],
         )
         if uploaded is not None:
-            enc = st.text_input("Codificação", st.session_state.get("encoding", ""))
-            sep = st.text_input("Separador", st.session_state.get("sep", ","))
             decimal = st.text_input(
                 "Separador decimal", st.session_state.get("decimal", ".")
             )
-            if uploaded.name.lower().endswith(".csv"):
-                df = pd.read_csv(
-                    uploaded,
-                    encoding=enc or None,
-                    sep=sep,
-                    decimal=decimal,
-                    nrows=100,
-                )
-                sheet = None
-            else:
-                xls = pd.ExcelFile(uploaded)
-                sheet = st.selectbox(tr("Planilha"), xls.sheet_names)
-                df = pd.read_excel(xls, sheet_name=sheet, decimal=decimal, nrows=100)
+            xls = pd.ExcelFile(uploaded)
+            sheet = st.selectbox(tr("Planilha"), xls.sheet_names)
+            df = pd.read_excel(xls, sheet_name=sheet, decimal=decimal, nrows=100)
             uploaded.seek(0)
             st.subheader(tr("Pré-visualização"))
             st.dataframe(df)
@@ -739,8 +701,6 @@ def _render_dashboard(results_dir: Path) -> None:
                     cfg = {
                         "input_path": str(tmp_path),
                         "target_col": target_col,
-                        "encoding": enc or None,
-                        "sep": sep,
                         "decimal": decimal,
                     }
                     if sheet is not None:
@@ -1043,30 +1003,25 @@ def _render_dashboard(results_dir: Path) -> None:
     with spectra_tab:
         st.subheader(tr("Espectros"))
         spectra_file = st.file_uploader(
-            tr("Arquivo CSV ou XLSX"),
-            type=["csv", "xlsx", "xls"],
+            tr("Arquivo XLSX"),
+            type=["xlsx", "xls"],
             key="spectra_file",
         )
         if spectra_file is not None:
-            sep = st.text_input("Separador", st.session_state.get("sep", ","))
             decimal = st.text_input(
                 "Separador decimal", st.session_state.get("decimal", ".")
             )
 
-        st.caption(
-            tr(
-                "O arquivo deve possuir colunas numéricas. "
-                "Converta valores textuais com `pandas.to_numeric` antes do envio."
-            )
+            st.caption(
+                tr(
+                    "O arquivo deve possuir colunas numéricas. "
+                    "Converta valores textuais com `pandas.to_numeric` antes do envio."
+                )
         )
         if spectra_file is not None and st.button(tr("Rodar PCA")):
-
             try:
                 spectra_file.seek(0)
-                if spectra_file.name.lower().endswith((".xlsx", ".xls")):
-                    df = pd.read_excel(spectra_file, decimal=decimal)
-                else:
-                    df = pd.read_csv(spectra_file, sep=sep, decimal=decimal)
+                df = pd.read_excel(spectra_file, decimal=decimal)
                 numeric = (
                     df.apply(pd.to_numeric, errors="coerce")
                     .dropna(axis=1, how="all")
@@ -1095,22 +1050,18 @@ def _render_dashboard(results_dir: Path) -> None:
     with pca_tab:
         st.subheader(tr("PCA"))
         pca_file = st.file_uploader(
-            tr("Arquivo CSV ou XLSX"),
-            type=["csv", "xlsx", "xls"],
+            tr("Arquivo XLSX"),
+            type=["xlsx", "xls"],
             key="pca_file",
         )
         if pca_file is not None:
-            sep = st.text_input("Separador", st.session_state.get("sep", ","))
             decimal = st.text_input(
                 "Separador decimal", st.session_state.get("decimal", ".")
             )
             if st.button(tr("Rodar PCA")):
                 try:
                     pca_file.seek(0)
-                    if pca_file.name.lower().endswith((".xlsx", ".xls")):
-                        df = pd.read_excel(pca_file, decimal=decimal)
-                    else:
-                        df = pd.read_csv(pca_file, sep=sep, decimal=decimal)
+                    df = pd.read_excel(pca_file, decimal=decimal)
                     numeric = df.apply(pd.to_numeric, errors="coerce").select_dtypes(
                         include="number"
                     )
