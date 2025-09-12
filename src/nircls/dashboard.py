@@ -1023,7 +1023,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 "Converta valores textuais com `pandas.to_numeric` antes do envio."
             )
         )
-        if pca_file is not None and st.button(tr("Rodar PCA")):
+        if spectra_file is not None and st.button(tr("Rodar PCA")):
 
             try:
                 spectra_file.seek(0)
