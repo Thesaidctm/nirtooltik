@@ -30,6 +30,7 @@ dependencies = [
   "plotly",
   "kaleido",
   "streamlit>=1.25",
+  "sqlalchemy",
 ]
 
 [project.optional-dependencies]
