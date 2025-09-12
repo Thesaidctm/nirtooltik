@@ -311,6 +311,7 @@ def _render_dashboard(results_dir: Path) -> None:
         exec_tab,
         results_tab,
         summary_tab,
+        spectra_tab,
         pca_tab,
         logs_tab,
         help_tab,
@@ -322,6 +323,7 @@ def _render_dashboard(results_dir: Path) -> None:
             tr("Execução"),
             tr("Resultados"),
             tr("Resumo"),
+            tr("Espectros"),
             tr("PCA"),
             tr("Logs"),
             tr("Ajuda"),
@@ -1002,6 +1004,47 @@ def _render_dashboard(results_dir: Path) -> None:
                 styled = display_df.style.apply(_highlight_best, axis=0)
                 st.dataframe(styled, width="stretch")
 
+    with spectra_tab:
+        st.subheader(tr("Espectros"))
+        spectra_file = st.file_uploader(
+            tr("Arquivo CSV ou XLSX"),
+            type=["csv", "xlsx", "xls"],
+            key="spectra_file",
+        )
+        if spectra_file is not None:
+            sep = st.text_input("Separador", st.session_state.get("sep", ","))
+            decimal = st.text_input(
+                "Separador decimal", st.session_state.get("decimal", ".")
+            )
+            try:
+                spectra_file.seek(0)
+                if spectra_file.name.lower().endswith((".xlsx", ".xls")):
+                    df = pd.read_excel(spectra_file, decimal=decimal)
+                else:
+                    df = pd.read_csv(spectra_file, sep=sep, decimal=decimal)
+                numeric = (
+                    df.apply(pd.to_numeric, errors="coerce")
+                    .dropna(axis=1, how="all")
+                    .select_dtypes(include="number")
+                )
+                if numeric.empty:
+                    st.warning(tr("Nenhuma coluna numérica encontrada."))
+                else:
+                    max_spec = st.slider(
+                        tr("Quantidade de espectros"),
+                        1,
+                        len(numeric),
+                        min(10, len(numeric)),
+                    )
+                    fig = go.Figure()
+                    for idx, row in numeric.head(max_spec).iterrows():
+                        fig.add_trace(
+                            go.Scatter(x=numeric.columns, y=row, name=str(idx))
+                        )
+                    st.plotly_chart(fig, width="stretch")
+            except Exception as exc:  # pragma: no cover - display error
+                st.error(tr("Erro ao plotar espectros: {exc}").format(exc=exc))
+
     with pca_tab:
         st.subheader(tr("PCA"))
         pca_file = st.file_uploader(
@@ -1009,21 +1052,31 @@ def _render_dashboard(results_dir: Path) -> None:
             type=["csv", "xlsx", "xls"],
             key="pca_file",
         )
-        if pca_file is not None and st.button(tr("Rodar PCA")):
-            try:
-                if pca_file.name.lower().endswith((".xlsx", ".xls")):
-                    df = pd.read_excel(pca_file)
-                else:
-                    df = pd.read_csv(pca_file)
-                numeric = df.select_dtypes(include="number")
-                if numeric.empty:
-                    st.warning(tr("Nenhuma coluna numérica encontrada."))
-                else:
-                    res = pca_outliers(numeric)
-                    fig = px.scatter(res, x="PC1", y="PC2")
-                    st.plotly_chart(fig, width="stretch")
-            except Exception as exc:  # pragma: no cover - display error
-                st.error(tr("Erro ao executar PCA: {exc}").format(exc=exc))
+        if pca_file is not None:
+            sep = st.text_input("Separador", st.session_state.get("sep", ","))
+            decimal = st.text_input(
+                "Separador decimal", st.session_state.get("decimal", ".")
+            )
+            if st.button(tr("Rodar PCA")):
+                try:
+                    pca_file.seek(0)
+                    if pca_file.name.lower().endswith((".xlsx", ".xls")):
+                        df = pd.read_excel(pca_file, decimal=decimal)
+                    else:
+                        df = pd.read_csv(pca_file, sep=sep, decimal=decimal)
+                    numeric = df.apply(pd.to_numeric, errors="coerce").select_dtypes(
+                        include="number"
+                    )
+                    if numeric.empty:
+                        st.warning(tr("Nenhuma coluna numérica encontrada."))
+                        st.dataframe(df.head())
+                        st.write(df.dtypes.astype(str))
+                    else:
+                        res = pca_outliers(numeric)
+                        fig = px.scatter(res, x="PC1", y="PC2")
+                        st.plotly_chart(fig, width="stretch")
+                except Exception as exc:  # pragma: no cover - display error
+                    st.error(tr("Erro ao executar PCA: {exc}").format(exc=exc))
 
     with logs_tab:
         log_path = Path.home() / ".nircls" / "nircls.log"
