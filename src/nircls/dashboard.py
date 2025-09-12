@@ -211,7 +211,7 @@ def _render_dashboard(results_dir: Path) -> None:
                     except Exception:
                         fig = None
                     if fig is not None:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width="stretch")
                         st.caption(caption)
                     elif png_file.exists():
                         st.image(str(png_file), caption=caption)
@@ -259,8 +259,11 @@ def _render_dashboard(results_dir: Path) -> None:
             if ren_col.button("Renomear", key=f"{key_prefix}rename_btn_{run.name}"):
                 new_path = run.with_name(new_name.strip())
                 if new_name and new_path != run:
-                    run.rename(new_path)
-                    st.rerun()
+                    try:
+                        run.rename(new_path)
+                        st.rerun()
+                    except PermissionError as exc:
+                        st.error(tr("Erro ao renomear: {exc}").format(exc=exc))
             if del_col.button("Excluir", key=f"{key_prefix}delete_{run.name}"):
                 if st.confirm_dialog(f"Excluir {run.name}?"):
                     shutil.rmtree(run)
@@ -745,7 +748,7 @@ def _render_dashboard(results_dir: Path) -> None:
                             counts = ds["Y"].value_counts().reset_index()
                             counts.columns = ["class", "count"]
                             fig = px.bar(counts, x="class", y="count")
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width="stretch")
                             stem = ds["target"].replace(" ", "_")
                             out_base = prep_fig_dir / f"{stem}__class_counts"
                             _export(fig, out_base, interactive=True)
@@ -796,7 +799,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                 xaxis_title="Comprimento de onda",
                                 yaxis_title="Reflectância",
                             )
-                            st.plotly_chart(fig2, use_container_width=True)
+                            st.plotly_chart(fig2, width="stretch")
                             out_base2 = prep_fig_dir / f"{stem}__mean_std"
                             _export(fig2, out_base2, interactive=True)
                             png_file = out_base2.with_suffix(".png")
@@ -897,7 +900,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                                 False: "blue",
                                             },
                                         )
-                                        st.plotly_chart(fig, use_container_width=True)
+                                        st.plotly_chart(fig, width="stretch")
                                 except (
                                     Exception
                                 ) as exc:  # pragma: no cover - display error
@@ -997,7 +1000,7 @@ def _render_dashboard(results_dir: Path) -> None:
                     ]
 
                 styled = display_df.style.apply(_highlight_best, axis=0)
-                st.dataframe(styled, use_container_width=True)
+                st.dataframe(styled, width="stretch")
 
     with pca_tab:
         st.subheader(tr("PCA"))
@@ -1018,7 +1021,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 else:
                     res = pca_outliers(numeric)
                     fig = px.scatter(res, x="PC1", y="PC2")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
             except Exception as exc:  # pragma: no cover - display error
                 st.error(tr("Erro ao executar PCA: {exc}").format(exc=exc))
 
