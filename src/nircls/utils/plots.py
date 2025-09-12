@@ -30,19 +30,19 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
     """
 
     out_base.parent.mkdir(parents=True, exist_ok=True)
-    out = out_base.with_suffix(".png")
-    logger.debug("Exporting %s", out)
-
     if importlib.util.find_spec("kaleido") is None:
         logger.warning(
             "Kaleido engine not found. Install with 'pip install -U kaleido' to enable static image export."
         )
     else:
-        try:
-            fig.write_image(out)
-            logger.debug("Exported %s", out)
-        except Exception as exc:  # pragma: no cover - small message
-            logger.warning("Export failed for %s: %s", out, exc)
+        for suffix in [".png", ".svg"]:
+            out = out_base.with_suffix(suffix)
+            logger.debug("Exporting %s", out)
+            try:
+                fig.write_image(out)
+                logger.debug("Exported %s", out)
+            except Exception as exc:  # pragma: no cover - small message
+                logger.warning("Export failed for %s: %s", out, exc)
 
     if interactive:
         html_out = out_base.with_suffix(".html")
