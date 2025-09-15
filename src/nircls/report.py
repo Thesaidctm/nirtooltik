@@ -83,10 +83,17 @@ def generate_report(
             std_col = f"{base}_std"
             if std_col in df.columns:
                 table_df[base] = df.apply(
-                    lambda r: f"{r[mean_col]:.3f} ± {r[std_col]:.3f}", axis=1
+                    lambda r: (
+                        f"{r[mean_col]:.3f} ± {r[std_col]:.3f}"
+                        if pd.notnull(r[mean_col]) and pd.notnull(r[std_col])
+                        else "N/A"
+                    ),
+                    axis=1,
                 )
             else:
-                table_df[base] = df[mean_col].map(lambda v: f"{v:.3f}")
+                table_df[base] = df[mean_col].map(
+                    lambda v: f"{v:.3f}" if pd.notnull(v) else "N/A"
+                )
     # Build a markdown table without requiring external dependencies
     header = "| " + " | ".join(table_df.columns.tolist()) + " |"
     sep = "| " + " | ".join(["---"] * len(table_df.columns)) + " |"
