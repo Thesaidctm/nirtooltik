@@ -12,6 +12,7 @@ from datetime import datetime
 from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Iterable, Mapping
 
 import numpy as np
 import pandas as pd
@@ -302,6 +303,117 @@ def build_pipeline_from_config(
     return out
 
 
+def _format_preprocess_step(step: Any) -> str:
+    """Return a concise string representation for a preprocessing ``step``."""
+
+    if isinstance(step, str):
+        cleaned = step.strip()
+        if not cleaned:
+            return ""
+        if cleaned.endswith("()"):
+            cleaned = cleaned[:-2]
+        upper = cleaned.upper()
+        mapping = {
+            "SNV": "SNV",
+            "MSC": "MSC",
+            "SG": "SG",
+            "EMSC": "EMSC",
+            "EPO": "EPO",
+            "SCALE": "SCALE",
+        }
+        if upper in mapping:
+            return mapping[upper]
+        if cleaned.lower().startswith("detrend"):
+            suffix = cleaned[len("Detrend") :]
+            return f"DETREND{suffix}"
+        if cleaned.startswith("SavitzkyGolayTransformer") or cleaned.startswith("SG("):
+            cleaned = cleaned.replace("SavitzkyGolayTransformer", "SG")
+            cleaned = cleaned.replace("window_length", "window")
+            cleaned = cleaned.replace("polyorder", "poly")
+            return cleaned
+        if cleaned.lower().startswith("standardscaler"):
+            return "SCALE"
+        return cleaned
+
+    if isinstance(step, SNV):
+        return "SNV"
+    if isinstance(step, MSC):
+        return "MSC"
+    if isinstance(step, SavitzkyGolayTransformer):
+        return (
+            f"SG(window={step.window_length},poly={step.polyorder},deriv={step.deriv})"
+        )
+    if isinstance(step, Detrend):
+        return f"DETREND(order={step.order})"
+    if isinstance(step, EMSC):
+        return f"EMSC(degree={step.degree})"
+    if isinstance(step, EPO):
+        return "EPO"
+    if isinstance(step, StandardScaler):
+        return "SCALE"
+    return step.__class__.__name__
+
+
+def _format_preprocess_steps(steps: Iterable[Any]) -> str:
+    """Format a sequence of preprocessing ``steps`` into a readable string."""
+
+    formatted: List[str] = []
+    for step in steps:
+        if step is None:
+            continue
+        desc = _format_preprocess_step(step)
+        if desc:
+            formatted.append(desc)
+    result = ", ".join(formatted)
+    return result if result else "None"
+
+
+def _normalize_preprocess_value(
+    value: Any, default_steps: Sequence[str]
+) -> str:
+    """Normalize any representation of preprocessing steps to a string."""
+
+    if isinstance(value, str):
+        formatted = _format_preprocess_step(value)
+        return formatted if formatted else "None"
+    if isinstance(value, (list, tuple)):
+        return _format_preprocess_steps(value)
+    if value:
+        return str(value)
+    if default_steps:
+        return _format_preprocess_steps(list(default_steps))
+    return "None"
+
+
+def _coerce_param_value(value: Any) -> Any:
+    """Convert parameter ``value`` to a JSON-friendly representation."""
+
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (list, tuple)):
+        return [_coerce_param_value(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _coerce_param_value(v) for k, v in value.items()}
+    if isinstance(value, Path):
+        return value.as_posix()
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _update_row_with_best_params(
+    row: Dict[str, Any], best_params: Optional[Mapping[str, Any]]
+) -> None:
+    """Add ``best_params`` entries to ``row`` using ``best_<param>`` keys."""
+
+    if not best_params:
+        return
+    for key, value in best_params.items():
+        row[f"best_{key}"] = _coerce_param_value(value)
+
+
 def _save_metrics(
     rows: List[Dict[str, Any]],
     out_dir: Path,
@@ -317,8 +429,9 @@ def _save_metrics(
     """
 
     for row in rows:
-        if "preprocess_steps" not in row:
-            row["preprocess_steps"] = list(preprocess_steps)
+        row["preprocess_steps"] = _normalize_preprocess_value(
+            row.get("preprocess_steps"), preprocess_steps
+        )
         row.setdefault("overfit_warning", False)
     df = pd.DataFrame(rows)
     if df.empty:
@@ -558,7 +671,8 @@ def _run_cv(
             y_pred_all: List[np.ndarray] = []
             y_proba_all: List[np.ndarray] = []
             n_comp_list: List[int] = []
-            best_steps_repr: Optional[List[str]] = None
+            best_steps_repr: Optional[str] = None
+            best_params_example: Optional[Dict[str, Any]] = None
             if is_loo:
                 inner_splits = int(min(inner_folds, counts.min()))
                 inner_splits = max(inner_splits, 2)
@@ -575,9 +689,9 @@ def _run_cv(
                     n_comp_list.append(n_comp)
                 best = pipe.set_params(**best_params)
                 if best_steps_repr is None:
-                    best_steps_repr = [
-                        repr(v) for k, v in best.named_steps.items() if k != "clf"
-                    ]
+                    best_steps_repr = _format_preprocess_steps(
+                        [v for k, v in best.named_steps.items() if k != "clf"]
+                    )
                 calib_cfg = m_cfg.get("calibration")
                 if calib_cfg:
                     best = CalibratedClassifierCV(
@@ -665,9 +779,10 @@ def _run_cv(
                     row.setdefault(f"{m}_std", None)
                     row.setdefault(f"train_{m}_mean", None)
                     row.setdefault(f"train_{m}_std", None)
+                _update_row_with_best_params(row, best_params)
                 if n_comp_list:
                     row["n_components"] = int(np.median(n_comp_list))
-                if best_steps_repr is not None:
+                if best_steps_repr:
                     row["preprocess_steps"] = best_steps_repr
                 if log_memory:
                     mem_end = psutil.Process().memory_info().rss / 1e6
@@ -749,15 +864,16 @@ def _run_cv(
                     pipe, grid, scoring="f1_macro", cv=inner, n_jobs=n_jobs
                 )
                 gs.fit(Xtr, ytr, **fit_kwargs)
-
+                if best_params_example is None:
+                    best_params_example = dict(gs.best_params_)
                 n_comp = _get_n_components(gs.best_params_)
                 if n_comp is not None:
                     n_comp_list.append(n_comp)
                 best = gs.best_estimator_
                 if best_steps_repr is None:
-                    best_steps_repr = [
-                        repr(v) for k, v in best.named_steps.items() if k != "clf"
-                    ]
+                    best_steps_repr = _format_preprocess_steps(
+                        [v for k, v in best.named_steps.items() if k != "clf"]
+                    )
                 calib_cfg = m_cfg.get("calibration")
                 if calib_cfg:
                     best = CalibratedClassifierCV(
@@ -847,6 +963,7 @@ def _run_cv(
                 row.setdefault(f"{m}_std", None)
                 row.setdefault(f"train_{m}_mean", None)
                 row.setdefault(f"train_{m}_std", None)
+            _update_row_with_best_params(row, best_params_example)
             if m_cfg.get("overfit_check") and yscramble_iter > 0:
                 cv_scramble = outer
                 if cv_method == "spxy":
@@ -875,7 +992,7 @@ def _run_cv(
                     row["Yscramble_p95"] = None
             if n_comp_list:
                 row["n_components"] = int(np.median(n_comp_list))
-            if best_steps_repr is not None:
+            if best_steps_repr:
                 row["preprocess_steps"] = best_steps_repr
             if log_memory:
                 mem_end = psutil.Process().memory_info().rss / 1e6
@@ -1007,9 +1124,9 @@ def _run_holdout(
             gs.fit(Xtr, ytr)
             n_comp = _get_n_components(gs.best_params_)
             best = gs.best_estimator_
-            preprocess_steps = [
-                repr(v) for k, v in best.named_steps.items() if k != "clf"
-            ]
+            preprocess_steps = _format_preprocess_steps(
+                [v for k, v in best.named_steps.items() if k != "clf"]
+            )
             calib_cfg = m_cfg.get("calibration")
             if calib_cfg:
                 best = CalibratedClassifierCV(
@@ -1035,6 +1152,7 @@ def _run_holdout(
             diff = row["train_BalancedAcc_mean"] - row["BalancedAcc_mean"]
             row["overfit_warning"] = diff > 0.05
             row["n_components"] = n_comp
+            _update_row_with_best_params(row, gs.best_params_)
             proba_fn = getattr(best, "predict_proba", None)
             proba = None
             proba_tr = None
@@ -1194,7 +1312,7 @@ def run_multiple_eval(
             mlflow.log_params(
                 {
                     "models": ",".join(model_names),
-                    "preprocess_steps": ",".join(steps_cfg),
+                    "preprocess_steps": _format_preprocess_steps(list(steps_cfg)),
                     "cv_method": cv_method,
                 }
             )
@@ -1489,9 +1607,9 @@ def train_and_save(
 
             n_comp = _get_n_components(gs.best_params_)
             best = gs.best_estimator_
-            preprocess_steps = [
-                repr(v) for k, v in best.named_steps.items() if k != "clf"
-            ]
+            preprocess_steps = _format_preprocess_steps(
+                [v for k, v in best.named_steps.items() if k != "clf"]
+            )
             calib_cfg = model_cfg.get("calibration") if model_cfg else None
             if calib_cfg:
                 best = CalibratedClassifierCV(
@@ -1520,6 +1638,7 @@ def train_and_save(
             }
             row["n_components"] = n_comp
             row["preprocess_steps"] = preprocess_steps
+            _update_row_with_best_params(row, gs.best_params_)
             proba_fn = getattr(best, "predict_proba", None)
             proba = None
             if proba_fn is not None:
@@ -1575,10 +1694,15 @@ def train_and_save(
                     logger.debug("Could not log DVC metadata", exc_info=True)
                 params = {
                     "model": name,
-                    "preprocess_steps": ",".join(steps_cfg),
+                    "preprocess_steps": _format_preprocess_steps(list(steps_cfg)),
                     "cv_method": cv_method,
                 }
-                params.update({f"best_{k}": v for k, v in gs.best_params_.items()})
+                params.update(
+                    {
+                        f"best_{k}": _coerce_param_value(v)
+                        for k, v in gs.best_params_.items()
+                    }
+                )
                 mlflow.log_params(params)
                 mlflow.log_metrics(row)
                 mlflow.log_artifact(out_dir / "model.joblib")

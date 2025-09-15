@@ -12,7 +12,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, Sequence, cast
+from typing import Any, Dict, Optional, Sequence, cast
 
 import pandas as pd
 import yaml  # type: ignore[import-untyped]
@@ -80,7 +80,7 @@ STRINGS = {
         "astm_external_validation": "External validation",
         "full_report": "Full report: {path}",
         "model_saved": "Model saved: {path}",
-        "final_model": "== Final model ==",
+        "final_model": "== Final model{steps} ==",
         "data_prepared_in": "Prepared data in: {file}",
         "model_trained_in": "Model trained in: {path}",
         "cv_results_in": "Cross-val results in: {path}",
@@ -133,7 +133,7 @@ STRINGS = {
         "astm_external_validation": "Validação externa",
         "full_report": "Relatório completo: {path}",
         "model_saved": "Modelo salvo: {path}",
-        "final_model": "== Modelo final ==",
+        "final_model": "== Modelo final{steps} ==",
         "data_prepared_in": "Dados preparados em: {file}",
         "model_trained_in": "Modelo treinado em: {path}",
         "cv_results_in": "Resultados de cross-val em: {path}",
@@ -184,6 +184,28 @@ def _print_metrics_table(metrics_json: Path) -> None:
             df[base] = df[col].map(lambda x: f"{x:.3f}")
     display_cols = id_cols + [c[:-5] for c in metrics_cols]
     print(df[display_cols].to_string(index=False))
+
+
+def _load_preprocess_steps(metrics_json: Path) -> Optional[str]:
+    """Extract preprocessing description from ``metrics_json`` if available."""
+
+    if not metrics_json or not metrics_json.exists():
+        return None
+    try:
+        df = pd.read_json(metrics_json)
+    except ValueError:
+        return None
+    if df.empty or "preprocess_steps" not in df.columns:
+        return None
+    val = df.iloc[0]["preprocess_steps"]
+    if isinstance(val, (list, tuple)):
+        parts = [str(v) for v in val if v is not None]
+        if not parts:
+            return None
+        return ", ".join(parts)
+    if pd.isna(val) or val is None:
+        return None
+    return str(val)
 
 
 def _print_confusion_paths(fig_dir: Path) -> None:
@@ -599,7 +621,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             if rpt.exists():
                 print(t("full_report", path=rpt))
         if train_metrics:
-            print(t("final_model"))
+            steps_desc = _load_preprocess_steps(train_metrics)
+            suffix = f" ({steps_desc})" if steps_desc else ""
+            print(t("final_model", steps=suffix))
             _print_metrics_table(train_metrics)
             _print_confusion_paths(train_figs)
             if report_path.exists():
