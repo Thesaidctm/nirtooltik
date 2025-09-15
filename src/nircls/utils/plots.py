@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import importlib.util
 from pathlib import Path
+from typing import Iterable, Sequence
 
 import numpy as np
 import pandas as pd
@@ -79,6 +80,174 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
             logger.debug("Exported %s", json_out)
         except Exception as exc:  # pragma: no cover - small message
             logger.warning("Export failed for %s: %s", json_out, exc)
+
+
+def _coerce_feature_names(
+    feature_names: Sequence[object] | pd.Index | None, n_features: int
+) -> list[object]:
+    """Return a list of feature labels with length ``n_features``."""
+
+    if feature_names is None:
+        return list(range(n_features))
+    if isinstance(feature_names, pd.Index):
+        labels = feature_names.tolist()
+    else:
+        labels = list(feature_names)
+    if len(labels) != n_features:
+        raise ValueError(
+            "Feature name list length does not match number of features"
+        )
+    coerced: list[object] = []
+    for label in labels:
+        if isinstance(label, np.generic):
+            coerced.append(label.item())
+        else:
+            coerced.append(label)
+    return coerced
+
+
+def _pls_component_records(
+    values: np.ndarray,
+    feature_names: Iterable[object],
+) -> list[dict[str, object]]:
+    """Build long-form records for PLS component values."""
+
+    records: list[dict[str, object]] = []
+    component_labels = [f"Comp {idx + 1}" for idx in range(values.shape[1])]
+    for comp_idx, label in enumerate(component_labels, start=1):
+        column = values[:, comp_idx - 1]
+        for feat, val in zip(feature_names, column, strict=False):
+            records.append(
+                {
+                    "feature": feat,
+                    "component": label,
+                    "component_index": comp_idx,
+                    "value": float(val),
+                }
+            )
+    return records
+
+
+def plot_pls_loadings(
+    loadings: np.ndarray,
+    feature_names: Sequence[object] | pd.Index | None,
+    out_base: Path,
+    interactive: bool = False,
+    *,
+    palette: Palette = Palette.VIRIDIS,
+) -> pd.DataFrame:
+    """Plot PLS loadings and return the underlying values."""
+
+    loadings = np.asarray(loadings, dtype=float)
+    if loadings.ndim != 2:
+        raise ValueError("loadings must be a 2-D array")
+    n_features, n_components = loadings.shape
+    if n_components == 0:
+        return pd.DataFrame(columns=["feature", "component", "component_index", "value"])
+
+    features = _coerce_feature_names(feature_names, n_features)
+    fig = go.Figure()
+    fig.update_layout(
+        title="PLS Loadings",
+        xaxis_title="Feature",
+        yaxis_title="Loading",
+        colorway=PALETTE_MAP[palette],
+    )
+    component_labels = [f"Comp {i + 1}" for i in range(n_components)]
+    for idx, label in enumerate(component_labels):
+        fig.add_trace(
+            go.Scatter(
+                x=features,
+                y=loadings[:, idx],
+                mode="lines",
+                name=label,
+            )
+        )
+    _export(fig, out_base, interactive)
+
+    records = _pls_component_records(loadings, features)
+    return pd.DataFrame.from_records(records)
+
+
+def plot_pls_weights(
+    weights: np.ndarray,
+    feature_names: Sequence[object] | pd.Index | None,
+    out_base: Path,
+    interactive: bool = False,
+    *,
+    palette: Palette = Palette.VIRIDIS,
+) -> pd.DataFrame:
+    """Plot PLS weights for each component and return numeric values."""
+
+    weights = np.asarray(weights, dtype=float)
+    if weights.ndim != 2:
+        raise ValueError("weights must be a 2-D array")
+    n_features, n_components = weights.shape
+    if n_components == 0:
+        return pd.DataFrame(columns=["feature", "component", "component_index", "value"])
+
+    features = _coerce_feature_names(feature_names, n_features)
+    fig = go.Figure()
+    fig.update_layout(
+        title="PLS Weights",
+        xaxis_title="Feature",
+        yaxis_title="Weight",
+        colorway=PALETTE_MAP[palette],
+    )
+    component_labels = [f"Comp {i + 1}" for i in range(n_components)]
+    for idx, label in enumerate(component_labels):
+        fig.add_trace(
+            go.Scatter(
+                x=features,
+                y=weights[:, idx],
+                mode="lines",
+                name=label,
+            )
+        )
+    _export(fig, out_base, interactive)
+
+    records = _pls_component_records(weights, features)
+    return pd.DataFrame.from_records(records)
+
+
+def plot_vip(
+    vip_scores: np.ndarray,
+    feature_names: Sequence[object] | pd.Index | None,
+    out_base: Path,
+    interactive: bool = False,
+    *,
+    palette: Palette = Palette.VIRIDIS,
+) -> pd.DataFrame:
+    """Plot Variable Importance in Projection (VIP) scores."""
+
+    vip_scores = np.asarray(vip_scores, dtype=float).ravel()
+    n_features = vip_scores.size
+    if n_features == 0:
+        return pd.DataFrame(columns=["feature", "vip"])
+
+    features = _coerce_feature_names(feature_names, n_features)
+    colors = PALETTE_MAP[palette]
+    color = colors[0] if colors else None
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=features,
+            y=vip_scores,
+            marker=dict(color=color) if color else None,
+            name="VIP",
+        )
+    )
+    fig.add_hline(y=1.0, line_dash="dash", line_color="gray", name="VIP = 1")
+    fig.update_layout(
+        title="Variable Importance in Projection",
+        xaxis_title="Feature",
+        yaxis_title="VIP Score",
+        showlegend=False,
+    )
+    _export(fig, out_base, interactive)
+
+    df = pd.DataFrame({"feature": features, "vip": vip_scores.astype(float)})
+    return df
 
 
 def plot_confusion(
