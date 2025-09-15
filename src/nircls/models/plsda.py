@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Any, Callable, Dict
 
 import numpy as np
+from scipy.linalg import LinAlgWarning
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.discriminant_analysis import (
@@ -64,7 +66,16 @@ class PLSDA(BaseEstimator, ClassifierMixin):
                 max_comp,
             )
         T = self.pls.transform(X)
-        self.clf.fit(T, y)
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always", LinAlgWarning)
+            self.clf.fit(T, y)
+        for warning in caught_warnings:
+            if issubclass(warning.category, LinAlgWarning):
+                logger.warning(
+                    "LinAlgWarning during %s.fit: %s",
+                    self.method,
+                    warning.message,
+                )
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
