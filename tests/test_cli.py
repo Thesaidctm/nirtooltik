@@ -5,6 +5,7 @@ import subprocess
 import sys
 import json
 import io
+import textwrap
 
 import pandas as pd
 
@@ -78,6 +79,57 @@ def test_train_cli_with_config_creates_artifacts(tmp_path: pathlib.Path) -> None
     figures_dir = metrics_files[0].parent / "figures"
     assert figures_dir.is_dir()
     assert (metrics_files[0].parent / "astm_classification.json").exists()
+
+
+def test_run_all_cli_displays_preprocess_descriptions(
+    tmp_path: pathlib.Path,
+) -> None:
+    env = _base_env()
+    data_src = pathlib.Path(__file__).resolve().parents[1] / "data" / "demo.csv"
+    shutil.copy(data_src, tmp_path / "demo.csv")
+    cfg_dst = tmp_path / "config.yaml"
+    cfg_dst.write_text(
+        textwrap.dedent(
+            """
+            data:
+              input_path: demo.csv
+              target_cols: [target]
+              out_dir: results
+            preprocess:
+              steps: [SNV, MSC]
+            models:
+              - name: PLSDA
+                grid: {n_components: [2], method: [logreg]}
+                y_scramble_n_iter: 0
+            cv:
+              strategies:
+                - type: holdout
+                  test_size: 0.5
+            """
+        ).strip()
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nircls.cli",
+            "--lang",
+            "pt",
+            "--no-progress",
+            "run-all",
+            "--config",
+            str(cfg_dst),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert "Variação Normal Padrão" in proc.stdout
+    assert "Correção Multiplicativa de Espalhamento" in proc.stdout
 
 
 def test_summary_cli_aggregates_results(tmp_path: pathlib.Path) -> None:

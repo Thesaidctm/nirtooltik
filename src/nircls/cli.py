@@ -38,14 +38,35 @@ from .utils.summarize import summarize_runs
 # Human-friendly names for interactive wizard choices
 MODEL_DESCRIPTIONS = get_model_descriptions()
 
-PREPROCESS_DESCRIPTIONS = {
-    "SNV": "Standard Normal Variate",
-    "MSC": "Multiplicative Scatter Correction",
-    "DETREND": "Polynomial Detrend",
-    "SG": "Savitzky-Golay Filter",
-    "EMSC": "Extended MSC",
-    "EPO": "External Parameter Orthogonalization",
-    "SCALE": "Standard Scaling",
+PREPROCESS_DESCRIPTIONS: dict[str, dict[str, str]] = {
+    "SNV": {
+        "en": "Standard Normal Variate",
+        "pt": "Variação Normal Padrão",
+    },
+    "MSC": {
+        "en": "Multiplicative Scatter Correction",
+        "pt": "Correção Multiplicativa de Espalhamento",
+    },
+    "DETREND": {
+        "en": "Polynomial Detrend",
+        "pt": "Remoção de Tendência Polinomial",
+    },
+    "SG": {
+        "en": "Savitzky-Golay Filter",
+        "pt": "Filtro de Savitzky-Golay",
+    },
+    "EMSC": {
+        "en": "Extended MSC",
+        "pt": "MSC Estendido",
+    },
+    "EPO": {
+        "en": "External Parameter Orthogonalization",
+        "pt": "Ortogonalização de Parâmetro Externo",
+    },
+    "SCALE": {
+        "en": "Standard Scaling",
+        "pt": "Escalonamento Padrão",
+    },
 }
 
 STRINGS = {
@@ -159,6 +180,18 @@ LANG = "en"
 
 def t(key: str, **kwargs: Any) -> str:
     return STRINGS.get(LANG, STRINGS["en"]).get(key, key).format(**kwargs)
+
+
+def _get_preprocess_description(code: str, lang: str | None = None) -> str:
+    """Return a human-friendly description for a preprocessing ``code``."""
+
+    data = PREPROCESS_DESCRIPTIONS.get(code)
+    if not data:
+        return code
+    language = lang or LANG
+    if isinstance(data, dict):
+        return data.get(language) or data.get("en") or next(iter(data.values()))
+    return str(data)
 
 
 def _print_metrics_table(metrics_json: Path) -> None:
@@ -640,7 +673,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(t("full_report", path=rpt))
         if train_metrics:
             steps_desc = _load_preprocess_steps(train_metrics)
-            suffix = f" ({steps_desc})" if steps_desc else ""
+            suffix = ""
+            if steps_desc:
+                codes = [code.strip() for code in steps_desc.split(",") if code.strip()]
+                mapped = [_get_preprocess_description(code) for code in codes]
+                if mapped:
+                    suffix = f" ({', '.join(mapped)})"
+                else:
+                    suffix = f" ({steps_desc})"
             print(t("final_model", steps=suffix))
             _print_metrics_table(train_metrics)
             _print_confusion_paths(train_figs)
@@ -768,8 +808,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             models_cfg.append(model_entry)
 
         pre_choices = [
-            Choice(title=f"{k} - {v}", value=k)
-            for k, v in PREPROCESS_DESCRIPTIONS.items()
+            Choice(title=f"{k} - {_get_preprocess_description(k)}", value=k)
+            for k in PREPROCESS_DESCRIPTIONS
         ]
         preprocess_steps = questionary.checkbox(
             t("wizard_preprocessors"), choices=pre_choices
