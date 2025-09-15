@@ -10,6 +10,7 @@ import pandas as pd
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 import nircls
+from nircls.cli import _load_preprocess_steps
 
 
 def test_version_cli():
@@ -110,3 +111,23 @@ def test_summary_cli_aggregates_results(tmp_path: pathlib.Path) -> None:
     df = pd.read_fwf(io.StringIO(proc.stdout))
     assert len(df) == 2
     assert set(df["run"]) == {"run1", "run2"}
+
+
+def test_load_preprocess_steps_handles_multiple_sequences(
+    tmp_path: pathlib.Path,
+) -> None:
+    metrics_path = tmp_path / "metrics.json"
+    metrics_path.write_text(
+        json.dumps(
+            [
+                {"preprocess_steps": ["SNV", "SG"]},
+                {"preprocess_steps": ["MSC", "SNV"]},
+                {"preprocess_steps": None},
+                {"preprocess_steps": "EPO"},
+            ]
+        )
+    )
+
+    steps = _load_preprocess_steps(metrics_path)
+
+    assert steps == "SNV, SG, MSC, EPO"

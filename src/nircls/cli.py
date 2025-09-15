@@ -197,15 +197,33 @@ def _load_preprocess_steps(metrics_json: Path) -> Optional[str]:
         return None
     if df.empty or "preprocess_steps" not in df.columns:
         return None
-    val = df.iloc[0]["preprocess_steps"]
-    if isinstance(val, (list, tuple)):
-        parts = [str(v) for v in val if v is not None]
-        if not parts:
-            return None
-        return ", ".join(parts)
-    if pd.isna(val) or val is None:
+
+    seen = set()
+    ordered_steps: list[str] = []
+
+    def _add_step(step: Any) -> None:
+        if step is None:
+            return
+        try:
+            if pd.isna(step):
+                return
+        except TypeError:
+            pass
+        step_str = str(step)
+        if step_str not in seen:
+            seen.add(step_str)
+            ordered_steps.append(step_str)
+
+    for val in df["preprocess_steps"]:
+        if isinstance(val, (list, tuple)):
+            for item in val:
+                _add_step(item)
+        else:
+            _add_step(val)
+
+    if not ordered_steps:
         return None
-    return str(val)
+    return ", ".join(ordered_steps)
 
 
 def _print_confusion_paths(fig_dir: Path) -> None:
