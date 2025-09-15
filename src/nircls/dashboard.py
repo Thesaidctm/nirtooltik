@@ -63,6 +63,30 @@ def _get_preprocessor_names() -> list[str]:
     return sorted(names)
 
 
+def _standardize_excel_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure column names are strings and object columns have consistent dtypes."""
+
+    result = df.copy()
+    result.columns = result.columns.map(str)
+    for column in result.columns:
+        if result[column].dtype == "object":
+            try:
+                converted = pd.to_numeric(result[column], errors="ignore")
+            except Exception as exc:  # pragma: no cover - defensive guard
+                raise ValueError(
+                    f"Falha ao converter a coluna '{column}' para numérico: {exc}"
+                ) from exc
+            result[column] = converted
+            if result[column].dtype == "object":
+                try:
+                    result[column] = result[column].astype(str)
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    raise ValueError(
+                        f"Falha ao converter a coluna '{column}' para texto: {exc}"
+                    ) from exc
+    return result
+
+
 def run_dashboard(results_dir: str | Path | None = None) -> int:
     """Launch the Streamlit dashboard.
 
@@ -675,166 +699,180 @@ def _render_dashboard(results_dir: Path) -> None:
             )
             xls = pd.ExcelFile(uploaded)
             sheet = st.selectbox(tr("Planilha"), xls.sheet_names)
-            df = pd.read_excel(xls, sheet_name=sheet, decimal=decimal, nrows=100)
-            uploaded.seek(0)
-            st.subheader(tr("Pré-visualização"))
-            st.dataframe(df)
-            summary_cols = pd.DataFrame(
-                {"coluna": df.columns, "tipo": df.dtypes.astype(str)}
-            )
-            st.subheader(tr("Resumo de colunas"))
-            st.dataframe(summary_cols)
-            is_num = pd.api.types.is_numeric_dtype
-            non_num = [c for c in df.columns if not is_num(df[c])]
-            target_col = st.selectbox(tr("Coluna alvo"), non_num)
-            group_col = st.selectbox(tr("Coluna de grupos"), [""] + non_num)
-            spectral_input = st.text_input(tr("Faixa espectral (mín,max)"))
-            if target_col and st.button(tr("Processar")):
-                max_size = 50 * 1024 * 1024
-                if uploaded.size > max_size:
-                    st.error(tr("Arquivo maior que 50 MB"))
-                else:
-                    progress = st.progress(0)
-                    with tempfile.NamedTemporaryFile(
-                        "wb", delete=False, suffix=Path(uploaded.name).suffix
-                    ) as tmp:
-                        uploaded.seek(0)
-                        total = uploaded.size or 1
-                        chunk = 1 << 20
-                        written = 0
-                        while True:
-                            data = uploaded.read(chunk)
-                            if not data:
-                                break
-                            tmp.write(data)
-                            written += len(data)
-                            progress.progress(int(written / total * 100))
-                        tmp_path = Path(tmp.name)
-                    cfg = {
-                        "input_path": str(tmp_path),
-                        "target_col": target_col,
-                        "decimal": decimal,
-                    }
-                    if sheet is not None:
-                        cfg["sheet_name"] = sheet
-                    if group_col:
-                        cfg["group_col"] = group_col
-                    if spectral_input:
+            df = None
+            try:
+                df = pd.read_excel(xls, sheet_name=sheet, decimal=decimal, nrows=100)
+            except Exception as exc:  # pragma: no cover - streamlit surface
+                st.error(tr("Erro ao ler planilha selecionada: {exc}").format(exc=exc))
+            else:
+                try:
+                    df = _standardize_excel_dataframe(df)
+                except ValueError as exc:
+                    st.error(
+                        tr("Falha ao preparar dados do Excel: {exc}").format(exc=exc)
+                    )
+                    df = None
+            finally:
+                uploaded.seek(0)
+            if df is not None:
+                st.subheader(tr("Pré-visualização"))
+                st.dataframe(df)
+                summary_cols = pd.DataFrame(
+                    {"coluna": df.columns, "tipo": df.dtypes.astype(str)}
+                )
+                st.subheader(tr("Resumo de colunas"))
+                st.dataframe(summary_cols)
+                is_num = pd.api.types.is_numeric_dtype
+                non_num = [c for c in df.columns if not is_num(df[c])]
+                target_col = st.selectbox(tr("Coluna alvo"), non_num)
+                group_col = st.selectbox(tr("Coluna de grupos"), [""] + non_num)
+                spectral_input = st.text_input(tr("Faixa espectral (mín,max)"))
+                if target_col and st.button(tr("Processar")):
+                    max_size = 50 * 1024 * 1024
+                    if uploaded.size > max_size:
+                        st.error(tr("Arquivo maior que 50 MB"))
+                    else:
+                        progress = st.progress(0)
+                        with tempfile.NamedTemporaryFile(
+                            "wb", delete=False, suffix=Path(uploaded.name).suffix
+                        ) as tmp:
+                            uploaded.seek(0)
+                            total = uploaded.size or 1
+                            chunk = 1 << 20
+                            written = 0
+                            while True:
+                                data = uploaded.read(chunk)
+                                if not data:
+                                    break
+                                tmp.write(data)
+                                written += len(data)
+                                progress.progress(int(written / total * 100))
+                            tmp_path = Path(tmp.name)
+                        cfg = {
+                            "input_path": str(tmp_path),
+                            "target_col": target_col,
+                            "decimal": decimal,
+                        }
+                        if sheet is not None:
+                            cfg["sheet_name"] = sheet
+                        if group_col:
+                            cfg["group_col"] = group_col
+                        if spectral_input:
+                            try:
+                                lo, hi = map(float, spectral_input.split(","))
+                                cfg["spectral_range"] = [lo, hi]
+                            except Exception:
+                                st.error(tr("Formato inválido de faixa espectral"))
                         try:
-                            lo, hi = map(float, spectral_input.split(","))
-                            cfg["spectral_range"] = [lo, hi]
-                        except Exception:
-                            st.error(tr("Formato inválido de faixa espectral"))
-                    try:
-                        ds_list = prepare_inputs(cfg, use_cache=False)
-                        summary = summarize_dataset(ds_list)
-                        st.subheader(tr("Resumo do conjunto"))
-                        st.dataframe(summary)
-                        for ds in ds_list:
-                            st.markdown(f"### {ds['target']}")
-                            head_df = ds["X"].copy()
-                            head_df[ds["target"]] = ds["Y"]
-                            st.dataframe(head_df.head())
-                            counts = ds["Y"].value_counts().reset_index()
-                            counts.columns = ["class", "count"]
-                            fig = px.bar(counts, x="class", y="count")
-                            st.plotly_chart(fig, width="stretch")
-                            stem = ds["target"].replace(" ", "_")
-                            out_base = prep_fig_dir / f"{stem}__class_counts"
-                            _export(fig, out_base, interactive=True)
-                            png_file = out_base.with_suffix(".png")
-                            with png_file.open("rb") as f:
-                                st.download_button(
-                                    f"Download {png_file.name}",
-                                    f,
-                                    file_name=png_file.name,
-                                    mime="image/png",
-                                    key=f"download_{png_file}",
-                                )
-                            svg_file = out_base.with_suffix(".svg")
-                            if svg_file.exists():
-                                with svg_file.open("rb") as f:
+                            ds_list = prepare_inputs(cfg, use_cache=False)
+                            summary = summarize_dataset(ds_list)
+                            st.subheader(tr("Resumo do conjunto"))
+                            st.dataframe(summary)
+                            for ds in ds_list:
+                                st.markdown(f"### {ds['target']}")
+                                head_df = ds["X"].copy()
+                                head_df[ds["target"]] = ds["Y"]
+                                st.dataframe(head_df.head())
+                                counts = ds["Y"].value_counts().reset_index()
+                                counts.columns = ["class", "count"]
+                                fig = px.bar(counts, x="class", y="count")
+                                st.plotly_chart(fig, width="stretch")
+                                stem = ds["target"].replace(" ", "_")
+                                out_base = prep_fig_dir / f"{stem}__class_counts"
+                                _export(fig, out_base, interactive=True)
+                                png_file = out_base.with_suffix(".png")
+                                with png_file.open("rb") as f:
                                     st.download_button(
-                                        f"Download {svg_file.name}",
+                                        f"Download {png_file.name}",
                                         f,
-                                        file_name=svg_file.name,
-                                        mime="image/svg+xml",
-                                        key=f"download_{svg_file}",
+                                        file_name=png_file.name,
+                                        mime="image/png",
+                                        key=f"download_{png_file}",
                                     )
-                            html_file = out_base.with_suffix(".html")
-                            if html_file.exists():
-                                with html_file.open("r") as f:
-                                    st.download_button(
-                                        f"Download {html_file.name}",
-                                        f,
-                                        file_name=html_file.name,
-                                        mime="text/html",
-                                        key=f"download_{html_file}",
+                                svg_file = out_base.with_suffix(".svg")
+                                if svg_file.exists():
+                                    with svg_file.open("rb") as f:
+                                        st.download_button(
+                                            f"Download {svg_file.name}",
+                                            f,
+                                            file_name=svg_file.name,
+                                            mime="image/svg+xml",
+                                            key=f"download_{svg_file}",
+                                        )
+                                html_file = out_base.with_suffix(".html")
+                                if html_file.exists():
+                                    with html_file.open("r") as f:
+                                        st.download_button(
+                                            f"Download {html_file.name}",
+                                            f,
+                                            file_name=html_file.name,
+                                            mime="text/html",
+                                            key=f"download_{html_file}",
+                                        )
+                                mean = ds["X"].mean()
+                                std = ds["X"].std()
+                                wl = mean.index.astype(float)
+                                fig2 = go.Figure()
+                                fig2.add_trace(go.Scatter(x=wl, y=mean, name="mean"))
+                                fig2.add_trace(
+                                    go.Scatter(
+                                        x=wl,
+                                        y=mean + std,
+                                        name="+sd",
+                                        line=dict(width=0),
+                                        showlegend=False,
                                     )
-                            mean = ds["X"].mean()
-                            std = ds["X"].std()
-                            wl = mean.index.astype(float)
-                            fig2 = go.Figure()
-                            fig2.add_trace(go.Scatter(x=wl, y=mean, name="mean"))
-                            fig2.add_trace(
-                                go.Scatter(
-                                    x=wl,
-                                    y=mean + std,
-                                    name="+sd",
-                                    line=dict(width=0),
-                                    showlegend=False,
                                 )
-                            )
-                            fig2.add_trace(
-                                go.Scatter(
-                                    x=wl,
-                                    y=mean - std,
-                                    name="-sd",
-                                    fill="tonexty",
-                                    line=dict(width=0),
-                                    showlegend=False,
-                                )
-                            )
-                            fig2.update_layout(
-                                xaxis_title="Comprimento de onda",
-                                yaxis_title="Reflectância",
-                            )
-                            st.plotly_chart(fig2, width="stretch")
-                            out_base2 = prep_fig_dir / f"{stem}__mean_std"
-                            _export(fig2, out_base2, interactive=True)
-                            png_file = out_base2.with_suffix(".png")
-                            with png_file.open("rb") as f:
-                                st.download_button(
-                                    f"Download {png_file.name}",
-                                    f,
-                                    file_name=png_file.name,
-                                    mime="image/png",
-                                    key=f"download_{png_file}",
-                                )
-                            svg_file = out_base2.with_suffix(".svg")
-                            if svg_file.exists():
-                                with svg_file.open("rb") as f:
-                                    st.download_button(
-                                        f"Download {svg_file.name}",
-                                        f,
-                                        file_name=svg_file.name,
-                                        mime="image/svg+xml",
-                                        key=f"download_{svg_file}",
+                                fig2.add_trace(
+                                    go.Scatter(
+                                        x=wl,
+                                        y=mean - std,
+                                        name="-sd",
+                                        fill="tonexty",
+                                        line=dict(width=0),
+                                        showlegend=False,
                                     )
-                            html_file = out_base2.with_suffix(".html")
-                            if html_file.exists():
-                                with html_file.open("r") as f:
+                                )
+                                fig2.update_layout(
+                                    xaxis_title="Comprimento de onda",
+                                    yaxis_title="Reflectância",
+                                )
+                                st.plotly_chart(fig2, width="stretch")
+                                out_base2 = prep_fig_dir / f"{stem}__mean_std"
+                                _export(fig2, out_base2, interactive=True)
+                                png_file = out_base2.with_suffix(".png")
+                                with png_file.open("rb") as f:
                                     st.download_button(
-                                        f"Download {html_file.name}",
+                                        f"Download {png_file.name}",
                                         f,
-                                        file_name=html_file.name,
-                                        mime="text/html",
-                                        key=f"download_{html_file}",
+                                        file_name=png_file.name,
+                                        mime="image/png",
+                                        key=f"download_{png_file}",
                                     )
-                    except Exception as exc:  # pragma: no cover - display error
-                        st.error(tr("Erro ao preparar dados: {exc}").format(exc=exc))
-                    finally:
-                        tmp_path.unlink(missing_ok=True)
+                                svg_file = out_base2.with_suffix(".svg")
+                                if svg_file.exists():
+                                    with svg_file.open("rb") as f:
+                                        st.download_button(
+                                            f"Download {svg_file.name}",
+                                            f,
+                                            file_name=svg_file.name,
+                                            mime="image/svg+xml",
+                                            key=f"download_{svg_file}",
+                                        )
+                                html_file = out_base2.with_suffix(".html")
+                                if html_file.exists():
+                                    with html_file.open("r") as f:
+                                        st.download_button(
+                                            f"Download {html_file.name}",
+                                            f,
+                                            file_name=html_file.name,
+                                            mime="text/html",
+                                            key=f"download_{html_file}",
+                                        )
+                        except Exception as exc:  # pragma: no cover - display error
+                            st.error(tr("Erro ao preparar dados: {exc}").format(exc=exc))
+                        finally:
+                            tmp_path.unlink(missing_ok=True)
 
     with exec_tab:
         if not run_dirs:
@@ -1036,30 +1074,41 @@ def _render_dashboard(results_dir: Path) -> None:
             try:
                 spectra_file.seek(0)
                 df = pd.read_excel(spectra_file, decimal=decimal)
-                numeric = (
-                    df.apply(pd.to_numeric, errors="coerce")
-                    .dropna(axis=1, how="all")
-                    .select_dtypes(include="number")
-                )
-                if numeric.empty:
-                    st.warning(tr("Nenhuma coluna numérica encontrada."))
-                    st.dataframe(df.head(), width="stretch")
-                    st.write(df.dtypes)
-                else:
-                    max_spec = st.slider(
-                        tr("Quantidade de espectros"),
-                        1,
-                        len(numeric),
-                        min(10, len(numeric)),
-                    )
-                    fig = go.Figure()
-                    for idx, row in numeric.head(max_spec).iterrows():
-                        fig.add_trace(
-                            go.Scatter(x=numeric.columns, y=row, name=str(idx))
-                        )
-                    st.plotly_chart(fig, width="stretch")
             except Exception as exc:  # pragma: no cover - display error
-                st.error(tr("Erro ao plotar espectros: {exc}").format(exc=exc))
+                st.error(tr("Erro ao ler arquivo de espectros: {exc}").format(exc=exc))
+            else:
+                try:
+                    df = _standardize_excel_dataframe(df)
+                except ValueError as exc:
+                    st.error(
+                        tr("Falha ao preparar dados do Excel: {exc}").format(exc=exc)
+                    )
+                else:
+                    try:
+                        numeric = (
+                            df.apply(pd.to_numeric, errors="coerce")
+                            .dropna(axis=1, how="all")
+                            .select_dtypes(include="number")
+                        )
+                        if numeric.empty:
+                            st.warning(tr("Nenhuma coluna numérica encontrada."))
+                            st.dataframe(df.head(), width="stretch")
+                            st.write(df.dtypes)
+                        else:
+                            max_spec = st.slider(
+                                tr("Quantidade de espectros"),
+                                1,
+                                len(numeric),
+                                min(10, len(numeric)),
+                            )
+                            fig = go.Figure()
+                            for idx, row in numeric.head(max_spec).iterrows():
+                                fig.add_trace(
+                                    go.Scatter(x=numeric.columns, y=row, name=str(idx))
+                                )
+                            st.plotly_chart(fig, width="stretch")
+                    except Exception as exc:  # pragma: no cover - display error
+                        st.error(tr("Erro ao plotar espectros: {exc}").format(exc=exc))
 
     with pca_tab:
         st.subheader(tr("PCA"))
@@ -1078,19 +1127,32 @@ def _render_dashboard(results_dir: Path) -> None:
                 try:
                     pca_file.seek(0)
                     df = pd.read_excel(pca_file, decimal=decimal)
-                    numeric = df.apply(pd.to_numeric, errors="coerce").select_dtypes(
-                        include="number"
-                    )
-                    if numeric.empty:
-                        st.warning(tr("Nenhuma coluna numérica encontrada."))
-                        st.dataframe(df.head())
-                        st.write(df.dtypes.astype(str))
-                    else:
-                        res = pca_outliers(numeric)
-                        fig = px.scatter(res, x="PC1", y="PC2")
-                        st.plotly_chart(fig, width="stretch")
                 except Exception as exc:  # pragma: no cover - display error
-                    st.error(tr("Erro ao executar PCA: {exc}").format(exc=exc))
+                    st.error(tr("Erro ao ler arquivo de PCA: {exc}").format(exc=exc))
+                else:
+                    try:
+                        df = _standardize_excel_dataframe(df)
+                    except ValueError as exc:
+                        st.error(
+                            tr("Falha ao preparar dados do Excel: {exc}").format(
+                                exc=exc
+                            )
+                        )
+                    else:
+                        try:
+                            numeric = df.apply(pd.to_numeric, errors="coerce").select_dtypes(
+                                include="number"
+                            )
+                            if numeric.empty:
+                                st.warning(tr("Nenhuma coluna numérica encontrada."))
+                                st.dataframe(df.head())
+                                st.write(df.dtypes.astype(str))
+                            else:
+                                res = pca_outliers(numeric)
+                                fig = px.scatter(res, x="PC1", y="PC2")
+                                st.plotly_chart(fig, width="stretch")
+                        except Exception as exc:  # pragma: no cover - display error
+                            st.error(tr("Erro ao executar PCA: {exc}").format(exc=exc))
 
     with logs_tab:
         log_path = Path.home() / ".nircls" / "nircls.log"
