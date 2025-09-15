@@ -505,6 +505,7 @@ def _save_plots(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     y_proba: Optional[np.ndarray] = None,
+    preprocess_label: Optional[str] = None,
     *,
     interactive: bool = False,
     palette: Palette = Palette.BLUES,
@@ -512,12 +513,18 @@ def _save_plots(
     """Save confusion matrix and optional ROC/reliability plots.
 
     When ``interactive`` is ``True`` additional HTML versions of the confusion
-    matrix and ROC curve are generated using Plotly.
+    matrix and ROC curve are generated using Plotly. When provided,
+    ``preprocess_label`` is appended to the output stem so that figures created
+    for different preprocessing pipelines do not overwrite one another.
     """
 
     out_fig = out_dir / "figures"
     out_fig.mkdir(parents=True, exist_ok=True)
     stem = Path(file_path).stem
+    if preprocess_label is not None:
+        label = _normalize_preprocess_value(preprocess_label)
+        if label:
+            stem = f"{stem}__{label}"
     cm = confusion_matrix(y_true, y_pred)
     plot_confusion(
         cm,
@@ -815,6 +822,7 @@ def _run_cv(
                     y_true,
                     y_pred,
                     y_proba,
+                    preprocess_label=row.get("preprocess_steps"),
                     interactive=interactive,
                     palette=Palette(cfg.get("palette", Palette.BLUES)),
                 )
@@ -1023,6 +1031,7 @@ def _run_cv(
                 y_true,
                 y_pred,
                 y_proba,
+                preprocess_label=row.get("preprocess_steps"),
                 interactive=interactive,
                 palette=Palette(cfg.get("palette", Palette.BLUES)),
             )
@@ -1227,6 +1236,7 @@ def _run_holdout(
                 yte,
                 yhat,
                 proba,
+                preprocess_label=row.get("preprocess_steps"),
                 interactive=interactive,
                 palette=Palette(cfg.get("palette", Palette.BLUES)),
             )
@@ -1689,6 +1699,7 @@ def train_and_save(
                 y_enc,
                 yhat,
                 proba,
+                preprocess_label=row.get("preprocess_steps"),
                 interactive=interactive,
                 palette=Palette(cfg.get("palette", Palette.BLUES)),
             )
