@@ -368,20 +368,20 @@ def _format_preprocess_steps(steps: Iterable[Any]) -> str:
     return result if result else "None"
 
 
-def _normalize_preprocess_value(
-    value: Any, default_steps: Sequence[str]
-) -> str:
+def _normalize_preprocess_value(value: Any) -> str:
     """Normalize any representation of preprocessing steps to a string."""
 
+    if value is None:
+        return "None"
     if isinstance(value, str):
         formatted = _format_preprocess_step(value)
         return formatted if formatted else "None"
     if isinstance(value, (list, tuple)):
         return _format_preprocess_steps(value)
+    if isinstance(value, Iterable) and not isinstance(value, (str, bytes, Mapping)):
+        return _format_preprocess_steps(list(value))
     if value:
         return str(value)
-    if default_steps:
-        return _format_preprocess_steps(list(default_steps))
     return "None"
 
 
@@ -417,7 +417,6 @@ def _update_row_with_best_params(
 def _save_metrics(
     rows: List[Dict[str, Any]],
     out_dir: Path,
-    preprocess_steps: Sequence[str],
     *,
     append: bool = False,
 ) -> None:
@@ -430,7 +429,7 @@ def _save_metrics(
 
     for row in rows:
         row["preprocess_steps"] = _normalize_preprocess_value(
-            row.get("preprocess_steps"), preprocess_steps
+            row.get("preprocess_steps")
         )
         row.setdefault("overfit_warning", False)
     df = pd.DataFrame(rows)
@@ -782,8 +781,7 @@ def _run_cv(
                 _update_row_with_best_params(row, best_params)
                 if n_comp_list:
                     row["n_components"] = int(np.median(n_comp_list))
-                if best_steps_repr:
-                    row["preprocess_steps"] = best_steps_repr
+                row["preprocess_steps"] = best_steps_repr or "None"
                 if log_memory:
                     mem_end = psutil.Process().memory_info().rss / 1e6
                     logger.debug("memory end %.3f MB", mem_end)
@@ -794,7 +792,6 @@ def _run_cv(
                 _save_metrics(
                     [row],
                     out_dir,
-                    cfg.get("preprocess", {}).get("steps", []),
                     append=True,
                 )
                 y_true = np.concatenate(y_true_all)
@@ -992,8 +989,7 @@ def _run_cv(
                     row["Yscramble_p95"] = None
             if n_comp_list:
                 row["n_components"] = int(np.median(n_comp_list))
-            if best_steps_repr:
-                row["preprocess_steps"] = best_steps_repr
+            row["preprocess_steps"] = best_steps_repr or "None"
             if log_memory:
                 mem_end = psutil.Process().memory_info().rss / 1e6
                 logger.debug("memory end %.3f MB", mem_end)
@@ -1004,7 +1000,6 @@ def _run_cv(
             _save_metrics(
                 [row],
                 out_dir,
-                cfg.get("preprocess", {}).get("steps", []),
                 append=True,
             )
             y_true = np.concatenate(y_true_all)
@@ -1036,7 +1031,7 @@ def _run_cv(
             )
             gc.collect()
         progress.advance(tgt_task)
-    _save_metrics(rows, out_dir, cfg.get("preprocess", {}).get("steps", []))
+    _save_metrics(rows, out_dir)
     if cfg.get("astm"):
         flags = check_astm_classification(
             summary, {"external_validation": isinstance(outer, LeaveOneOut)}
@@ -1208,7 +1203,6 @@ def _run_holdout(
             _save_metrics(
                 [row],
                 out_dir,
-                cfg.get("preprocess", {}).get("steps", []),
                 append=True,
             )
             _save_plots(
@@ -1225,7 +1219,7 @@ def _run_holdout(
             )
             del best, proba, proba_tr, yhat, yhat_tr
             gc.collect()
-    _save_metrics(rows, out_dir, cfg.get("preprocess", {}).get("steps", []))
+    _save_metrics(rows, out_dir)
     if cfg.get("astm"):
         flags = check_astm_classification(summary, {"external_validation": True})
         with open(out_dir / "astm_classification.json", "w") as f:
@@ -1659,7 +1653,7 @@ def train_and_save(
                 if mem_start is not None:
                     row["memory_mb_start"] = float(mem_start)
                 row["memory_mb_end"] = float(mem_end)
-            _save_metrics([row], out_dir, cfg.get("preprocess", {}).get("steps", []))
+            _save_metrics([row], out_dir)
             if cfg.get("astm"):
                 flags = check_astm_classification(
                     summary, {"external_validation": False}

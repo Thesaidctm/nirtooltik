@@ -113,6 +113,48 @@ def test_end_to_end_cv_and_export(tmp_path, method):
     assert (train_dir / "astm_classification.json").exists()
 
 
+def test_metrics_reflect_applied_preprocess_steps(tmp_path):
+    rng = np.random.RandomState(0)
+    X = rng.rand(12, 6)
+    y = np.array(["A"] * 6 + ["B"] * 6)
+    df = pd.DataFrame(X, columns=[str(i) for i in range(6)])
+    df["target"] = y
+    data_file = tmp_path / "data.csv"
+    df.to_csv(data_file, index=False)
+
+    cfg = {
+        "data": {"input_path": str(data_file), "target_cols": ["target"]},
+        "preprocess": {
+            "steps": ["SNV", "SG"],
+            "evaluate_individual": True,
+            "sg": {"window": 5, "polyorder": 2, "deriv": 1},
+        },
+        "models": [
+            {"name": "PLSDA", "grid": {"n_components": [2], "method": ["logreg"]}}
+        ],
+        "cv": {
+            "random_state": 0,
+            "strategies": [{"type": "kfold", "n_splits": [2], "n_repeats": 1}],
+        },
+    }
+
+    out_dir = tmp_path / "cv_steps"
+    outputs = run_multiple_eval(cfg, out_dir, n_jobs=1)
+    expected_steps = {
+        "snv": {"SNV"},
+        "sg": {"SG(window=5,poly=2,deriv=1)"},
+    }
+    assert len(outputs) == len(expected_steps)
+    for metrics_path, _ in outputs:
+        step_dir = metrics_path.parent.parent.name
+        assert step_dir in expected_steps
+        with open(metrics_path) as f:
+            metrics = json.load(f)
+        assert metrics
+        observed = {row["preprocess_steps"] for row in metrics}
+        assert observed == expected_steps[step_dir]
+
+
 @pytest.mark.parametrize("method", METHODS)
 def test_pipeline_runs_with_spxy_cv_method(tmp_path, method):
     rng = np.random.RandomState(0)
