@@ -9,6 +9,7 @@ data:
   out_dir: results
 
 preprocess:
+  evaluate_individual: true
   steps: [SNV,MSC, SG, EPO, SCALE]
   sg:
     window: [3,7,11,15,21,25]
