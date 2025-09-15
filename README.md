@@ -157,6 +157,29 @@ data:
 * `cv.strategies` especifica a estratégia de avaliação: `kfold`, `loo` ou
   `holdout`. É possível combinar múltiplas estratégias.
 
+### Testes isolados de pré-processamento
+
+Por padrão o `nircls` encadeia todas as etapas listadas em
+`preprocess.steps`. Para investigar o efeito de cada transformador
+individualmente, ative `preprocess.evaluate_individual: true` (a
+configuração de referência `configs/eucalipto_spxy.yaml` já inclui essa
+opção). Com a flag habilitada e mais de uma etapa definida, o pipeline
+gera modelos independentes por transformador em vez de combiná-los
+imediatamente.
+
+```yaml
+preprocess:
+  evaluate_individual: true
+  steps: [SNV, MSC, SG, SCALE]
+```
+
+Ao executar `nircls run-all --config configs/eucalipto_spxy.yaml`, os
+resultados trazem sufixos como `PLSDA__snv` ou `RF__sg`, indicando qual
+pré-processador foi avaliado isoladamente. Use essas métricas para
+selecionar os candidatos mais promissores e, quando quiser voltar a
+avaliar o encadeamento completo, defina `evaluate_individual` como
+`false` ou remova a chave.
+
 Para realizar validação cruzada respeitando grupos (por exemplo, diferentes
 lotes ou indivíduos), informe a coluna de grupos em `data.group_col` e defina
 `cv.cv_method: group`:
@@ -211,6 +234,11 @@ Os diretórios padrão para dados brutos e resultados podem ser ajustados
 pelas variáveis de ambiente `NIRCLS_RAW` e `NIRCLS_RESULTS`.
 
 #### preprocess
+- **evaluate_individual** (`bool`, padrão `false`): quando `true` e
+  houver mais de uma etapa em `steps`, o `nircls` monta pipelines
+  separados para cada transformador, anexando um sufixo como
+  `__snv`/`__msc` ao nome do modelo. Isso permite medir o impacto de
+  cada pré-processador isoladamente antes de combiná-los.
 - **steps** (`list[str]`): lista de pré-processadores, por exemplo
   `SNV`, `MSC`, `DETREND`, `SG`, `EMSC`, `EPO`, `SCALE`.
 - **sg.window**, **sg.polyorder**, **sg.deriv** (`int` ou `list[int]`): parâmetros
