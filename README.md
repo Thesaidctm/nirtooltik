@@ -355,7 +355,7 @@ interface web.
 ### Paletas de cores e acessibilidade
 
 As funções `plot_confusion`, `plot_roc_ovr` e `plot_reliability` aceitam o
-parâmetro ``palette`` com opções como ``"viridis"`` (padrão) e
+parâmetro ``palette`` com opções como ``"blues"`` (padrão), ``"viridis"`` e
 ``"colorblind"``. A escolha da paleta também está disponível na aba
 **Configurações** do dashboard e é armazenada no arquivo
 ``~/.nircls/config.json``.
@@ -364,12 +364,14 @@ parâmetro ``palette`` com opções como ``"viridis"`` (padrão) e
 from pathlib import Path
 from nircls.utils.plots import plot_confusion
 
+plot_confusion(cm, classes, Path("saida"))            # usa "blues"
 plot_confusion(cm, classes, Path("saida"), palette="colorblind")
 ```
 
-A paleta ``colorblind`` utiliza cores seguras para daltonismo, aumentando a
-acessibilidade. ``Viridis`` é perceptualmente uniforme e indicada para dados
-contínuos.
+A paleta ``blues`` possui fundo branco e tons em azul, destacando contagens
+elevadas sem perder contraste para valores baixos. ``Colorblind`` utiliza cores
+seguras para daltonismo, aumentando a acessibilidade, enquanto ``viridis`` é
+perceptualmente uniforme e indicada para dados contínuos.
 
 ### Verificação de versão
 
