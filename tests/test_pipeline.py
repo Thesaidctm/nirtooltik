@@ -96,10 +96,12 @@ def test_end_to_end_cv_and_export(tmp_path, method):
     with open(strat_dir / "metrics.json") as f:
         metrics_json = json.load(f)
     assert "Yscramble_mean" in metrics_json[0]
-    assert metrics_json[0]["preprocess_steps"] == [
-        "SNV()",
-        "SavitzkyGolayTransformer(window_length=5)",
-    ]
+    assert (
+        metrics_json[0]["preprocess_steps"]
+        == "SNV, SG(window=5,poly=2,deriv=1)"
+    )
+    assert metrics_json[0]["best_clf__n_components"] == 2
+    assert metrics_json[0]["best_clf__method"] == method
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
