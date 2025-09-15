@@ -7,6 +7,7 @@ import sys
 import traceback
 import warnings
 from contextlib import nullcontext
+from copy import deepcopy
 from datetime import datetime
 from glob import glob
 from pathlib import Path
@@ -265,24 +266,39 @@ def build_pipeline_from_config(
     cfg: Dict[str, Any],
 ) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
     _validate_cfg(cfg, need_models=True)
-    steps_cfg = cfg.get("preprocess", {}).get("steps", [])
-    pre_steps, pre_grid = _make_preprocess(steps_cfg, cfg.get("preprocess", {}))
-    models = make_models_from_config(cfg["models"])
+    pre_cfg = cfg.get("preprocess", {})
+    steps_cfg = pre_cfg.get("steps", [])
+    evaluate_ind = pre_cfg.get("evaluate_individual", False)
     out: List[Tuple[str, Pipeline, Dict[str, Any]]] = []
-    for m in models:
-        est = m["estimator"]
-        grid = pre_grid.copy()
-        model_grid = m.get("grid", {}) or {}
-        if not hasattr(est, "predict_proba"):
-            calib_cfg = m.get("calibration") or {}
-            method = calib_cfg.get("method", "sigmoid")
-            cv = calib_cfg.get("cv", 5)
-            est = CalibratedClassifierCV(estimator=est, method=method, cv=cv)
-            grid.update({f"clf__estimator__{k}": v for k, v in model_grid.items()})
-        else:
-            grid.update({f"clf__{k}": v for k, v in model_grid.items()})
-        pipe = Pipeline(pre_steps + [("clf", est)])
-        out.append((m["name"], pipe, grid))
+
+    def _build_models(
+        pre_steps: List[Tuple[str, Any]], pre_grid: Dict[str, Any], suffix: str = ""
+    ) -> None:
+        models = make_models_from_config(cfg["models"])
+        for m in models:
+            est = m["estimator"]
+            grid = pre_grid.copy()
+            model_grid = m.get("grid", {}) or {}
+            if not hasattr(est, "predict_proba"):
+                calib_cfg = m.get("calibration") or {}
+                method = calib_cfg.get("method", "sigmoid")
+                cv = calib_cfg.get("cv", 5)
+                est = CalibratedClassifierCV(estimator=est, method=method, cv=cv)
+                grid.update({f"clf__estimator__{k}": v for k, v in model_grid.items()})
+            else:
+                grid.update({f"clf__{k}": v for k, v in model_grid.items()})
+            name = m["name"] + suffix
+            pipe = Pipeline(pre_steps + [("clf", est)])
+            out.append((name, pipe, grid))
+
+    if evaluate_ind and len(steps_cfg) > 1:
+        for step in steps_cfg:
+            pre_steps, pre_grid = _make_preprocess([step], pre_cfg)
+            _build_models(pre_steps, pre_grid, suffix=f"__{step.lower()}")
+    else:
+        pre_steps, pre_grid = _make_preprocess(steps_cfg, pre_cfg)
+        _build_models(pre_steps, pre_grid)
+
     return out
 
 
@@ -1129,6 +1145,28 @@ def run_multiple_eval(
 
     n_jobs = max(1, n_jobs)
     _validate_cfg(cfg, need_data=True, need_cv=True, need_models=True)
+    pre_cfg = cfg.get("preprocess", {})
+    steps_cfg = pre_cfg.get("steps", [])
+    if pre_cfg.get("evaluate_individual") and len(steps_cfg) > 1:
+        outputs: List[Tuple[Path, Path]] = []
+        for step in steps_cfg:
+            sub_cfg = deepcopy(cfg)
+            sub_cfg.setdefault("preprocess", {})["steps"] = [step]
+            sub_cfg["preprocess"]["evaluate_individual"] = False
+            sub_out = out_dir / step.lower()
+            outputs.extend(
+                run_multiple_eval(
+                    sub_cfg,
+                    sub_out,
+                    random_state=random_state,
+                    interactive=interactive,
+                    n_jobs=n_jobs,
+                    mlflow_uri=mlflow_uri,
+                    log_memory=log_memory,
+                )
+            )
+        return outputs
+
     strategies = cfg.get("cv", {}).get("strategies", [])
     random_state = cfg.get("cv", {}).get("random_state", random_state)
     cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()

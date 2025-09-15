@@ -9,6 +9,8 @@ data:
 
 preprocess:
   steps: [SNV]
+  # Defina como true para avaliar cada pré-processo isoladamente
+  evaluate_individual: false
 
 models:
   - name: PLSDA
