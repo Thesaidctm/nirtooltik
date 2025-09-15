@@ -43,6 +43,47 @@ def _filter_range(
     return df.loc[:, keep]
 
 
+def _extract_targets_and_groups(
+    df: pd.DataFrame,
+    target_cols: Optional[Sequence[str] | str],
+    group_col: Optional[str],
+) -> Tuple[List[str], List[Tuple[str, pd.Series]], Optional[pd.Series]]:
+    source = df.attrs.get("_source_path")
+    source_str = f" em {source}" if source else ""
+    default_to_all = bool(df.attrs.get("_default_all_target_cols"))
+    if target_cols in [None, "all"]:
+        if default_to_all:
+            target_cols_list = [c for c in df.columns if c != group_col]
+        else:
+            target_cols_list = [
+                c
+                for c in df.columns
+                if c != group_col and not pd.api.types.is_numeric_dtype(df[c])
+            ]
+    elif isinstance(target_cols, str):
+        target_cols_list = [target_cols]
+    else:
+        target_cols_list = list(cast(Sequence[str], target_cols))
+    y_list: List[Tuple[str, pd.Series]] = []
+    for col in target_cols_list:
+        if col not in df.columns:
+            raise DataError(f"Coluna alvo {col} não encontrada{source_str}")
+        y_list.append((col, df[col].astype("category")))
+    groups = None
+    if group_col:
+        if group_col not in df.columns:
+            raise DataError(
+                f"Coluna de grupos {group_col} não encontrada{source_str}"
+            )
+        groups = df[group_col].astype("category")
+    expected_len = len(df)
+    if any(len(y) != expected_len for _, y in y_list) or (
+        groups is not None and len(groups) != expected_len
+    ):
+        raise DataError("X e Y com n_amostras diferente")
+    return target_cols_list, y_list, groups
+
+
 def read_xlsx_xy(
     path: Path,
     x_sheet: str = "X",
@@ -57,26 +98,11 @@ def read_xlsx_xy(
         raise DataError(str(e)) from e
     except ValueError as e:
         raise DataError(str(e)) from e
-    if target_cols in [None, "all"]:
-        target_cols_list = [c for c in Ydf.columns if c != group_col]
-    elif isinstance(target_cols, str):
-        target_cols_list = [target_cols]
-    else:
-        target_cols_list = list(cast(Sequence[str], target_cols))
-    out: List[Tuple[str, pd.Series]] = []
-    for col in target_cols_list:
-        if col not in Ydf.columns:
-            raise DataError(f"Coluna alvo {col} não encontrada em {path}")
-        out.append((col, Ydf[col].astype("category")))
-    groups = None
-    if group_col:
-        if group_col not in Ydf.columns:
-            raise DataError(f"Coluna de grupos {group_col} não encontrada em {path}")
-        groups = Ydf[group_col].astype("category")
+    Ydf.attrs["_source_path"] = str(path)
+    Ydf.attrs["_default_all_target_cols"] = True
+    _, out, groups = _extract_targets_and_groups(Ydf, target_cols, group_col)
     X = X.select_dtypes(include=[np.number])
-    if any(len(X) != len(y) for _, y in out) or (
-        groups is not None and len(X) != len(groups)
-    ):
+    if len(X) != len(Ydf):
         raise DataError("X e Y com n_amostras diferente")
     return X, out, groups
 
@@ -106,34 +132,14 @@ def read_tabular(
             df = pd.read_excel(path, **read_kwargs)
     except (FileNotFoundError, PermissionError) as e:
         raise DataError(str(e)) from e
-    if target_cols in [None, "all"]:
-        target_cols_list = [
-            c
-            for c in df.columns
-            if not pd.api.types.is_numeric_dtype(df[c]) and c != group_col
-        ]
-    elif isinstance(target_cols, str):
-        target_cols_list = [target_cols]
-    else:
-        target_cols_list = list(cast(Sequence[str], target_cols))
-    y_list: List[Tuple[str, pd.Series]] = []
-    for col in target_cols_list:
-        if col not in df.columns:
-            raise DataError(f"Coluna alvo {col} não encontrada em {path}")
-        y_list.append((col, df[col].astype("category")))
-    groups = None
-    if group_col:
-        if group_col not in df.columns:
-            raise DataError(f"Coluna de grupos {group_col} não encontrada em {path}")
-        groups = df[group_col].astype("category")
+    df.attrs["_source_path"] = str(path)
+    target_cols_list, y_list, groups = _extract_targets_and_groups(
+        df, target_cols, group_col
+    )
     drop_cols = list(target_cols_list)
     if group_col:
         drop_cols.append(group_col)
     X = df.drop(columns=drop_cols).select_dtypes(include=[np.number])
-    if any(len(X) != len(y) for _, y in y_list) or (
-        groups is not None and len(X) != len(groups)
-    ):
-        raise DataError("X e Y com n_amostras diferente")
     return X, y_list, groups
 
 
