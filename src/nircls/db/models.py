@@ -21,6 +21,7 @@ class User(Base):
     user_id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
+    hashed_password = Column(String(128), nullable=False)
 
     roles = relationship("Role", secondary="user_roles", back_populates="users")
 
