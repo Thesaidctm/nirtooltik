@@ -32,6 +32,11 @@ class PLSDA(BaseEstimator, ClassifierMixin):
     The PLS step reduces dimensionality before applying a probabilistic
     classifier such as logistic regression, LDA, QDA, SVM or kNN. Classifier
     hyperparameters can be tuned via the regular scikit-learn grid search API.
+
+    Notes
+    -----
+    ``y`` must be a one-dimensional array of class labels. Passing a
+    multi-dimensional array will raise a :class:`ValueError`.
     """
 
     def __init__(
@@ -44,6 +49,8 @@ class PLSDA(BaseEstimator, ClassifierMixin):
         self.clf = self._make_clf()
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "PLSDA":
+        if y.ndim != 1:
+            raise ValueError("PLSDA expects a 1-D array of class labels")
         classes, y_int = np.unique(y, return_inverse=True)
         self.classes_ = classes
         Y = np.eye(len(classes))[y_int]
