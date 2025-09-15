@@ -171,6 +171,33 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
         raise ValueError("metrics is empty")
     df = pd.DataFrame(rows)
 
+    steps: list[str] = []
+    if "preprocess_steps" in df.columns:
+        seen_steps: set[str] = set()
+
+        def _iter_steps(value: object) -> list[object]:
+            if isinstance(value, (list, tuple, set)):
+                items: list[object] = []
+                for item in value:
+                    items.extend(_iter_steps(item))
+                return items
+            return [value]
+
+        for value in df["preprocess_steps"]:
+            for step in _iter_steps(value):
+                if step is None:
+                    continue
+                try:
+                    if pd.isna(step):
+                        continue
+                except TypeError:
+                    pass
+                step_str = str(step).strip()
+                if not step_str or step_str in seen_steps:
+                    continue
+                seen_steps.add(step_str)
+                steps.append(step_str)
+
     # Determine the key metric and best model
     key_metric = None
     for cand in ["F1-macro_mean", "Accuracy_mean", "R2_mean"]:
@@ -193,7 +220,6 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
                 best_steps = [str(val)]
 
     data_cfg = cfg.get("data", {}) if isinstance(cfg, dict) else {}
-    steps = cfg.get("preprocess", {}).get("steps", []) if isinstance(cfg, dict) else []
     models = (
         [m.get("name", "") for m in cfg.get("models", [])]
         if isinstance(cfg, dict)
