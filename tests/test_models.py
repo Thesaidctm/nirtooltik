@@ -236,6 +236,21 @@ def test_plsda_warns_when_components_high(caplog, method):
     assert any("overfit" in r.message.lower() for r in caplog.records)
 
 
+def test_plsda_requires_1d_y():
+    rng = np.random.RandomState(0)
+    X = rng.rand(6, 4)
+    y_1d = (np.arange(6) % 2).astype(int)
+    model = PLSDA(n_components=2)
+    # Should fit without error for 1-D y
+    model.fit(X, y_1d)
+
+    y_2d = y_1d.reshape(-1, 1)
+    with pytest.raises(
+        ValueError, match="PLSDA expects a 1-D array of class labels"
+    ):
+        model.fit(X, y_2d)
+
+
 def test_plsda_default_grid_exposes_classifier_params():
     cfg = {"models": [{"name": "PLSDA"}]}
     name, pipe, grid = build_pipeline_from_config(cfg)[0]
