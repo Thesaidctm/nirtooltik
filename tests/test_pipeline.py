@@ -81,15 +81,11 @@ def test_end_to_end_cv_and_export(tmp_path, method):
 
     out_dir = tmp_path / "cv_run"
     outputs = run_multiple_eval(cfg, out_dir, n_jobs=1)
-    expected_steps = {
-        "snv": "SNV",
-        "sg": "SG(window=5,poly=2,deriv=1)",
-    }
-    assert len(outputs) == len(expected_steps)
+    expected_steps = {"SNV", "SG(window=5,poly=2,deriv=1)"}
+    assert len(outputs) == 1
     for metrics_file, figs_dir in outputs:
-        step_dir = metrics_file.parent.parent.name
-        assert step_dir in expected_steps
         strat_dir = metrics_file.parent
+        assert strat_dir.name == "kfold_2"
         metrics_path = strat_dir / "metrics_summary.xlsx"
         assert metrics_path.exists()
         xls = pd.ExcelFile(metrics_path)
@@ -97,18 +93,23 @@ def test_end_to_end_cv_and_export(tmp_path, method):
         val_df = xls.parse("validation")
         calib_df = xls.parse("calibration")
         assert {"Yscramble_mean", "Yscramble_p95"}.issubset(val_df.columns)
-        assert "preprocess_steps" in val_df.columns
-        assert "preprocess_steps" in calib_df.columns
+        assert set(val_df["preprocess_steps"]).issuperset(expected_steps)
+        assert set(calib_df["preprocess_steps"]).issuperset(expected_steps)
         assert any((strat_dir / "figures").glob("*.png"))
         assert (strat_dir / "report.md").exists()
         assert (strat_dir / "astm_classification.json").exists()
         with open(metrics_file) as f:
             metrics_json = json.load(f)
         assert metrics_json, "metrics.json should contain at least one entry"
-        assert "Yscramble_mean" in metrics_json[0]
-        assert metrics_json[0]["preprocess_steps"] == expected_steps[step_dir]
-        assert metrics_json[0]["best_clf__n_components"] == 2
-        assert metrics_json[0]["best_clf__method"] == method
+        assert all("Yscramble_mean" in row for row in metrics_json)
+        metrics_by_step = {}
+        for row in metrics_json:
+            metrics_by_step.setdefault(row["preprocess_steps"], []).append(row)
+        for label in expected_steps:
+            assert label in metrics_by_step
+            for entry in metrics_by_step[label]:
+                assert entry["best_clf__n_components"] == 2
+                assert entry["best_clf__method"] == method
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
@@ -146,19 +147,15 @@ def test_metrics_reflect_applied_preprocess_steps(tmp_path):
 
     out_dir = tmp_path / "cv_steps"
     outputs = run_multiple_eval(cfg, out_dir, n_jobs=1)
-    expected_steps = {
-        "snv": {"SNV"},
-        "sg": {"SG(window=5,poly=2,deriv=1)"},
-    }
-    assert len(outputs) == len(expected_steps)
+    expected_steps = {"SNV", "SG(window=5,poly=2,deriv=1)"}
+    assert len(outputs) == 1
     for metrics_path, _ in outputs:
-        step_dir = metrics_path.parent.parent.name
-        assert step_dir in expected_steps
         with open(metrics_path) as f:
             metrics = json.load(f)
         assert metrics
         observed = {row["preprocess_steps"] for row in metrics}
-        assert observed == expected_steps[step_dir]
+        for label in expected_steps:
+            assert label in observed
 
 
 @pytest.mark.parametrize("method", METHODS)
