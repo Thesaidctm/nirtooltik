@@ -394,13 +394,6 @@ def _render_dashboard(results_dir: Path) -> None:
         ajuda_link = "Consulte a [aba Ajuda](#ajuda)"
 
         with st.form("run_form"):
-            analises = st.multiselect(
-                tr("Análises"),
-                options=["preparar", "treinar", "validar"],
-                help=tr("Escolha as análises a executar. {ajuda_link}").format(
-                    ajuda_link=ajuda_link
-                ),
-            )
             uploaded_files = st.file_uploader(
                 tr("Arquivos de entrada"),
                 type=["xlsx", "xls"],
@@ -409,35 +402,52 @@ def _render_dashboard(results_dir: Path) -> None:
                     ajuda_link=ajuda_link
                 ),
             )
-            modelos = st.multiselect(
-                tr("Modelos"),
-                options=sorted(MODEL_DESCRIPTIONS),
-                key="modelos",
-                help=tr("Selecione os modelos. {ajuda_link}").format(
-                    ajuda_link=ajuda_link
-                ),
-            )
-            preprocess = st.multiselect(
-                tr("Preprocessadores"),
-                options=_get_preprocessor_names(),
-                key="preprocess",
-                help=tr("Selecione os pré-processadores. {ajuda_link}").format(
-                    ajuda_link=ajuda_link
-                ),
-            )
-            decimal = st.text_input(
-                "Separador decimal",
-                key="decimal",
-                help=f"Caractere usado como separador decimal. {ajuda_link}",
-            )
-            email = st.text_input(
-                tr("E-mail (opcional)"),
-                key="email",
-                help=tr("Endereço para notificações. {ajuda_link}").format(
-                    ajuda_link=ajuda_link
-                ),
-            )
-            submitted = st.form_submit_button(tr("Executar"))
+            analises: list[str] = []
+            modelos: list[str] = []
+            preprocess: list[str] = []
+            decimal = ""
+            email = ""
+            submitted = False
+
+            if uploaded_files:
+                analises = st.multiselect(
+                    tr("Análises"),
+                    options=["preparar", "treinar", "validar"],
+                    help=tr("Escolha as análises a executar. {ajuda_link}").format(
+                        ajuda_link=ajuda_link
+                    ),
+                )
+                modelos = st.multiselect(
+                    tr("Modelos"),
+                    options=sorted(MODEL_DESCRIPTIONS),
+                    key="modelos",
+                    help=tr("Selecione os modelos. {ajuda_link}").format(
+                        ajuda_link=ajuda_link
+                    ),
+                )
+                preprocess = st.multiselect(
+                    tr("Preprocessadores"),
+                    options=_get_preprocessor_names(),
+                    key="preprocess",
+                    help=tr("Selecione os pré-processadores. {ajuda_link}").format(
+                        ajuda_link=ajuda_link
+                    ),
+                )
+                decimal = st.text_input(
+                    "Separador decimal",
+                    key="decimal",
+                    help=f"Caractere usado como separador decimal. {ajuda_link}",
+                )
+                email = st.text_input(
+                    tr("E-mail (opcional)"),
+                    key="email",
+                    help=tr("Endereço para notificações. {ajuda_link}").format(
+                        ajuda_link=ajuda_link
+                    ),
+                )
+                submitted = st.form_submit_button(tr("Executar"))
+            else:
+                st.info(tr("Envie os dados para configurar as demais opções."))
 
         cols = st.columns(2)
         if cols[0].button(tr("Salvar")):
@@ -1017,7 +1027,7 @@ def _render_dashboard(results_dir: Path) -> None:
                     "O arquivo deve possuir colunas numéricas. "
                     "Converta valores textuais com `pandas.to_numeric` antes do envio."
                 )
-        )
+            )
         if spectra_file is not None and st.button(tr("Rodar PCA")):
             try:
                 spectra_file.seek(0)
