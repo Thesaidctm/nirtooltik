@@ -219,17 +219,17 @@ def _print_metrics_table(metrics_json: Path) -> None:
     print(df[display_cols].to_string(index=False))
 
 
-def _load_preprocess_steps(metrics_json: Path) -> Optional[str]:
-    """Extract preprocessing description from ``metrics_json`` if available."""
+def _load_preprocess_steps(metrics_json: Path) -> list[str]:
+    """Return ordered preprocessing steps found in ``metrics_json``."""
 
     if not metrics_json or not metrics_json.exists():
-        return None
+        return []
     try:
         df = pd.read_json(metrics_json)
     except ValueError:
-        return None
+        return []
     if df.empty or "preprocess_steps" not in df.columns:
-        return None
+        return []
 
     seen = set()
     ordered_steps: list[str] = []
@@ -254,9 +254,30 @@ def _load_preprocess_steps(metrics_json: Path) -> Optional[str]:
         else:
             _add_step(val)
 
-    if not ordered_steps:
-        return None
-    return ", ".join(ordered_steps)
+    return ordered_steps
+
+
+def _describe_preprocess_steps(steps: Sequence[str]) -> list[str]:
+    """Convert raw ``steps`` identifiers into human-friendly descriptions."""
+
+    pretty_steps: list[str] = []
+    for raw_step in steps:
+        step_str = str(raw_step).strip()
+        if not step_str:
+            continue
+        base = step_str
+        params = ""
+        if "(" in step_str and step_str.endswith(")"):
+            base, params = step_str.split("(", 1)
+            params = "(" + params
+        base_code = base.strip().upper()
+        desc = _get_preprocess_description(base_code)
+        if desc == base_code:
+            desc = base.strip()
+        if params:
+            desc = f"{desc} {params}".strip()
+        pretty_steps.append(desc)
+    return pretty_steps
 
 
 def _print_confusion_paths(fig_dir: Path) -> None:
@@ -515,7 +536,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(summary.to_string(index=False))
         try:
             metrics_path, figs_dir = train_and_save(
-                cfg.dict(),
+                cfg.dict(exclude_defaults=True, exclude_none=True),
                 out_dir,
                 interactive=args.interactive,
                 random_state=args.seed,
@@ -562,7 +583,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cfg.astm = args.astm
         try:
             outputs = run_multiple_eval(
-                cfg.dict(),
+                cfg.dict(exclude_defaults=True, exclude_none=True),
                 out_dir,
                 interactive=args.interactive,
                 random_state=args.seed,
@@ -577,7 +598,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(t("invalid_model", err=e), file=sys.stderr)
             return 1
         for metrics_path, figs_dir in outputs:
-            print(f"== {metrics_path.parent.name} ==")
+            step_descs = _describe_preprocess_steps(
+                _load_preprocess_steps(metrics_path)
+            )
+            if step_descs:
+                header = f"== {metrics_path.parent.name} ({', '.join(step_descs)}) =="
+            else:
+                header = f"== {metrics_path.parent.name} =="
+            print(header)
             _print_metrics_table(metrics_path)
             _print_confusion_paths(figs_dir)
             rpt = metrics_path.parent / "report.md"
@@ -665,22 +693,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(str(e), file=sys.stderr)
             return 1
         for cv_metrics, cv_figs in outputs:
-            print(f"== {cv_metrics.parent.name} ==")
+            step_descs = _describe_preprocess_steps(
+                _load_preprocess_steps(cv_metrics)
+            )
+            if step_descs:
+                header = f"== {cv_metrics.parent.name} ({', '.join(step_descs)}) =="
+            else:
+                header = f"== {cv_metrics.parent.name} =="
+            print(header)
             _print_metrics_table(cv_metrics)
             _print_confusion_paths(cv_figs)
             rpt = cv_metrics.parent / "report.md"
             if rpt.exists():
                 print(t("full_report", path=rpt))
         if train_metrics:
-            steps_desc = _load_preprocess_steps(train_metrics)
+            steps_list = _load_preprocess_steps(train_metrics)
             suffix = ""
-            if steps_desc:
-                codes = [code.strip() for code in steps_desc.split(",") if code.strip()]
-                mapped = [_get_preprocess_description(code) for code in codes]
-                if mapped:
-                    suffix = f" ({', '.join(mapped)})"
-                else:
-                    suffix = f" ({steps_desc})"
+            step_descs = _describe_preprocess_steps(steps_list)
+            if step_descs:
+                suffix = f" ({', '.join(step_descs)})"
             print(t("final_model", steps=suffix))
             _print_metrics_table(train_metrics)
             _print_confusion_paths(train_figs)
@@ -728,7 +759,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(train_dir)
         try:
             metrics_path, figs_dir = train_and_save(
-                cfg.dict(),
+                cfg.dict(exclude_defaults=True, exclude_none=True),
                 train_dir,
                 random_state=args.seed,
                 n_jobs=n_jobs,
@@ -750,7 +781,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(cv_dir)
         try:
             outputs = run_multiple_eval(
-                cfg.dict(),
+                cfg.dict(exclude_defaults=True, exclude_none=True),
                 cv_dir,
                 random_state=args.seed,
                 n_jobs=n_jobs,

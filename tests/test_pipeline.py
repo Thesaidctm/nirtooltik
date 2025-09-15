@@ -31,6 +31,7 @@ def test_pipeline_fit_predict_with_cv_and_windows(method):
     cfg = {
         "preprocess": {
             "steps": ["SNV", "SG"],
+            "evaluate_individual": False,
             "sg": {"window": [5, 7], "polyorder": 2, "deriv": 1},
         },
         "models": [
@@ -79,29 +80,35 @@ def test_end_to_end_cv_and_export(tmp_path, method):
     }
 
     out_dir = tmp_path / "cv_run"
-    run_multiple_eval(cfg, out_dir, n_jobs=1)
-    strat_dir = out_dir / "kfold_2"
-    metrics_path = strat_dir / "metrics_summary.xlsx"
-    assert metrics_path.exists()
-    xls = pd.ExcelFile(metrics_path)
-    assert set(xls.sheet_names) == {"validation", "calibration"}
-    val_df = xls.parse("validation")
-    calib_df = xls.parse("calibration")
-    assert {"Yscramble_mean", "Yscramble_p95"}.issubset(val_df.columns)
-    assert "preprocess_steps" in val_df.columns
-    assert "preprocess_steps" in calib_df.columns
-    assert any((strat_dir / "figures").glob("*.png"))
-    assert (strat_dir / "report.md").exists()
-    assert (strat_dir / "astm_classification.json").exists()
-    with open(strat_dir / "metrics.json") as f:
-        metrics_json = json.load(f)
-    assert "Yscramble_mean" in metrics_json[0]
-    assert (
-        metrics_json[0]["preprocess_steps"]
-        == "SNV, SG(window=5,poly=2,deriv=1)"
-    )
-    assert metrics_json[0]["best_clf__n_components"] == 2
-    assert metrics_json[0]["best_clf__method"] == method
+    outputs = run_multiple_eval(cfg, out_dir, n_jobs=1)
+    expected_steps = {
+        "snv": "SNV",
+        "sg": "SG(window=5,poly=2,deriv=1)",
+    }
+    assert len(outputs) == len(expected_steps)
+    for metrics_file, figs_dir in outputs:
+        step_dir = metrics_file.parent.parent.name
+        assert step_dir in expected_steps
+        strat_dir = metrics_file.parent
+        metrics_path = strat_dir / "metrics_summary.xlsx"
+        assert metrics_path.exists()
+        xls = pd.ExcelFile(metrics_path)
+        assert set(xls.sheet_names) == {"validation", "calibration"}
+        val_df = xls.parse("validation")
+        calib_df = xls.parse("calibration")
+        assert {"Yscramble_mean", "Yscramble_p95"}.issubset(val_df.columns)
+        assert "preprocess_steps" in val_df.columns
+        assert "preprocess_steps" in calib_df.columns
+        assert any((strat_dir / "figures").glob("*.png"))
+        assert (strat_dir / "report.md").exists()
+        assert (strat_dir / "astm_classification.json").exists()
+        with open(metrics_file) as f:
+            metrics_json = json.load(f)
+        assert metrics_json, "metrics.json should contain at least one entry"
+        assert "Yscramble_mean" in metrics_json[0]
+        assert metrics_json[0]["preprocess_steps"] == expected_steps[step_dir]
+        assert metrics_json[0]["best_clf__n_components"] == 2
+        assert metrics_json[0]["best_clf__method"] == method
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
@@ -126,7 +133,6 @@ def test_metrics_reflect_applied_preprocess_steps(tmp_path):
         "data": {"input_path": str(data_file), "target_cols": ["target"]},
         "preprocess": {
             "steps": ["SNV", "SG"],
-            "evaluate_individual": True,
             "sg": {"window": 5, "polyorder": 2, "deriv": 1},
         },
         "models": [

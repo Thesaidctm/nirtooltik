@@ -182,4 +182,4 @@ def test_load_preprocess_steps_handles_multiple_sequences(
 
     steps = _load_preprocess_steps(metrics_path)
 
-    assert steps == "SNV, SG, MSC, EPO"
+    assert steps == ["SNV", "SG", "MSC", "EPO"]
