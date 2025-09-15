@@ -5,8 +5,7 @@ from __future__ import annotations
 import base64
 import importlib.util
 from pathlib import Path
-from typing import Iterable, Sequence
-
+from typing import Iterable, Sequence, Optional
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -64,7 +63,7 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
                 logger.debug("Exported %s", out)
             except Exception as exc:  # pragma: no cover - small message
                 logger.warning("Export failed for %s: %s", out, exc)
-                if not out.exists():
+                if "kaleido" in str(exc).lower() and not out.exists():
                     _write_placeholder_image(out)
 
     if interactive:
@@ -386,5 +385,57 @@ def plot_reliability(
         xaxis=dict(range=[0, 1]),
         yaxis=dict(range=[0, 1]),
         colorway=PALETTE_MAP[palette],
+    )
+    _export(fig, out_base, interactive)
+
+
+def plot_pca_scores(
+    scores: pd.DataFrame,
+    labels: Optional[Sequence],
+    out_base: Path,
+    interactive: bool = False,
+    *,
+    palette: Palette = Palette.VIRIDIS,
+) -> None:
+    """Scatter plot of PCA scores coloured by treatment labels."""
+
+    missing = {"PC1", "PC2"} - set(scores.columns)
+    if missing:
+        raise ValueError(f"Scores dataframe missing columns: {sorted(missing)}")
+
+    df = scores.copy()
+    if labels is not None:
+        if isinstance(labels, pd.Series):
+            label_series = labels.reindex(df.index)
+        else:
+            label_series = pd.Series(labels, index=df.index)
+        label_series = label_series.fillna("Unlabeled").astype(str)
+    else:
+        label_series = pd.Series(["All"] * len(df), index=df.index, dtype="object")
+
+    df["_group"] = label_series
+
+    fig = go.Figure()
+    colors = PALETTE_MAP[palette]
+    for idx, (label, group) in enumerate(df.groupby("_group", sort=False)):
+        color = colors[idx % len(colors)] if colors else None
+        fig.add_trace(
+            go.Scatter(
+                x=group["PC1"],
+                y=group["PC2"],
+                mode="markers",
+                name=str(label),
+                marker=dict(color=color) if color else None,
+                text=group.index.astype(str),
+                hovertemplate="PC1=%{x:.3f}<br>PC2=%{y:.3f}<br>Sample=%{text}<extra></extra>",
+            )
+        )
+
+    fig.update_layout(
+        title="PCA Scores",
+        xaxis_title="PC1",
+        yaxis_title="PC2",
+        legend_title="Treatment",
+        colorway=colors,
     )
     _export(fig, out_base, interactive)

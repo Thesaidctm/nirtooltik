@@ -12,6 +12,7 @@ def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> No
 
     formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
     console = Console(stderr=True)
+    file_handler = None
     handlers: list[logging.Handler] = [
         RichHandler(console=console, show_path=False, markup=True)
     ]
@@ -26,6 +27,14 @@ def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> No
         format="%(message)s",
         force=True,
     )
+    logging.captureWarnings(True)
+    warnings_logger = logging.getLogger("py.warnings")
+    warnings_logger.handlers.clear()
+    if file_handler:
+        warnings_logger.addHandler(file_handler)
+        warnings_logger.propagate = False
+    else:
+        warnings_logger.propagate = True
     logging.getLogger("kaleido").setLevel(logging.WARNING)
     logging.getLogger("choreography").setLevel(logging.WARNING)
 

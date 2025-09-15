@@ -171,9 +171,9 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
         raise ValueError("metrics is empty")
     df = pd.DataFrame(rows)
 
-    steps: list[str] = []
+    preprocess_steps: list[str] = []
     if "preprocess_steps" in df.columns:
-        seen_steps: set[str] = set()
+        step_values: set[str] = set()
 
         def _iter_steps(value: object) -> list[object]:
             if isinstance(value, (list, tuple, set)):
@@ -193,10 +193,11 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
                 except TypeError:
                     pass
                 step_str = str(step).strip()
-                if not step_str or step_str in seen_steps:
+                if not step_str:
                     continue
-                seen_steps.add(step_str)
-                steps.append(step_str)
+                step_values.add(step_str)
+
+        preprocess_steps = sorted(step_values)
 
     # Determine the key metric and best model
     key_metric = None
@@ -226,34 +227,6 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
 
     data_cfg = cfg.get("data", {}) if isinstance(cfg, dict) else {}
 
-    steps: list[str] = []
-    if "preprocess_steps" in df.columns:
-        seen_steps: set[str] = set()
-        for value in df["preprocess_steps"]:
-            if isinstance(value, (list, tuple, set)):
-                items = value
-            elif value is None:
-                continue
-            else:
-                try:
-                    if pd.isna(value):
-                        continue
-                except TypeError:
-                    pass
-                items = [value]
-
-            for item in items:
-                if item is None:
-                    continue
-                try:
-                    if pd.isna(item):
-                        continue
-                except TypeError:
-                    pass
-                step = str(item).strip()
-                if step and step not in seen_steps:
-                    seen_steps.add(step)
-                    steps.append(step)
     models = (
         [m.get("name", "") for m in cfg.get("models", [])]
         if isinstance(cfg, dict)
@@ -271,7 +244,7 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
         "---",
         "",
         f"**Data**: `{data_cfg.get('input_path', '')}`",
-        f"**Preprocessing**: {', '.join(steps) if steps else 'None'}",
+        f"**Preprocessing**: {', '.join(preprocess_steps) if preprocess_steps else 'None'}",
         f"**Algorithms tested**: {', '.join(models) if models else 'N/A'}",
     ]
     if best_model is not None and key_metric is not None and best_score is not None:

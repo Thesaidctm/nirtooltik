@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gc
 import json
+import re
 import subprocess
 import sys
 import traceback
@@ -74,6 +75,7 @@ from .utils.plots import (
     plot_roc_ovr,
     plot_vip,
 )
+from .utils.plots import plot_confusion, plot_pca_scores, plot_reliability, plot_roc_ovr
 from .utils.qc import detect_identical_spectra, find_duplicates, pca_outliers
 from .utils.split import spxy_split
 from .utils.y_scramble import y_scramble_scores
@@ -543,21 +545,119 @@ def _maybe_run_qc(
     if not cfg.get("qc"):
         return
 
+    pre_cfg = cfg.get("preprocess", {}) or {}
+    steps_cfg = list(pre_cfg.get("steps") or [])
+
+    def _normalize_step(value: str) -> str:
+        slug = re.sub(r"[^0-9A-Za-z]+", "_", value or "")
+        slug = slug.strip("_").lower()
+        return slug or "step"
+
+    def _sanitize_sheet_name(name: str) -> str:
+        cleaned = re.sub(r"[:\\/?*\[\]]", "_", name or "")
+        cleaned = cleaned.strip()
+        return cleaned or "Sheet"
+
+    def _make_sheet_name(base: str, slug: str, used: Dict[str, Set[str]]) -> str:
+        sanitized = _sanitize_sheet_name(base)
+        choices = used.setdefault(slug, set())
+        candidate = sanitized[:31]
+        counter = 1
+        while not candidate or candidate in choices:
+            suffix = f"_{counter}"
+            counter += 1
+            available = max(0, 31 - len(suffix))
+            trimmed = sanitized[:available]
+            if not trimmed:
+                trimmed = "Sheet"
+            candidate = f"{trimmed}{suffix}"[:31]
+        choices.add(candidate)
+        return candidate
+
+    sheet_names: Dict[str, Set[str]] = {}
+    per_step_frames: Dict[str, List[Tuple[str, pd.DataFrame]]] = {}
+    interactive = bool(cfg.get("interactive", False))
+
+    out_dir.mkdir(parents=True, exist_ok=True)
     report: List[Dict[str, Any]] = []
-    for ds in data:
+    for idx, ds in enumerate(data, start=1):
         X, y = ds["X"], ds["Y"]
         df = X.copy()
         df[ds["target"]] = y
-        report.append(
-            {
-                "file": ds["file"],
-                "target": ds["target"],
-                "duplicates": find_duplicates(df).index.tolist(),
-                "identical_spectra": detect_identical_spectra(X),
-                "pca_outliers": pca_outliers(X).to_dict(orient="index"),
-            }
-        )
-    out_dir.mkdir(parents=True, exist_ok=True)
+        if isinstance(y, pd.Series):
+            labels = y.reindex(X.index)
+        else:
+            labels = pd.Series(y, index=X.index)
+
+        raw_scores = pca_outliers(X, n_components=2)
+        raw_export = raw_scores.copy()
+        raw_export["target"] = labels
+
+        entry: Dict[str, Any] = {
+            "file": ds["file"],
+            "target": ds["target"],
+            "duplicates": find_duplicates(df).index.tolist(),
+            "identical_spectra": detect_identical_spectra(X),
+            "pca_outliers": raw_export.to_dict(orient="index"),
+        }
+
+        base_sheet = f"{idx}_{Path(ds['file']).stem}_{ds['target']}"
+
+        for step in steps_cfg:
+            step_slug = _normalize_step(step)
+            pre_steps, _ = _make_preprocess([step], pre_cfg)
+            if pre_steps:
+                try:
+                    Xp = Pipeline(pre_steps).fit_transform(X)
+                except Exception as exc:  # pragma: no cover - best effort logging
+                    logger.warning(
+                        "QC preprocessing '%s' failed for %s: %s",
+                        step,
+                        ds["file"],
+                        exc,
+                    )
+                    continue
+                if isinstance(Xp, pd.DataFrame):
+                    Xp_df = Xp
+                else:
+                    Xp_df = pd.DataFrame(Xp, index=X.index)
+                    if Xp_df.shape[1] == X.shape[1]:
+                        Xp_df.columns = X.columns
+            else:
+                Xp_df = X
+
+            scores = pca_outliers(Xp_df, n_components=2)
+            scores_export = scores.copy()
+            scores_export["target"] = labels.reindex(scores.index)
+
+            key = f"pca_{step}"
+            entry[key] = scores_export.to_dict(orient="index")
+
+            per_step_frames.setdefault(step_slug, []).append(
+                (
+                    _make_sheet_name(base_sheet, step_slug, sheet_names),
+                    scores_export,
+                )
+            )
+
+            excel_name = f"qc_pca_{step_slug}.xlsx"
+            entry[f"{key}_file"] = excel_name
+
+            fig_stem = f"{Path(ds['file']).stem}__{ds['target']}__pca_{step_slug}"
+            fig_rel = Path("figures") / fig_stem
+            entry[f"{key}_figure"] = fig_rel.with_suffix(".png").as_posix()
+            plot_pca_scores(scores, labels, out_dir / fig_rel, interactive=interactive)
+
+        report.append(entry)
+
+    for slug, frames in per_step_frames.items():
+        if not frames:
+            continue
+        xlsx_path = out_dir / f"qc_pca_{slug}.xlsx"
+        with pd.ExcelWriter(xlsx_path) as writer:
+            for sheet_name, frame in frames:
+                frame.to_excel(writer, sheet_name=sheet_name, index=True)
+
     with open(out_dir / "qc_report.json", "w") as f:
         json.dump(report, f, indent=2)
 
