@@ -45,6 +45,7 @@ class PLSDA(BaseEstimator, ClassifierMixin):
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "PLSDA":
         classes, y_int = np.unique(y, return_inverse=True)
+        self.classes_ = classes
         Y = np.eye(len(classes))[y_int]
         self.pls.fit(X, Y)
         self.n_components_ = self.pls.x_scores_.shape[1]
