@@ -269,7 +269,11 @@ def build_pipeline_from_config(
     _validate_cfg(cfg, need_models=True)
     pre_cfg = cfg.get("preprocess", {})
     steps_cfg = pre_cfg.get("steps", [])
-    evaluate_ind = pre_cfg.get("evaluate_individual", False)
+    evaluate_flag = pre_cfg.get("evaluate_individual")
+    if evaluate_flag is None:
+        evaluate_ind = len(steps_cfg) > 1
+    else:
+        evaluate_ind = bool(evaluate_flag)
     out: List[Tuple[str, Pipeline, Dict[str, Any]]] = []
 
     def _build_models(
@@ -643,10 +647,15 @@ def _run_cv(
         models = build_pipeline_from_config(cfg)
         model_cfgs = cfg.get("models", [])
         model_task = progress.add_task("Model", total=len(models))
-        for m_cfg, (name, pipe, grid) in zip(model_cfgs, models):
+        for idx, (name, pipe, grid) in enumerate(models):
+            if not model_cfgs:
+                continue
+            m_cfg = model_cfgs[idx % len(model_cfgs)]
             progress.update(model_task, description=f"Model: {name}")
-            steps_cfg = cfg.get("preprocess", {}).get("steps", [])
-            logger.info("Running %s with steps: %s", name, steps_cfg)
+            steps_desc = _format_preprocess_steps(
+                [v for k, v in pipe.named_steps.items() if k != "clf"]
+            )
+            logger.info("Running %s with steps: %s", name, steps_desc)
             mem_start = None
             if log_memory:
                 mem_start = psutil.Process().memory_info().rss / 1e6
@@ -1087,9 +1096,11 @@ def _run_holdout(
         cv_method = cv_cfg.get("cv_method", "stratified").lower()
         outer_folds = int(cv_cfg.get("outer_folds", cv_cfg.get("inner_folds", 3)))
         model_cfgs = cfg.get("models", [])
-        for m_cfg, (name, pipe, grid) in zip(
-            model_cfgs, build_pipeline_from_config(cfg)
-        ):
+        pipelines = build_pipeline_from_config(cfg)
+        for idx, (name, pipe, grid) in enumerate(pipelines):
+            if not model_cfgs:
+                continue
+            m_cfg = model_cfgs[idx % len(model_cfgs)]
             Xtr, Xte, ytr, yte = train_test_split(
                 X.values,
                 y_enc,
@@ -1104,8 +1115,10 @@ def _run_holdout(
                 logger.warning(
                     "Adjusted number of CV folds from %d to %d", outer_folds, n_splits
                 )
-            steps_cfg = cfg.get("preprocess", {}).get("steps", [])
-            logger.info("Running %s with steps: %s", name, steps_cfg)
+            steps_desc = _format_preprocess_steps(
+                [v for k, v in pipe.named_steps.items() if k != "clf"]
+            )
+            logger.info("Running %s with steps: %s", name, steps_desc)
             yscramble_iter = int(m_cfg.get("y_scramble_n_iter", 20))
             if cv_method == "spxy":
                 inner = spxy_split(Xtr, ytr, n_splits)
@@ -1259,13 +1272,20 @@ def run_multiple_eval(
     _validate_cfg(cfg, need_data=True, need_cv=True, need_models=True)
     pre_cfg = cfg.get("preprocess", {})
     steps_cfg = pre_cfg.get("steps", [])
-    if pre_cfg.get("evaluate_individual") and len(steps_cfg) > 1:
+    evaluate_flag = pre_cfg.get("evaluate_individual")
+    if evaluate_flag is None:
+        evaluate_individual = len(steps_cfg) > 1
+    else:
+        evaluate_individual = bool(evaluate_flag)
+    if evaluate_individual and len(steps_cfg) > 1:
         outputs: List[Tuple[Path, Path]] = []
         for step in steps_cfg:
             sub_cfg = deepcopy(cfg)
             sub_cfg.setdefault("preprocess", {})["steps"] = [step]
             sub_cfg["preprocess"]["evaluate_individual"] = False
-            sub_out = out_dir / step.lower()
+            step_label = _format_preprocess_step(step) or str(step)
+            safe_step = step_label.lower().replace(" ", "_").replace("/", "_")
+            sub_out = out_dir / safe_step
             outputs.extend(
                 run_multiple_eval(
                     sub_cfg,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 from pathlib import Path
 
@@ -14,6 +15,25 @@ from sklearn.preprocessing import label_binarize
 
 from .logging import logger
 from .palettes import PALETTE_MAP, Palette
+
+_PLACEHOLDER_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFgwJ/lEDNkwAAAABJRU5ErkJggg=="
+)
+_PLACEHOLDER_SVG = (
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"></svg>"
+)
+
+
+def _write_placeholder_image(out: Path) -> None:
+    """Create a minimal placeholder image when Plotly export fails."""
+
+    try:
+        if out.suffix.lower() == ".png":
+            out.write_bytes(_PLACEHOLDER_PNG)
+        elif out.suffix.lower() == ".svg":
+            out.write_text(_PLACEHOLDER_SVG, encoding="utf-8")
+    except Exception:  # pragma: no cover - best effort fallback
+        logger.debug("Could not write placeholder image", exc_info=True)
 
 
 def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
@@ -43,6 +63,8 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
                 logger.debug("Exported %s", out)
             except Exception as exc:  # pragma: no cover - small message
                 logger.warning("Export failed for %s: %s", out, exc)
+                if not out.exists():
+                    _write_placeholder_image(out)
 
     if interactive:
         html_out = out_base.with_suffix(".html")
