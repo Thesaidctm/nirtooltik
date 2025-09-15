@@ -214,12 +214,46 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
         best_score = float(best_row[key_metric])
         if "preprocess_steps" in best_row:
             val = best_row["preprocess_steps"]
-            if isinstance(val, (list, tuple)):
-                best_steps = list(val)
-            elif pd.notna(val):
-                best_steps = [str(val)]
+            if isinstance(val, (list, tuple, set)):
+                best_steps = [str(item) for item in val]
+            else:
+                try:
+                    not_null = pd.notna(val)
+                except TypeError:
+                    not_null = True
+                if not_null:
+                    best_steps = [str(val)]
 
     data_cfg = cfg.get("data", {}) if isinstance(cfg, dict) else {}
+
+    steps: list[str] = []
+    if "preprocess_steps" in df.columns:
+        seen_steps: set[str] = set()
+        for value in df["preprocess_steps"]:
+            if isinstance(value, (list, tuple, set)):
+                items = value
+            elif value is None:
+                continue
+            else:
+                try:
+                    if pd.isna(value):
+                        continue
+                except TypeError:
+                    pass
+                items = [value]
+
+            for item in items:
+                if item is None:
+                    continue
+                try:
+                    if pd.isna(item):
+                        continue
+                except TypeError:
+                    pass
+                step = str(item).strip()
+                if step and step not in seen_steps:
+                    seen_steps.add(step)
+                    steps.append(step)
     models = (
         [m.get("name", "") for m in cfg.get("models", [])]
         if isinstance(cfg, dict)
