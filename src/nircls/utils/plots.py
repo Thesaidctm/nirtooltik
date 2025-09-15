@@ -65,7 +65,7 @@ def plot_confusion(
     out_base: Path,
     interactive: bool = False,
     *,
-    palette: Palette = Palette.VIRIDIS,
+    palette: Palette = Palette.BLUES,
 ) -> None:
     """Plot and export a confusion matrix with raw counts.
 
