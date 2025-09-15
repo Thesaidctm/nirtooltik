@@ -225,7 +225,9 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
 
     # Metrics table
     table_cols = [
-        c for c in ["file", "model", "preprocess_steps", "overfit_warning"] if c in df.columns
+        c
+        for c in ["file", "model", "preprocess_steps", "overfit_warning"]
+        if c in df.columns
     ]
     table_df = df[table_cols].copy()
     if "preprocess_steps" in table_df.columns:
@@ -239,10 +241,17 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
             std_col = f"{base}_std"
             if std_col in df.columns:
                 table_df[base] = df.apply(
-                    lambda r: f"{r[mean_col]:.3f} ± {r[std_col]:.3f}", axis=1
+                    lambda r: (
+                        f"{r[mean_col]:.3f} ± {r[std_col]:.3f}"
+                        if pd.notnull(r[mean_col]) and pd.notnull(r[std_col])
+                        else "N/A"
+                    ),
+                    axis=1,
                 )
             else:
-                table_df[base] = df[mean_col].map(lambda v: f"{v:.3f}")
+                table_df[base] = df[mean_col].map(
+                    lambda v: f"{v:.3f}" if pd.notnull(v) else "N/A"
+                )
     header = "| " + " | ".join(table_df.columns.tolist()) + " |"
     sep = "| " + " | ".join(["---"] * len(table_df.columns)) + " |"
     lines = [header, sep]
