@@ -97,9 +97,10 @@ def test_end_to_end_cv_and_export(tmp_path, method):
         metrics_json = json.load(f)
     assert "Yscramble_mean" in metrics_json[0]
     assert metrics_json[0]["preprocess_steps"] == [
-        "SNV()",
-        "SavitzkyGolayTransformer(window_length=5)",
+        "SNV",
+        "SG(window=5,poly=2,deriv=1)",
     ]
+    assert metrics_json[0]["best_sg__window_length"] == 5
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
@@ -109,6 +110,13 @@ def test_end_to_end_cv_and_export(tmp_path, method):
     assert (train_dir / "model_card.md").exists()
     assert (train_dir / "classes.json").exists()
     assert (train_dir / "astm_classification.json").exists()
+    with open(train_dir / "metrics.json") as f:
+        train_metrics = json.load(f)
+    assert train_metrics[0]["preprocess_steps"] == [
+        "SNV",
+        "SG(window=5,poly=2,deriv=1)",
+    ]
+    assert train_metrics[0]["best_sg__window_length"] == 5
 
 
 @pytest.mark.parametrize("method", METHODS)

@@ -262,6 +262,54 @@ def _make_preprocess(
     return steps, grid
 
 
+def _describe_preprocess_step(step: Any) -> str:
+    """Return a human readable description for a preprocessing transformer."""
+
+    if isinstance(step, SNV):
+        return "SNV"
+    if isinstance(step, MSC):
+        return "MSC"
+    if isinstance(step, Detrend):
+        return f"DETREND(order={step.order})"
+    if isinstance(step, SavitzkyGolayTransformer):
+        window = getattr(step, "window_length", None)
+        poly = getattr(step, "polyorder", None)
+        deriv = getattr(step, "deriv", None)
+        return f"SG(window={window},poly={poly},deriv={deriv})"
+    if isinstance(step, EMSC):
+        return f"EMSC(degree={step.degree})"
+    if isinstance(step, EPO):
+        return "EPO"
+    if isinstance(step, StandardScaler):
+        return "SCALE"
+    return repr(step)
+
+
+def _describe_preprocess_steps(estimator: Any) -> List[str]:
+    """Collect readable descriptions for the preprocessing portion of a pipeline."""
+
+    if not hasattr(estimator, "named_steps"):
+        return []
+    steps: List[str] = []
+    for name, step in estimator.named_steps.items():
+        if name == "clf":
+            continue
+        steps.append(_describe_preprocess_step(step))
+    return steps
+
+
+def _normalise_preprocess_steps(value: Any) -> List[str]:
+    """Normalise stored preprocessing steps to a list of strings."""
+
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        return [str(v) for v in value]
+    return [str(value)]
+
+
 def build_pipeline_from_config(
     cfg: Dict[str, Any],
 ) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
@@ -316,9 +364,14 @@ def _save_metrics(
     written, overwriting any existing files.
     """
 
+    cfg_steps = _normalise_preprocess_steps(preprocess_steps)
     for row in rows:
         if "preprocess_steps" not in row:
-            row["preprocess_steps"] = list(preprocess_steps)
+            row["preprocess_steps"] = list(cfg_steps)
+        else:
+            row["preprocess_steps"] = _normalise_preprocess_steps(
+                row["preprocess_steps"]
+            )
         row.setdefault("overfit_warning", False)
     df = pd.DataFrame(rows)
     if df.empty:
@@ -559,6 +612,7 @@ def _run_cv(
             y_proba_all: List[np.ndarray] = []
             n_comp_list: List[int] = []
             best_steps_repr: Optional[List[str]] = None
+            best_params_example: Optional[Dict[str, Any]] = None
             if is_loo:
                 inner_splits = int(min(inner_folds, counts.min()))
                 inner_splits = max(inner_splits, 2)
@@ -570,14 +624,13 @@ def _run_cv(
                 gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=1)
                 gs.fit(X.values, y_enc)
                 best_params = gs.best_params_
+                best_params_example = dict(best_params)
                 n_comp = _get_n_components(best_params)
                 if n_comp is not None:
                     n_comp_list.append(n_comp)
                 best = pipe.set_params(**best_params)
                 if best_steps_repr is None:
-                    best_steps_repr = [
-                        repr(v) for k, v in best.named_steps.items() if k != "clf"
-                    ]
+                    best_steps_repr = _describe_preprocess_steps(best)
                 calib_cfg = m_cfg.get("calibration")
                 if calib_cfg:
                     best = CalibratedClassifierCV(
@@ -750,14 +803,14 @@ def _run_cv(
                 )
                 gs.fit(Xtr, ytr, **fit_kwargs)
 
+                if best_params_example is None:
+                    best_params_example = dict(gs.best_params_)
                 n_comp = _get_n_components(gs.best_params_)
                 if n_comp is not None:
                     n_comp_list.append(n_comp)
                 best = gs.best_estimator_
                 if best_steps_repr is None:
-                    best_steps_repr = [
-                        repr(v) for k, v in best.named_steps.items() if k != "clf"
-                    ]
+                    best_steps_repr = _describe_preprocess_steps(best)
                 calib_cfg = m_cfg.get("calibration")
                 if calib_cfg:
                     best = CalibratedClassifierCV(
@@ -877,6 +930,8 @@ def _run_cv(
                 row["n_components"] = int(np.median(n_comp_list))
             if best_steps_repr is not None:
                 row["preprocess_steps"] = best_steps_repr
+            if best_params_example:
+                row.update({f"best_{k}": v for k, v in best_params_example.items()})
             if log_memory:
                 mem_end = psutil.Process().memory_info().rss / 1e6
                 logger.debug("memory end %.3f MB", mem_end)
@@ -1005,11 +1060,10 @@ def _run_holdout(
                 )
             gs = GridSearchCV(pipe, grid, scoring="f1_macro", cv=inner, n_jobs=n_jobs)
             gs.fit(Xtr, ytr)
-            n_comp = _get_n_components(gs.best_params_)
+            best_params = dict(gs.best_params_)
+            n_comp = _get_n_components(best_params)
             best = gs.best_estimator_
-            preprocess_steps = [
-                repr(v) for k, v in best.named_steps.items() if k != "clf"
-            ]
+            preprocess_steps = _describe_preprocess_steps(best)
             calib_cfg = m_cfg.get("calibration")
             if calib_cfg:
                 best = CalibratedClassifierCV(
@@ -1035,6 +1089,8 @@ def _run_holdout(
             diff = row["train_BalancedAcc_mean"] - row["BalancedAcc_mean"]
             row["overfit_warning"] = diff > 0.05
             row["n_components"] = n_comp
+            if best_params:
+                row.update({f"best_{k}": v for k, v in best_params.items()})
             proba_fn = getattr(best, "predict_proba", None)
             proba = None
             proba_tr = None
@@ -1487,11 +1543,10 @@ def train_and_save(
             logger.info("Grid search end: %s", datetime.now().isoformat())
             progress.update(train_task, completed=1)
 
-            n_comp = _get_n_components(gs.best_params_)
+            best_params = dict(gs.best_params_)
+            n_comp = _get_n_components(best_params)
             best = gs.best_estimator_
-            preprocess_steps = [
-                repr(v) for k, v in best.named_steps.items() if k != "clf"
-            ]
+            preprocess_steps = _describe_preprocess_steps(best)
             calib_cfg = model_cfg.get("calibration") if model_cfg else None
             if calib_cfg:
                 best = CalibratedClassifierCV(
@@ -1520,6 +1575,8 @@ def train_and_save(
             }
             row["n_components"] = n_comp
             row["preprocess_steps"] = preprocess_steps
+            if best_params:
+                row.update({f"best_{k}": v for k, v in best_params.items()})
             proba_fn = getattr(best, "predict_proba", None)
             proba = None
             if proba_fn is not None:

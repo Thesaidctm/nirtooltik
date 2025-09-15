@@ -80,6 +80,7 @@ STRINGS = {
         "astm_external_validation": "External validation",
         "full_report": "Full report: {path}",
         "model_saved": "Model saved: {path}",
+        "preprocess_sequence": "Preprocessing: {steps}",
         "final_model": "== Final model ==",
         "data_prepared_in": "Prepared data in: {file}",
         "model_trained_in": "Model trained in: {path}",
@@ -133,6 +134,7 @@ STRINGS = {
         "astm_external_validation": "Validação externa",
         "full_report": "Relatório completo: {path}",
         "model_saved": "Modelo salvo: {path}",
+        "preprocess_sequence": "Pré-processamento: {steps}",
         "final_model": "== Modelo final ==",
         "data_prepared_in": "Dados preparados em: {file}",
         "model_trained_in": "Modelo treinado em: {path}",
@@ -184,6 +186,32 @@ def _print_metrics_table(metrics_json: Path) -> None:
             df[base] = df[col].map(lambda x: f"{x:.3f}")
     display_cols = id_cols + [c[:-5] for c in metrics_cols]
     print(df[display_cols].to_string(index=False))
+
+
+def _print_preprocess_sequence(metrics_json: Path) -> None:
+    """Display preprocessing sequences stored in a metrics file."""
+
+    if not metrics_json or not metrics_json.exists():
+        return
+    try:
+        df = pd.read_json(metrics_json)
+    except ValueError:
+        return
+    if df.empty or "preprocess_steps" not in df.columns:
+        return
+    seen: set[str] = set()
+    for _, row in df.iterrows():
+        steps_val = row.get("preprocess_steps")
+        if isinstance(steps_val, (list, tuple)):
+            steps = " -> ".join(str(s) for s in steps_val if s)
+        elif pd.notna(steps_val):
+            steps = str(steps_val)
+        else:
+            continue
+        if not steps or steps in seen:
+            continue
+        seen.add(steps)
+        print(t("preprocess_sequence", steps=steps))
 
 
 def _print_confusion_paths(fig_dir: Path) -> None:
@@ -460,6 +488,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         if metrics_path:
             _print_metrics_table(metrics_path)
+            _print_preprocess_sequence(metrics_path)
         if figs_dir:
             _print_confusion_paths(figs_dir)
         report_path = out_dir / "report.md"
@@ -506,6 +535,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for metrics_path, figs_dir in outputs:
             print(f"== {metrics_path.parent.name} ==")
             _print_metrics_table(metrics_path)
+            _print_preprocess_sequence(metrics_path)
             _print_confusion_paths(figs_dir)
             rpt = metrics_path.parent / "report.md"
             if rpt.exists():
@@ -594,6 +624,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for cv_metrics, cv_figs in outputs:
             print(f"== {cv_metrics.parent.name} ==")
             _print_metrics_table(cv_metrics)
+            _print_preprocess_sequence(cv_metrics)
             _print_confusion_paths(cv_figs)
             rpt = cv_metrics.parent / "report.md"
             if rpt.exists():
@@ -601,6 +632,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if train_metrics:
             print(t("final_model"))
             _print_metrics_table(train_metrics)
+            _print_preprocess_sequence(train_metrics)
             _print_confusion_paths(train_figs)
             if report_path.exists():
                 print(t("full_report", path=report_path))
@@ -657,6 +689,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             if metrics_path:
                 _print_metrics_table(metrics_path)
+                _print_preprocess_sequence(metrics_path)
             if figs_dir:
                 _print_confusion_paths(figs_dir)
             print(t("model_trained_in", path=train_dir))
@@ -677,6 +710,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             for metrics_path, figs_dir in outputs:
                 _print_metrics_table(metrics_path)
+                _print_preprocess_sequence(metrics_path)
                 _print_confusion_paths(figs_dir)
             print(t("cv_results_in", path=cv_dir))
         except DataError as e:
@@ -774,6 +808,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 if metrics_path:
                     _print_metrics_table(metrics_path)
+                    _print_preprocess_sequence(metrics_path)
                 if figs_dir:
                     _print_confusion_paths(figs_dir)
                 print(t("wizard_train_in", path=train_dir))
@@ -789,6 +824,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 for metrics_path, figs_dir in outputs:
                     _print_metrics_table(metrics_path)
+                    _print_preprocess_sequence(metrics_path)
                     _print_confusion_paths(figs_dir)
                 print(t("wizard_eval_in", path=cv_dir))
             except DataError as e:
