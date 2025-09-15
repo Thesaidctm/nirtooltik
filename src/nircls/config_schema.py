@@ -130,7 +130,7 @@ class ConfigModel(BaseModel):
     models: Optional[List[ModelConfig]] = None
     astm: bool = False
     use_cache: bool = True
-    palette: Palette = Palette.VIRIDIS
+    palette: Palette = Palette.BLUES
     notification_email: Optional[str] = Field(
         None,
         description="Email address for notifications",

@@ -391,7 +391,7 @@ def _save_plots(
     y_proba: Optional[np.ndarray] = None,
     *,
     interactive: bool = False,
-    palette: Palette = Palette.VIRIDIS,
+    palette: Palette = Palette.BLUES,
 ) -> None:
     """Save confusion matrix and optional ROC/reliability plots.
 
@@ -695,7 +695,7 @@ def _run_cv(
                     y_pred,
                     y_proba,
                     interactive=interactive,
-                    palette=Palette(cfg.get("palette", Palette.VIRIDIS)),
+                    palette=Palette(cfg.get("palette", Palette.BLUES)),
                 )
                 progress.advance(model_task)
                 del (
@@ -903,7 +903,7 @@ def _run_cv(
                 y_pred,
                 y_proba,
                 interactive=interactive,
-                palette=Palette(cfg.get("palette", Palette.VIRIDIS)),
+                palette=Palette(cfg.get("palette", Palette.BLUES)),
             )
             progress.advance(model_task)
             del (
@@ -1103,7 +1103,7 @@ def _run_holdout(
                 yhat,
                 proba,
                 interactive=interactive,
-                palette=Palette(cfg.get("palette", Palette.VIRIDIS)),
+                palette=Palette(cfg.get("palette", Palette.BLUES)),
             )
             del best, proba, proba_tr, yhat, yhat_tr
             gc.collect()
@@ -1557,7 +1557,7 @@ def train_and_save(
                 yhat,
                 proba,
                 interactive=interactive,
-                palette=Palette(cfg.get("palette", Palette.VIRIDIS)),
+                palette=Palette(cfg.get("palette", Palette.BLUES)),
             )
             del best, proba, yhat
             gc.collect()
