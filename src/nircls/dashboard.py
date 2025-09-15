@@ -123,7 +123,7 @@ def _render_dashboard(results_dir: Path) -> None:
     )
     st.session_state.setdefault("language", _initial_cfg.get("language", "pt"))
     st.session_state.setdefault(
-        "palette", _initial_cfg.get("palette", Palette.VIRIDIS.value)
+        "palette", _initial_cfg.get("palette", Palette.BLUES.value)
     )
     if _initial_cfg.get("check_updates", True):
         import nircls
@@ -357,7 +357,7 @@ def _render_dashboard(results_dir: Path) -> None:
         )
         st.session_state.setdefault("decimal", cfg_defaults.get("decimal", "."))
         st.session_state.setdefault(
-            "palette", cfg_defaults.get("palette", Palette.VIRIDIS.value)
+            "palette", cfg_defaults.get("palette", Palette.BLUES.value)
         )
 
         language = st.selectbox(
@@ -376,7 +376,7 @@ def _render_dashboard(results_dir: Path) -> None:
             tr("Paleta de cores"),
             [p.value for p in Palette],
             index=[p.value for p in Palette].index(
-                st.session_state.get("palette", Palette.VIRIDIS.value)
+                st.session_state.get("palette", Palette.BLUES.value)
             ),
         )
         if palette != st.session_state.get("palette"):
@@ -458,7 +458,7 @@ def _render_dashboard(results_dir: Path) -> None:
                     "preprocess": st.session_state.get("preprocess", []),
                     "email": st.session_state.get("email", ""),
                     "decimal": st.session_state.get("decimal", "."),
-                    "palette": st.session_state.get("palette", Palette.VIRIDIS.value),
+                    "palette": st.session_state.get("palette", Palette.BLUES.value),
                 }
             )
             _save_cfg(cfg)
@@ -470,7 +470,7 @@ def _render_dashboard(results_dir: Path) -> None:
                 ("preprocess", []),
                 ("email", ""),
                 ("decimal", "."),
-                ("palette", Palette.VIRIDIS.value),
+                ("palette", Palette.BLUES.value),
             ]:
                 st.session_state[k] = loaded.get(k, default)
             st.rerun()
@@ -483,7 +483,7 @@ def _render_dashboard(results_dir: Path) -> None:
                     "preprocess": st.session_state.get("preprocess", []),
                     "email": st.session_state.get("email", ""),
                     "decimal": st.session_state.get("decimal", "."),
-                    "palette": st.session_state.get("palette", Palette.VIRIDIS.value),
+                    "palette": st.session_state.get("palette", Palette.BLUES.value),
                 }
             )
             _save_cfg(cfg)
@@ -507,7 +507,7 @@ def _render_dashboard(results_dir: Path) -> None:
                         "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
                         "notification_email": email or None,
                         "palette": st.session_state.get(
-                            "palette", Palette.VIRIDIS.value
+                            "palette", Palette.BLUES.value
                         ),
                     }
                     try:
