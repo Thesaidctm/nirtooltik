@@ -60,6 +60,7 @@ class SGConfig(BaseModel):
 class PreprocessConfig(BaseModel):
     steps: List[str] = Field(default_factory=list)
     sg: Optional[SGConfig] = None
+    evaluate_individual: bool = False
 
     class Config:
         extra = "forbid"
