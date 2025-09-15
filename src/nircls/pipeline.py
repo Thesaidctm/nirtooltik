@@ -23,6 +23,7 @@ import yaml  # type: ignore[import-untyped]
 from joblib import dump, load
 from rich.console import Console
 from rich.progress import Progress
+from sklearn.base import clone
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
     accuracy_score,
@@ -45,6 +46,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 from .config_schema import ConfigModel, ValidationError
+from .feature_selection.vip import compute_vip
 from .io import export_xy_xlsx
 from .io import prepare_inputs as _prepare_inputs
 from .io import read_tabular, read_xlsx_xy, summarize_dataset
@@ -65,6 +67,14 @@ from .utils.errors import DataError, ModelError
 from .utils.logging import log_versions, logger
 from .utils.misc import RESULTS_DIR, file_hash
 from .utils.palettes import Palette
+from .utils.plots import (
+    plot_confusion,
+    plot_pls_loadings,
+    plot_pls_weights,
+    plot_reliability,
+    plot_roc_ovr,
+    plot_vip,
+)
 from .utils.plots import plot_confusion, plot_pca_scores, plot_reliability, plot_roc_ovr
 from .utils.qc import detect_identical_spectra, find_duplicates, pca_outliers
 from .utils.split import spxy_split
@@ -707,6 +717,177 @@ def _save_plots(
         )
 
 
+def _append_table(df: pd.DataFrame, path: Path) -> None:
+    """Append rows from ``df`` to ``path`` preserving headers."""
+
+    if df.empty:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    exists = path.exists()
+    mode = "a" if exists else "w"
+    df.to_csv(path, mode=mode, header=not exists, index=False)
+
+
+def _save_pls_diagnostics(
+    *,
+    template_pipe: Pipeline,
+    best_params: Optional[Mapping[str, Any]],
+    X: pd.DataFrame,
+    y: np.ndarray,
+    classes: np.ndarray,
+    file_path: str,
+    target: str,
+    model: str,
+    preprocess_steps: Optional[str],
+    out_dir: Path,
+    interactive: bool,
+    palette: Palette,
+) -> Dict[str, str]:
+    """Export PLS loadings, weights and VIP tables when available."""
+
+    clf_step = (
+        template_pipe.named_steps.get("clf")
+        if hasattr(template_pipe, "named_steps")
+        else None
+    )
+    if clf_step is None or not hasattr(clf_step, "pls"):
+        return {}
+
+    try:
+        pipe = clone(template_pipe)
+    except Exception:  # pragma: no cover - fallback to deepcopy
+        pipe = deepcopy(template_pipe)
+    if best_params:
+        try:
+            pipe.set_params(**best_params)
+        except Exception:  # pragma: no cover - log and continue
+            logger.debug("Could not apply best params for PLS diagnostics", exc_info=True)
+    try:
+        pipe.fit(X.values, y)
+    except Exception:  # pragma: no cover - unable to fit pipeline
+        logger.debug("Could not fit pipeline for PLS diagnostics", exc_info=True)
+        return {}
+
+    clf = pipe.named_steps.get("clf")
+    pls = getattr(clf, "pls", None)
+    if pls is None:
+        return {}
+
+    loadings = getattr(pls, "x_loadings_", None)
+    weights = getattr(pls, "x_weights_", None)
+    if loadings is None or weights is None:
+        return {}
+
+    try:
+        Xt = pipe[:-1].transform(X.values) if len(pipe.steps) > 1 else X.values
+    except Exception:  # pragma: no cover - preprocessing transform failed
+        Xt = X.values
+
+    Y = np.eye(len(classes))[y]
+    try:
+        vip_scores = compute_vip(pls, Xt, Y)
+    except Exception:  # pragma: no cover - VIP computation failed
+        logger.debug("Could not compute VIP scores", exc_info=True)
+        return {}
+
+    figures_dir = out_dir / "figures"
+    stem = Path(file_path).stem
+    if preprocess_steps is not None:
+        label = _normalize_preprocess_value(preprocess_steps)
+        if label:
+            stem = f"{stem}__{label}"
+    base = f"{stem}__{target}__{model}"
+    loadings_base = figures_dir / f"{base}__pls_loadings"
+    weights_base = figures_dir / f"{base}__pls_weights"
+    vip_base = figures_dir / f"{base}__vip"
+
+    loadings_df = plot_pls_loadings(
+        loadings,
+        X.columns,
+        loadings_base,
+        interactive=interactive,
+        palette=palette,
+    )
+    weights_df = plot_pls_weights(
+        weights,
+        X.columns,
+        weights_base,
+        interactive=interactive,
+        palette=palette,
+    )
+    vip_df = plot_vip(
+        vip_scores,
+        X.columns,
+        vip_base,
+        interactive=interactive,
+        palette=palette,
+    )
+
+    preprocess_value = preprocess_steps if preprocess_steps else "None"
+
+    loadings_df.insert(0, "file", file_path)
+    loadings_df.insert(1, "target", target)
+    loadings_df.insert(2, "model", model)
+    loadings_df.insert(3, "preprocess_steps", preprocess_value)
+    weights_df.insert(0, "file", file_path)
+    weights_df.insert(1, "target", target)
+    weights_df.insert(2, "model", model)
+    weights_df.insert(3, "preprocess_steps", preprocess_value)
+    vip_df.insert(0, "file", file_path)
+    vip_df.insert(1, "target", target)
+    vip_df.insert(2, "model", model)
+    vip_df.insert(3, "preprocess_steps", preprocess_value)
+
+    loadings_cols = [
+        "file",
+        "target",
+        "model",
+        "preprocess_steps",
+        "feature",
+        "component",
+        "component_index",
+        "value",
+    ]
+    vip_cols = [
+        "file",
+        "target",
+        "model",
+        "preprocess_steps",
+        "feature",
+        "vip",
+    ]
+
+    _append_table(loadings_df[loadings_cols], out_dir / "pls_loadings.csv")
+    _append_table(weights_df[loadings_cols], out_dir / "pls_weights.csv")
+    _append_table(vip_df[vip_cols], out_dir / "vip.csv")
+
+    def _rel(path: Path) -> str:
+        try:
+            return path.relative_to(out_dir).as_posix()
+        except ValueError:
+            return path.as_posix()
+
+    artifacts: Dict[str, str] = {
+        "pls_loadings_csv": _rel(out_dir / "pls_loadings.csv"),
+        "pls_weights_csv": _rel(out_dir / "pls_weights.csv"),
+        "vip_csv": _rel(out_dir / "vip.csv"),
+        "pls_loadings_png": _rel(loadings_base.with_suffix(".png")),
+        "pls_weights_png": _rel(weights_base.with_suffix(".png")),
+        "vip_png": _rel(vip_base.with_suffix(".png")),
+    }
+    if interactive:
+        for key, base in [
+            ("pls_loadings_html", loadings_base),
+            ("pls_weights_html", weights_base),
+            ("vip_html", vip_base),
+        ]:
+            html_path = base.with_suffix(".html")
+            if html_path.exists():
+                artifacts[key] = _rel(html_path)
+
+    return artifacts
+
+
 def _get_n_components(best_params: Dict[str, Any]) -> Optional[int]:
     """Return the best ``n_components`` value from GridSearchCV parameters."""
 
@@ -954,6 +1135,22 @@ def _run_cv(
                 if n_comp_list:
                     row["n_components"] = int(np.median(n_comp_list))
                 row["preprocess_steps"] = best_steps_repr or "None"
+                pls_artifacts = _save_pls_diagnostics(
+                    template_pipe=pipe,
+                    best_params=best_params,
+                    X=X,
+                    y=y_enc,
+                    classes=classes,
+                    file_path=ds["file"],
+                    target=ds["target"],
+                    model=name,
+                    preprocess_steps=row.get("preprocess_steps"),
+                    out_dir=out_dir,
+                    interactive=interactive,
+                    palette=Palette(cfg.get("palette", Palette.BLUES)),
+                )
+                if pls_artifacts:
+                    row.update(pls_artifacts)
                 if log_memory:
                     mem_end = psutil.Process().memory_info().rss / 1e6
                     logger.debug("memory end %.3f MB", mem_end)
@@ -1163,6 +1360,22 @@ def _run_cv(
             if n_comp_list:
                 row["n_components"] = int(np.median(n_comp_list))
             row["preprocess_steps"] = best_steps_repr or "None"
+            pls_artifacts = _save_pls_diagnostics(
+                template_pipe=pipe,
+                best_params=best_params_example,
+                X=X,
+                y=y_enc,
+                classes=classes,
+                file_path=ds["file"],
+                target=ds["target"],
+                model=name,
+                preprocess_steps=row.get("preprocess_steps"),
+                out_dir=out_dir,
+                interactive=interactive,
+                palette=Palette(cfg.get("palette", Palette.BLUES)),
+            )
+            if pls_artifacts:
+                row.update(pls_artifacts)
             if log_memory:
                 mem_end = psutil.Process().memory_info().rss / 1e6
                 logger.debug("memory end %.3f MB", mem_end)
@@ -1377,6 +1590,22 @@ def _run_holdout(
                     row["Yscramble_mean"] = None
                     row["Yscramble_p95"] = None
             row["preprocess_steps"] = preprocess_steps
+            pls_artifacts = _save_pls_diagnostics(
+                template_pipe=pipe,
+                best_params=gs.best_params_,
+                X=X,
+                y=y_enc,
+                classes=classes,
+                file_path=ds["file"],
+                target=ds["target"],
+                model=name,
+                preprocess_steps=row.get("preprocess_steps"),
+                out_dir=out_dir,
+                interactive=interactive,
+                palette=Palette(cfg.get("palette", Palette.BLUES)),
+            )
+            if pls_artifacts:
+                row.update(pls_artifacts)
             rows.append(row)
             _save_metrics(
                 [row],
