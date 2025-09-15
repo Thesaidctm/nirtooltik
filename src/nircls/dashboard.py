@@ -669,7 +669,9 @@ def _render_dashboard(results_dir: Path) -> None:
         )
         if uploaded is not None:
             decimal = st.text_input(
-                "Separador decimal", st.session_state.get("decimal", ".")
+                "Separador decimal",
+                st.session_state.get("decimal", "."),
+                key="prep_decimal",
             )
             xls = pd.ExcelFile(uploaded)
             sheet = st.selectbox(tr("Planilha"), xls.sheet_names)
@@ -1019,7 +1021,9 @@ def _render_dashboard(results_dir: Path) -> None:
         )
         if spectra_file is not None:
             decimal = st.text_input(
-                "Separador decimal", st.session_state.get("decimal", ".")
+                "Separador decimal",
+                st.session_state.get("decimal", "."),
+                key="spectra_decimal",
             )
 
             st.caption(
@@ -1066,7 +1070,9 @@ def _render_dashboard(results_dir: Path) -> None:
         )
         if pca_file is not None:
             decimal = st.text_input(
-                "Separador decimal", st.session_state.get("decimal", ".")
+                "Separador decimal",
+                st.session_state.get("decimal", "."),
+                key="pca_decimal",
             )
             if st.button(tr("Rodar PCA")):
                 try:
