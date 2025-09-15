@@ -17,33 +17,7 @@ preprocess:
 
 cv:
   random_state: 42
-  strategies:
-    - type: kfold
-      n_splits: [5,10]
-      n_repeats: 2
-    - type: loo
-    - type: holdout
-      test_size: 0.3
-
-
-data:
-  input_path: data/raw/*.xlsx
-  x_sheet: X
-  y_sheet: Y
-  target_cols: all   # ou uma lista explícita de colunas
-  spectral_range: null
-  drop_nans: true
-  out_dir: results
-
-preprocess:
-  steps: [SNV,MSC, SG, EPO, SCALE]
-  sg:
-    window: [3,7,11,15,21,25]
-    polyorder: 2
-    deriv: [1,2]
-
-cv:
-  random_state: 42
+  cv_method: spxy
   strategies:
     - type: kfold
       n_splits: [5,10]
@@ -54,14 +28,8 @@ cv:
 
 models:
   - name: PLSDA
-    grid: {n_components: [5,10], method: [logreg], C: [0.5,1.0,2.0]}
+    grid: {n_components: [5,10], method: [lda, qda], C: [0.5,1.0,2.0]}
     # overfit_check: false  # desativa Y-scrambling (ativo por padrão)
-
-  - name: SVM_RBF
-    grid: {C: [0.5,1.0,2.0], gamma: [scale, auto]}
-
-  - name: SVM_LINEAR
-    grid: {C: [0.5,1.0,2.0]}
 
   - name: RF
     grid: {n_estimators: [200,400], max_depth: [null, 20]}
@@ -69,27 +37,5 @@ models:
   - name: ET
     grid: {n_estimators: [200,400], max_depth: [null, 20]}
 
-  - name: ADABOOST
-    grid: {n_estimators: [50,100], learning_rate: [1.0,0.5]}
-
-  - name: LOGREG
-    grid: {C: [0.5,1.0,2.0]}
-
-  - name: QDA
-    grid: {reg_param: [0.0,0.1]}
-
-  - name: MLP
-    grid:
-      hidden_layer_sizes:
-        - [100]
-        - [200]
-      alpha: [0.0001]
-
   - name: DT
     grid: {max_depth: [null,20], min_samples_split: [2,5]}
-
-  - name: KNN
-    grid: {n_neighbors: [3,5,7]}
-
-  - name: CNN1D
-    grid: {n_filters: [32], kernel_size: [3], n_epochs: [10], patience: [0], device: [cuda]}
