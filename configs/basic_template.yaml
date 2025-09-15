@@ -9,6 +9,8 @@ data:
 
 preprocess:
   steps: [SNV]
+  # Inclua `None` na lista (ex.: steps: [None, SNV, MSC]) para avaliar o
+  # baseline sem pré-processamento junto com as demais etapas.
   # Defina como true para avaliar cada pré-processo isoladamente
   evaluate_individual: false
 

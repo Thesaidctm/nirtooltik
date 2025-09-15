@@ -227,7 +227,17 @@ def _make_preprocess(
     steps = []
     grid = {}
     for name in steps_cfg or []:
-        n = name.upper()
+        if name is None:
+            continue
+        if isinstance(name, str):
+            cleaned = name.strip()
+            if not cleaned:
+                continue
+            if cleaned.lower() in {"none", "raw"}:
+                continue
+            n = cleaned.upper()
+        else:
+            n = str(name).upper()
         if n == "SNV":
             steps.append(("snv", SNV()))
         elif n == "MSC":
@@ -310,6 +320,8 @@ def build_pipeline_from_config(
 def _format_preprocess_step(step: Any) -> str:
     """Return a concise string representation for a preprocessing ``step``."""
 
+    if step is None:
+        return "None"
     if isinstance(step, str):
         cleaned = step.strip()
         if not cleaned:
@@ -363,8 +375,6 @@ def _format_preprocess_steps(steps: Iterable[Any]) -> str:
 
     formatted: List[str] = []
     for step in steps:
-        if step is None:
-            continue
         desc = _format_preprocess_step(step)
         if desc:
             formatted.append(desc)
