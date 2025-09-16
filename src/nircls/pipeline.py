@@ -1105,6 +1105,7 @@ def _run_cv(
     interactive: bool = False,
     n_jobs: int = 1,
     log_memory: bool = False,
+    step_label: Optional[str] = None,
 ) -> None:
     """Run cross-validation for configured datasets and models.
 
@@ -1122,6 +1123,8 @@ def _run_cv(
         Seed applied to inner cross-validation splits.
     n_jobs:
         Number of parallel jobs for ``GridSearchCV``.
+    step_label:
+        Optional label to use when no preprocessing steps are selected.
     """
 
     n_jobs = max(1, n_jobs)
@@ -1334,6 +1337,8 @@ def _run_cv(
                 if n_comp_list:
                     row["n_components"] = int(np.median(n_comp_list))
                 row["preprocess_steps"] = best_steps_repr or "None"
+                if step_label and row["preprocess_steps"] == "None":
+                    row["preprocess_steps"] = step_label
                 pls_artifacts = _save_pls_diagnostics(
                     template_pipe=pipe,
                     best_params=best_params,
@@ -1563,6 +1568,8 @@ def _run_cv(
             if n_comp_list:
                 row["n_components"] = int(np.median(n_comp_list))
             row["preprocess_steps"] = best_steps_repr or "None"
+            if step_label and row["preprocess_steps"] == "None":
+                row["preprocess_steps"] = step_label
             pls_artifacts = _save_pls_diagnostics(
                 template_pipe=pipe,
                 best_params=best_params_example,
@@ -1959,6 +1966,9 @@ def run_multiple_eval(
                 else:
                     variant_steps = [raw_steps]
                 variant_steps_repr = _format_preprocess_steps(variant_steps)
+                variant_step_label = step_label
+                if variant_steps_repr == "None":
+                    variant_step_label = variant_step_label or "RAW"
                 step_desc = step_label or variant_steps_repr or "None"
                 safe_step = None
                 if step_label:
@@ -2016,6 +2026,7 @@ def run_multiple_eval(
                                 interactive=interactive,
                                 n_jobs=n_jobs,
                                 log_memory=log_memory,
+                                step_label=variant_step_label,
                             )
                             metrics = sub / "metrics.json"
                             figs = sub / "figures"
@@ -2071,6 +2082,7 @@ def run_multiple_eval(
                             interactive=interactive,
                             n_jobs=n_jobs,
                             log_memory=log_memory,
+                            step_label=variant_step_label,
                         )
                         metrics = sub / "metrics.json"
                         figs = sub / "figures"
@@ -2281,6 +2293,8 @@ def train_and_save(
             preprocess_steps = _format_preprocess_steps(
                 [v for k, v in best.named_steps.items() if k != "clf"]
             )
+            if preprocess_steps == "None":
+                preprocess_steps = "RAW"
             model_label, method_label = _format_model_and_method_labels(
                 name, pipe, gs.best_params_
             )
