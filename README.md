@@ -149,9 +149,10 @@ data:
 * `preprocess.steps` lista os transformadores aplicados antes do classificador.
   Alguns pré-processos como `SG` aceitam parâmetros (janela, ordem do polinômio,
   derivada) que podem ser fixos ou listas para busca em grade. Nos arquivos de
-  métricas, a coluna `preprocess_steps` registra apenas as etapas realmente
-  empregadas pelo melhor modelo, incluindo os valores finais de seus
-  hiperparâmetros.
+  métricas, as colunas `preprocess_steps` e `result` registram apenas as etapas
+  realmente empregadas pelo melhor modelo, incluindo os valores finais de seus
+  hiperparâmetros. Quando nenhuma etapa é aplicada, o campo `result` recebe o
+  valor `RAW`, indicando dados brutos, e `preprocess_steps` permanece vazio.
 * `models` define um ou mais estimadores; cada um pode receber um dicionário de
   hiperparâmetros (`grid`).
 * `cv.strategies` especifica a estratégia de avaliação: `kfold`, `loo` ou
@@ -473,7 +474,11 @@ diretório segue como `results/<run_id>/<estratégia>/`. Dentro de cada
 estratégia/etapa de pré-processamento são produzidos:
 
 * `metrics.json` – métricas detalhadas por partição;
-* `metrics_summary.csv` – resumo das métricas agregadas;
+* `metrics_summary.csv` – resumo das métricas agregadas (incluindo as colunas
+  `result` e `preprocess_steps`). O campo `result` indica o identificador da
+  variante de pré-processamento e assume `RAW` quando nenhuma etapa foi
+  aplicada; `preprocess_steps` lista as transformações efetivamente empregadas
+  naquele modelo.
 * `report.md` – relatório científico em Markdown com tabelas, figuras e
   metadados de citação;
 * `report.pdf` – versão em PDF quando `pandoc` ou `weasyprint` estiver
@@ -498,6 +503,18 @@ repositórios. Para distribuir os resultados, basta enviar o `report.md` junto c
 a pasta `figures/` (que contém as imagens referenciadas no relatório) ou a
 versão PDF (`report.pdf`). O cabeçalho YAML traz título, data e versão do
 projeto, facilitando citações padronizadas.
+
+Um trecho típico de `metrics_summary.csv`:
+
+| result  | model                       | preprocess_steps                                                       | BalancedAcc_mean | F1_macro_mean |
+|---------|-----------------------------|-----------------------------------------------------------------------|------------------|---------------|
+| RAW     | PLS-LOGREG (n_components=2) | — (nenhum)                                                            | 0.842            | 0.836         |
+| snv     | PLS-LOGREG (n_components=2) | Standard Normal Variate                                               | 0.871            | 0.863         |
+| snv_sg  | PLS-LOGREG (n_components=2) | Standard Normal Variate<br>Savitzky-Golay (window=7, poly=2, deriv=1) | 0.889            | 0.880         |
+
+Os valores são ilustrativos e demonstram que `RAW` aparece em `result` quando
+nenhum pré-processamento foi aplicado, enquanto as etapas efetivas são descritas
+na coluna `preprocess_steps`.
 
 ## Métricas de calibração e validação
 
