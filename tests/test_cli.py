@@ -139,10 +139,30 @@ def test_summary_cli_aggregates_results(tmp_path: pathlib.Path) -> None:
     run1.mkdir()
     run2.mkdir()
     (run1 / "metrics.json").write_text(
-        json.dumps([{"target": "t", "model": "M", "accuracy_mean": 0.9}])
+        json.dumps(
+            [
+                {
+                    "target": "t",
+                    "model": "M",
+                    "accuracy_mean": 0.9,
+                    "preprocess_steps": ["SNV"],
+                    "result": "snv",
+                }
+            ]
+        )
     )
     (run2 / "metrics.json").write_text(
-        json.dumps([{"target": "t", "model": "M", "accuracy_mean": 0.8}])
+        json.dumps(
+            [
+                {
+                    "target": "t",
+                    "model": "M",
+                    "accuracy_mean": 0.8,
+                    "preprocess_steps": ["MSC"],
+                    "result": "msc",
+                }
+            ]
+        )
     )
     proc = subprocess.run(
         [
@@ -163,6 +183,14 @@ def test_summary_cli_aggregates_results(tmp_path: pathlib.Path) -> None:
     df = pd.read_fwf(io.StringIO(proc.stdout))
     assert len(df) == 2
     assert set(df["run"]) == {"run1", "run2"}
+    assert "preprocess_steps" in df.columns
+    assert "result" in df.columns
+    assert set(df["result"].str.strip()) == {"snv", "msc"}
+    preprocess_values = set(df["preprocess_steps"].str.strip())
+    assert preprocess_values == {
+        "Standard Normal Variate",
+        "Multiplicative Scatter Correction",
+    }
 
 
 def test_load_preprocess_steps_handles_multiple_sequences(
