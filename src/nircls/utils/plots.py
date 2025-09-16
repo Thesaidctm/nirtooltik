@@ -196,6 +196,27 @@ def plot_pls_loadings(
         raise
 
 
+def plot_pls_y_loadings(
+    values: np.ndarray,
+    feature_names: Sequence[object] | pd.Index | None,
+    out_base: Path,
+    interactive: bool = False,
+    *,
+    palette: Palette = Palette.VIRIDIS,
+) -> pd.DataFrame:
+    """Plot PLS Y loadings and return the underlying values."""
+
+    return _plot_pls_components(
+        values,
+        feature_names,
+        out_base,
+        interactive,
+        "PLS Y Loadings",
+        "Loading",
+        palette=palette,
+    )
+
+
 def plot_pls_weights(
     weights: np.ndarray,
     feature_names: Sequence[object] | pd.Index | None,

@@ -10,6 +10,7 @@ from joblib import dump
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.pipeline import Pipeline
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))  # noqa: E402
 from nircls.feature_selection.vip import compute_vip  # noqa: E402
@@ -20,14 +21,68 @@ from nircls.pipeline import (  # noqa: E402
     run_multiple_eval,
     train_and_save,
     _format_preprocess_step,
+    _save_pls_diagnostics,
 )
+from nircls.models.plsda import PLSDA  # noqa: E402
 from nircls.utils.errors import DataError, ModelError  # noqa: E402
+from nircls.utils.palettes import Palette  # noqa: E402
 
 METHODS = ["logreg", "lda"]
 
 
 def _sanitize_step_label(label: str) -> str:
     return re.sub(r"[^\w.-]+", "_", label.lower()).strip("_")
+
+
+def test_save_pls_diagnostics_includes_y_loadings(tmp_path, monkeypatch):
+    rng = np.random.RandomState(0)
+    X = pd.DataFrame(rng.rand(12, 4), columns=[f"f{i}" for i in range(4)])
+    y = np.array([0, 1] * 6)
+    classes = np.array(["class0", "class1"])
+    template_pipe = Pipeline([("clf", PLSDA(n_components=2, method="logreg"))])
+
+    def fake_export(fig, out_base, interactive):
+        out_base.parent.mkdir(parents=True, exist_ok=True)
+        out_base.with_suffix(".png").write_text("png")
+        if interactive:
+            out_base.with_suffix(".html").write_text("<html></html>")
+
+    monkeypatch.setattr("nircls.utils.plots._export", fake_export)
+
+    artifacts = _save_pls_diagnostics(
+        template_pipe=template_pipe,
+        best_params=None,
+        X=X,
+        y=y,
+        classes=classes,
+        file_path="dataset.csv",
+        target="target",
+        model="PLSDA",
+        preprocess_steps=None,
+        out_dir=tmp_path,
+        interactive=True,
+        palette=Palette.VIRIDIS,
+    )
+
+    assert "pls_y_loadings_csv" in artifacts
+    assert "pls_y_loadings_png" in artifacts
+    assert "pls_y_loadings_html" in artifacts
+
+    y_loadings_csv = tmp_path / artifacts["pls_y_loadings_csv"]
+    assert y_loadings_csv.exists()
+    y_loadings_df = pd.read_csv(y_loadings_csv)
+    assert not y_loadings_df.empty
+    assert set(y_loadings_df["feature"]) == {"class0", "class1"}
+    assert set(y_loadings_df["component"]) == {"Comp 1", "Comp 2"}
+    assert set(y_loadings_df["file"]) == {"dataset.csv"}
+    assert set(y_loadings_df["target"]) == {"target"}
+    assert set(y_loadings_df["model"]) == {"PLSDA"}
+    assert set(y_loadings_df["preprocess_steps"].fillna("None")) == {"None"}
+
+    png_path = tmp_path / artifacts["pls_y_loadings_png"]
+    html_path = tmp_path / artifacts["pls_y_loadings_html"]
+    assert png_path.exists()
+    assert html_path.exists()
 
 
 @pytest.mark.parametrize("method", METHODS)
