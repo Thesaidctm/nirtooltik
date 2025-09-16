@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 from typing import List
+
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
+
+
+def _row_hashes(df: pd.DataFrame) -> pd.Series:
+    """Compute deterministic hashes for each row in ``df``."""
+
+    return pd.util.hash_pandas_object(df, index=False).groupby(level=0).sum()
 
 
 def find_duplicates(df: pd.DataFrame) -> pd.DataFrame:
@@ -21,7 +28,7 @@ def find_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     pandas.DataFrame
         Subset of ``df`` containing the duplicated rows.
     """
-    row_hashes = pd.util.hash_pandas_object(df, index=False).groupby(level=0).sum()
+    row_hashes = _row_hashes(df)
     dup_idx = row_hashes[row_hashes.duplicated()].index
     return df.loc[dup_idx]
 
@@ -39,7 +46,7 @@ def detect_identical_spectra(X: pd.DataFrame) -> List[List[int]]:
     list of list of int
         Groups of row indices where spectra are identical.
     """
-    row_hashes = pd.util.hash_pandas_object(X, index=False).groupby(level=0).sum()
+    row_hashes = _row_hashes(X)
     groups = {}
     for idx, h in row_hashes.items():
         groups.setdefault(h, []).append(int(idx))
