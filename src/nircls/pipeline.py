@@ -439,6 +439,106 @@ def _update_row_with_best_params(
         row[f"best_{key}"] = _coerce_param_value(value)
 
 
+def _extract_plsda_method_from_params(
+    best_params: Optional[Mapping[str, Any]]
+) -> Optional[str]:
+    """Return the PLS-DA classifier method recorded in ``best_params`` if any."""
+
+    if not best_params:
+        return None
+    for key in ("clf__method", "clf__estimator__method"):
+        value = best_params.get(key)
+        if value is not None:
+            return str(value)
+    return None
+
+
+def _resolve_plsda_estimator(estimator: Any) -> Any:
+    """Unwrap nested estimators and return the underlying PLS-DA instance."""
+
+    current = estimator
+    while isinstance(current, CalibratedClassifierCV):
+        current = current.estimator
+    if isinstance(current, Pipeline):
+        clf = current.named_steps.get("clf")
+        if clf is None:
+            return current
+        return _resolve_plsda_estimator(clf)
+    return current
+
+
+def _get_plsda_method_details(
+    name: str, estimator: Any, best_params: Optional[Mapping[str, Any]]
+) -> Optional[Tuple[str, str]]:
+    """Return normalized slug and display label for a PLS-DA classifier method."""
+
+    if not name:
+        return None
+    normalized = re.sub(r"[^A-Za-z]", "", name).upper()
+    if "PLSDA" not in normalized:
+        return None
+    method = _extract_plsda_method_from_params(best_params)
+    if method is None:
+        core = _resolve_plsda_estimator(estimator)
+        method = getattr(core, "method", None)
+    if not method:
+        return None
+    method_str = str(method).strip()
+    if not method_str:
+        return None
+    method_slug = re.sub(r"[^0-9A-Za-z]+", "_", method_str.upper()).strip("_")
+    if not method_slug:
+        return None
+    display_core = method_slug.replace("_", "-")
+    if display_core.startswith("PLS"):
+        display_label = display_core
+    else:
+        display_label = f"PLS-{display_core}"
+    return method_slug, display_label
+
+
+def _format_model_label(
+    name: str,
+    estimator: Any,
+    best_params: Optional[Mapping[str, Any]],
+    *,
+    method_details: Optional[Tuple[str, str]] = None,
+) -> str:
+    """Include the PLS-DA classifier method in the model label when available."""
+
+    if not name:
+        return name
+    parts = name.split("__", 1)
+    base = parts[0]
+    suffix = f"__{parts[1]}" if len(parts) > 1 else ""
+    normalized = re.sub(r"[^A-Za-z]", "", base).upper()
+    if "PLSDA" not in normalized:
+        return name
+    if method_details is None:
+        method_details = _get_plsda_method_details(name, estimator, best_params)
+    if not method_details:
+        return name
+    method_slug, _ = method_details
+    if base.upper().endswith(f"_{method_slug}"):
+        new_base = base
+    else:
+        new_base = f"{base.rstrip('_')}_{method_slug}"
+    return f"{new_base}{suffix}"
+
+
+def _format_model_and_method_labels(
+    name: str, estimator: Any, best_params: Optional[Mapping[str, Any]]
+) -> Tuple[str, Optional[str]]:
+    """Return the model label and human-readable classifier method label."""
+
+    method_details = _get_plsda_method_details(name, estimator, best_params)
+    model_label = _format_model_label(
+        name, estimator, best_params, method_details=method_details
+    )
+    method_label = method_details[1] if method_details else None
+    return model_label, method_label
+
+
 def _save_metrics(
     rows: List[Dict[str, Any]],
     out_dir: Path,
@@ -1096,11 +1196,15 @@ def _run_cv(
                 )
                 y_true_all.append(y_enc)
                 y_pred_all.append(yhat)
+                model_label, method_label = _format_model_and_method_labels(
+                    name, pipe, best_params
+                )
                 row = {
                     "file": ds["file"],
                     "target": ds["target"],
-                    "model": name,
+                    "model": model_label,
                     "calibrated": bool(m_cfg.get("calibration")),
+                    "method": method_label,
                 }
                 row.update(
                     {f"{k}_mean": float(np.mean(v)) for k, v in scores_val.items() if v}
@@ -1143,7 +1247,7 @@ def _run_cv(
                     classes=classes,
                     file_path=ds["file"],
                     target=ds["target"],
-                    model=name,
+                    model=model_label,
                     preprocess_steps=row.get("preprocess_steps"),
                     out_dir=out_dir,
                     interactive=interactive,
@@ -1169,7 +1273,7 @@ def _run_cv(
                 _save_plots(
                     ds["file"],
                     ds["target"],
-                    name,
+                    model_label,
                     classes,
                     out_dir,
                     y_true,
@@ -1295,11 +1399,15 @@ def _run_cv(
                 if log_memory:
                     mem_fold_end = psutil.Process().memory_info().rss / 1e6
                     logger.debug("fold end %.3f MB", mem_fold_end)
+            model_label, method_label = _format_model_and_method_labels(
+                name, pipe, best_params_example
+            )
             row = {
                 "file": ds["file"],
                 "target": ds["target"],
-                "model": name,
+                "model": model_label,
                 "calibrated": bool(m_cfg.get("calibration")),
+                "method": method_label,
             }
             row.update(
                 {f"{k}_mean": float(np.mean(v)) for k, v in scores_val.items() if v}
@@ -1368,7 +1476,7 @@ def _run_cv(
                 classes=classes,
                 file_path=ds["file"],
                 target=ds["target"],
-                model=name,
+                model=model_label,
                 preprocess_steps=row.get("preprocess_steps"),
                 out_dir=out_dir,
                 interactive=interactive,
@@ -1394,7 +1502,7 @@ def _run_cv(
             _save_plots(
                 ds["file"],
                 ds["target"],
-                name,
+                model_label,
                 classes,
                 out_dir,
                 y_true,
@@ -1523,11 +1631,15 @@ def _run_holdout(
                 best.fit(Xtr, ytr)
             yhat = best.predict(Xte)
             yhat_tr = best.predict(Xtr)
+            model_label, method_label = _format_model_and_method_labels(
+                name, pipe, gs.best_params_
+            )
             row = {
                 "file": ds["file"],
                 "target": ds["target"],
-                "model": name,
+                "model": model_label,
                 "calibrated": bool(calib_cfg),
+                "method": method_label,
                 "F1-macro_mean": float(f1_score(yte, yhat, average="macro")),
                 "BalancedAcc_mean": float(balanced_accuracy_score(yte, yhat)),
                 "Accuracy_mean": float(accuracy_score(yte, yhat)),
@@ -1598,7 +1710,7 @@ def _run_holdout(
                 classes=classes,
                 file_path=ds["file"],
                 target=ds["target"],
-                model=name,
+                model=model_label,
                 preprocess_steps=row.get("preprocess_steps"),
                 out_dir=out_dir,
                 interactive=interactive,
@@ -1615,7 +1727,7 @@ def _run_holdout(
             _save_plots(
                 ds["file"],
                 ds["target"],
-                name,
+                model_label,
                 classes,
                 out_dir,
                 yte,
@@ -2073,6 +2185,9 @@ def train_and_save(
             preprocess_steps = _format_preprocess_steps(
                 [v for k, v in best.named_steps.items() if k != "clf"]
             )
+            model_label, method_label = _format_model_and_method_labels(
+                name, pipe, gs.best_params_
+            )
             calib_cfg = model_cfg.get("calibration") if model_cfg else None
             if calib_cfg:
                 best = CalibratedClassifierCV(
@@ -2086,15 +2201,16 @@ def train_and_save(
             dump(best, out_dir / "model.joblib")
             export_xy_xlsx(out_dir / "prepared_XY.xlsx", X, y)
             (out_dir / "model_card.md").write_text(
-                f"# Model Card\nBest model: {name}\nBest params: {gs.best_params_}\n",
+                f"# Model Card\nBest model: {model_label}\nBest params: {gs.best_params_}\n",
             )
 
             yhat = best.predict(X.values)
             row = {
                 "file": ds["file"],
                 "target": ds["target"],
-                "model": name,
+                "model": model_label,
                 "calibrated": bool(calib_cfg),
+                "method": method_label,
                 "F1-macro_mean": float(f1_score(y_enc, yhat, average="macro")),
                 "BalancedAcc_mean": float(balanced_accuracy_score(y_enc, yhat)),
                 "Accuracy_mean": float(accuracy_score(y_enc, yhat)),
@@ -2132,7 +2248,7 @@ def train_and_save(
             _save_plots(
                 ds["file"],
                 ds["target"],
-                name,
+                model_label,
                 le.classes_,
                 out_dir,
                 y_enc,
@@ -2157,7 +2273,7 @@ def train_and_save(
                 except Exception:  # pragma: no cover - best effort
                     logger.debug("Could not log DVC metadata", exc_info=True)
                 params = {
-                    "model": name,
+                    "model": model_label,
                     "preprocess_steps": _format_preprocess_steps(list(steps_cfg)),
                     "cv_method": cv_method,
                 }
