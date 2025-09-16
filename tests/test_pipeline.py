@@ -405,7 +405,32 @@ def test_summarize_dataset_columns(tmp_path):
         "spectral_min",
         "spectral_max",
         "n_nans",
+        "preprocess_steps",
+        "result",
     }
+    assert summary["preprocess_steps"].isna().all()
+    assert set(summary["result"]) == {"RAW"}
+
+
+def test_summarize_dataset_with_preprocess_info():
+    X = pd.DataFrame([[1.0, 2.0], [3.0, 4.0]], columns=["100", "101"])
+    y = pd.Series(["A", "B"], dtype="category")
+    ds_list = [
+        {
+            "X": X,
+            "Y": y,
+            "target": "species",
+            "n_nans": 0,
+            "preprocess_steps": ["SNV", "SG"],
+            "result": "snv_sg",
+        }
+    ]
+    summary = summarize_dataset(ds_list)
+    assert summary.loc[summary["class"] == "A", "preprocess_steps"].iloc[0] == [
+        "SNV",
+        "SG",
+    ]
+    assert summary["result"].unique().tolist() == ["snv_sg"]
 
 
 @pytest.mark.parametrize("method", METHODS)
