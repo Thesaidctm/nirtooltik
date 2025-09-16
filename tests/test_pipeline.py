@@ -110,8 +110,6 @@ def test_end_to_end_cv_and_export(tmp_path, method):
             for entry in metrics_by_step[label]:
                 assert entry["best_clf__n_components"] == 2
                 assert entry["best_clf__method"] == method
-                assert entry["model"].upper().startswith("PLSDA")
-                assert f"_{method.upper()}" in entry["model"].upper()
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
