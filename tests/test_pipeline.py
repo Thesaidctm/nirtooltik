@@ -101,6 +101,24 @@ def test_end_to_end_cv_and_export(tmp_path, method):
         assert any((strat_dir / "figures").glob("*.png"))
         assert (strat_dir / "report.md").exists()
         assert (strat_dir / "astm_classification.json").exists()
+        tables_dir = strat_dir / "results"
+        assert (tables_dir / "pls_loadings.csv").exists()
+        assert (tables_dir / "pls_weights.csv").exists()
+        assert (tables_dir / "vip.csv").exists()
+        assert (tables_dir / "pls_x_scores.csv").exists()
+        assert (tables_dir / "pls_y_scores.csv").exists()
+        x_scores_df = pd.read_csv(tables_dir / "pls_x_scores.csv")
+        y_scores_df = pd.read_csv(tables_dir / "pls_y_scores.csv")
+        expected_score_cols = {
+            "sample",
+            "sample_index",
+            "y_true",
+            "component",
+            "component_index",
+            "value",
+        }
+        assert expected_score_cols.issubset(x_scores_df.columns)
+        assert expected_score_cols.issubset(y_scores_df.columns)
         with open(metrics_file) as f:
             metrics_json = json.load(f)
         assert metrics_json, "metrics.json should contain at least one entry"
@@ -126,6 +144,12 @@ def test_end_to_end_cv_and_export(tmp_path, method):
     assert (train_dir / "model_card.md").exists()
     assert (train_dir / "classes.json").exists()
     assert (train_dir / "astm_classification.json").exists()
+    train_tables = train_dir / "results"
+    assert (train_tables / "pls_loadings.csv").exists()
+    assert (train_tables / "pls_weights.csv").exists()
+    assert (train_tables / "vip.csv").exists()
+    assert (train_tables / "pls_x_scores.csv").exists()
+    assert (train_tables / "pls_y_scores.csv").exists()
 
 
 def test_metrics_reflect_applied_preprocess_steps(tmp_path):

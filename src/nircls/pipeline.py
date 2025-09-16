@@ -836,6 +836,52 @@ def _append_table(df: pd.DataFrame, path: Path) -> None:
     df.to_csv(path, mode=mode, header=not exists, index=False)
 
 
+def _build_pls_scores_df(
+    scores: Optional[np.ndarray], index: pd.Index, labels: np.ndarray
+) -> pd.DataFrame:
+    """Return a tidy DataFrame with PLS scores per sample and component."""
+
+    columns = [
+        "sample",
+        "sample_index",
+        "y_true",
+        "component",
+        "component_index",
+        "value",
+    ]
+    if scores is None:
+        return pd.DataFrame(columns=columns)
+    arr = np.asarray(scores, dtype=float)
+    if arr.ndim != 2:
+        raise ValueError("scores must be a 2-D array")
+    n_samples, n_components = arr.shape
+    if n_samples == 0 or n_components == 0:
+        return pd.DataFrame(columns=columns)
+    idx = pd.Index(index)
+    samples = [str(v) for v in idx.tolist()]
+    if len(samples) != n_samples:
+        raise ValueError("Number of samples does not match scores shape")
+    lab_arr = np.asarray(labels)
+    if lab_arr.shape[0] != n_samples:
+        raise ValueError("Number of labels does not match scores shape")
+    records: list[dict[str, object]] = []
+    for sample_idx, (sample, label, row) in enumerate(
+        zip(samples, lab_arr, arr, strict=False)
+    ):
+        for comp_idx, value in enumerate(row, start=1):
+            records.append(
+                {
+                    "sample": sample,
+                    "sample_index": sample_idx,
+                    "y_true": label,
+                    "component": f"Comp {comp_idx}",
+                    "component_index": comp_idx,
+                    "value": float(value),
+                }
+            )
+    return pd.DataFrame.from_records(records, columns=columns)
+
+
 def _save_pls_diagnostics(
     *,
     template_pipe: Pipeline,
@@ -883,6 +929,8 @@ def _save_pls_diagnostics(
 
     loadings = getattr(pls, "x_loadings_", None)
     weights = getattr(pls, "x_weights_", None)
+    x_scores = getattr(pls, "x_scores_", None)
+    y_scores = getattr(pls, "y_scores_", None)
     if loadings is None or weights is None:
         return {}
 
@@ -933,6 +981,17 @@ def _save_pls_diagnostics(
 
     preprocess_value = preprocess_steps if preprocess_steps else "None"
 
+    y_arr = np.asarray(y)
+    y_int = y_arr.astype(int, copy=False)
+    classes_arr = np.asarray(classes)
+    try:
+        y_labels = classes_arr[y_int]
+    except Exception:
+        y_labels = y_arr
+    index = X.index if isinstance(X, pd.DataFrame) else pd.RangeIndex(len(y_arr))
+    x_scores_df = _build_pls_scores_df(x_scores, index, y_labels)
+    y_scores_df = _build_pls_scores_df(y_scores, index, y_labels)
+
     loadings_df.insert(0, "file", file_path)
     loadings_df.insert(1, "target", target)
     loadings_df.insert(2, "model", model)
@@ -945,6 +1004,14 @@ def _save_pls_diagnostics(
     vip_df.insert(1, "target", target)
     vip_df.insert(2, "model", model)
     vip_df.insert(3, "preprocess_steps", preprocess_value)
+    x_scores_df.insert(0, "file", file_path)
+    x_scores_df.insert(1, "target", target)
+    x_scores_df.insert(2, "model", model)
+    x_scores_df.insert(3, "preprocess_steps", preprocess_value)
+    y_scores_df.insert(0, "file", file_path)
+    y_scores_df.insert(1, "target", target)
+    y_scores_df.insert(2, "model", model)
+    y_scores_df.insert(3, "preprocess_steps", preprocess_value)
 
     loadings_cols = [
         "file",
@@ -964,10 +1031,26 @@ def _save_pls_diagnostics(
         "feature",
         "vip",
     ]
+    score_cols = [
+        "file",
+        "target",
+        "model",
+        "preprocess_steps",
+        "sample",
+        "sample_index",
+        "y_true",
+        "component",
+        "component_index",
+        "value",
+    ]
 
-    _append_table(loadings_df[loadings_cols], out_dir / "pls_loadings.csv")
-    _append_table(weights_df[loadings_cols], out_dir / "pls_weights.csv")
-    _append_table(vip_df[vip_cols], out_dir / "vip.csv")
+    results_dir = out_dir / "results"
+
+    _append_table(loadings_df[loadings_cols], results_dir / "pls_loadings.csv")
+    _append_table(weights_df[loadings_cols], results_dir / "pls_weights.csv")
+    _append_table(vip_df[vip_cols], results_dir / "vip.csv")
+    _append_table(x_scores_df[score_cols], results_dir / "pls_x_scores.csv")
+    _append_table(y_scores_df[score_cols], results_dir / "pls_y_scores.csv")
 
     def _rel(path: Path) -> str:
         try:
@@ -976,13 +1059,17 @@ def _save_pls_diagnostics(
             return path.as_posix()
 
     artifacts: Dict[str, str] = {
-        "pls_loadings_csv": _rel(out_dir / "pls_loadings.csv"),
-        "pls_weights_csv": _rel(out_dir / "pls_weights.csv"),
-        "vip_csv": _rel(out_dir / "vip.csv"),
+        "pls_loadings_csv": _rel(results_dir / "pls_loadings.csv"),
+        "pls_weights_csv": _rel(results_dir / "pls_weights.csv"),
+        "vip_csv": _rel(results_dir / "vip.csv"),
         "pls_loadings_png": _rel(loadings_base.with_suffix(".png")),
         "pls_weights_png": _rel(weights_base.with_suffix(".png")),
         "vip_png": _rel(vip_base.with_suffix(".png")),
     }
+    if (results_dir / "pls_x_scores.csv").exists():
+        artifacts["pls_x_scores_csv"] = _rel(results_dir / "pls_x_scores.csv")
+    if (results_dir / "pls_y_scores.csv").exists():
+        artifacts["pls_y_scores_csv"] = _rel(results_dir / "pls_y_scores.csv")
     if interactive:
         for key, base in [
             ("pls_loadings_html", loadings_base),
@@ -2240,6 +2327,22 @@ def train_and_save(
                 row["ECE_mean"] = float(
                     expected_calibration_error(y_enc, proba, n_bins=15)
                 )
+            pls_artifacts = _save_pls_diagnostics(
+                template_pipe=pipe,
+                best_params=gs.best_params_,
+                X=X,
+                y=y_enc,
+                classes=le.classes_,
+                file_path=ds["file"],
+                target=ds["target"],
+                model=model_label,
+                preprocess_steps=row.get("preprocess_steps"),
+                out_dir=out_dir,
+                interactive=interactive,
+                palette=Palette(cfg.get("palette", Palette.BLUES)),
+            )
+            if pls_artifacts:
+                row.update(pls_artifacts)
             if log_memory:
                 mem_end = psutil.Process().memory_info().rss / 1e6
                 logger.debug("memory end %.3f MB", mem_end)
