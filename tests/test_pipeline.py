@@ -409,7 +409,7 @@ def test_summarize_dataset_columns(tmp_path):
     ds_list = prepare_inputs(cfg)
     assert ds_list[0]["Y"].dtype.name == "category"
     summary = summarize_dataset(ds_list)
-    assert set(summary.columns) == {
+    expected_columns = {
         "target",
         "class",
         "count",
@@ -419,8 +419,28 @@ def test_summarize_dataset_columns(tmp_path):
         "preprocess_steps",
         "result",
     }
+    assert set(summary.columns) == expected_columns
     assert summary["preprocess_steps"].isna().all()
     assert set(summary["result"]) == {"RAW"}
+
+
+def test_summarize_dataset_defaults_to_raw_result():
+    X = pd.DataFrame([[1.0, 2.0], [3.0, 4.0]], columns=["100", "101"])
+    y = pd.Series(["A", "B"], dtype="category")
+    ds_list = [
+        {
+            "X": X,
+            "Y": y,
+            "target": "species",
+            "n_nans": 0,
+            "preprocess_steps": None,
+        }
+    ]
+
+    summary = summarize_dataset(ds_list)
+
+    assert summary["preprocess_steps"].isna().all()
+    assert summary["result"].unique().tolist() == ["RAW"]
 
 
 def test_summarize_dataset_with_preprocess_info():
