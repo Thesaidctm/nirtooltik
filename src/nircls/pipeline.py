@@ -71,6 +71,7 @@ from .utils.plots import (
     plot_confusion,
     plot_pls_loadings,
     plot_pls_weights,
+    plot_pls_y_loadings,
     plot_reliability,
     plot_roc_ovr,
     plot_vip,
@@ -897,7 +898,7 @@ def _save_pls_diagnostics(
     interactive: bool,
     palette: Palette,
 ) -> Dict[str, str]:
-    """Export PLS loadings, weights and VIP tables when available."""
+    """Export PLS loadings, Y loadings, weights and VIP tables when available."""
 
     clf_step = (
         template_pipe.named_steps.get("clf")
@@ -929,6 +930,7 @@ def _save_pls_diagnostics(
 
     loadings = getattr(pls, "x_loadings_", None)
     weights = getattr(pls, "x_weights_", None)
+    y_loadings = getattr(pls, "y_loadings_", None)
     x_scores = getattr(pls, "x_scores_", None)
     y_scores = getattr(pls, "y_scores_", None)
     if loadings is None or weights is None:
@@ -956,6 +958,9 @@ def _save_pls_diagnostics(
     loadings_base = figures_dir / f"{base}__pls_loadings"
     weights_base = figures_dir / f"{base}__pls_weights"
     vip_base = figures_dir / f"{base}__vip"
+    y_loadings_base: Optional[Path] = None
+    if y_loadings is not None:
+        y_loadings_base = figures_dir / f"{base}__pls_y_loadings"
 
     loadings_df = plot_pls_loadings(
         loadings,
@@ -978,6 +983,15 @@ def _save_pls_diagnostics(
         interactive=interactive,
         palette=palette,
     )
+    y_loadings_df: Optional[pd.DataFrame] = None
+    if y_loadings_base is not None:
+        y_loadings_df = plot_pls_y_loadings(
+            y_loadings,
+            classes,
+            y_loadings_base,
+            interactive=interactive,
+            palette=palette,
+        )
 
     preprocess_value = preprocess_steps if preprocess_steps else "None"
 
@@ -1012,6 +1026,11 @@ def _save_pls_diagnostics(
     y_scores_df.insert(1, "target", target)
     y_scores_df.insert(2, "model", model)
     y_scores_df.insert(3, "preprocess_steps", preprocess_value)
+    if y_loadings_df is not None:
+        y_loadings_df.insert(0, "file", file_path)
+        y_loadings_df.insert(1, "target", target)
+        y_loadings_df.insert(2, "model", model)
+        y_loadings_df.insert(3, "preprocess_steps", preprocess_value)
 
     loadings_cols = [
         "file",
@@ -1045,7 +1064,10 @@ def _save_pls_diagnostics(
     ]
 
     results_dir = out_dir / "results"
+    y_loadings_csv = results_dir / "pls_y_loadings.csv"
 
+    if y_loadings_df is not None:
+        _append_table(y_loadings_df[loadings_cols], y_loadings_csv)
     _append_table(loadings_df[loadings_cols], results_dir / "pls_loadings.csv")
     _append_table(weights_df[loadings_cols], results_dir / "pls_weights.csv")
     _append_table(vip_df[vip_cols], results_dir / "vip.csv")
@@ -1066,16 +1088,26 @@ def _save_pls_diagnostics(
         "pls_weights_png": _rel(weights_base.with_suffix(".png")),
         "vip_png": _rel(vip_base.with_suffix(".png")),
     }
+    if y_loadings_df is not None:
+        if not y_loadings_df.empty and y_loadings_base is not None:
+            artifacts["pls_y_loadings_png"] = _rel(
+                y_loadings_base.with_suffix(".png")
+            )
+        if y_loadings_csv.exists():
+            artifacts["pls_y_loadings_csv"] = _rel(y_loadings_csv)
     if (results_dir / "pls_x_scores.csv").exists():
         artifacts["pls_x_scores_csv"] = _rel(results_dir / "pls_x_scores.csv")
     if (results_dir / "pls_y_scores.csv").exists():
         artifacts["pls_y_scores_csv"] = _rel(results_dir / "pls_y_scores.csv")
     if interactive:
-        for key, base in [
+        html_targets = [
             ("pls_loadings_html", loadings_base),
             ("pls_weights_html", weights_base),
             ("vip_html", vip_base),
-        ]:
+        ]
+        if y_loadings_base is not None:
+            html_targets.append(("pls_y_loadings_html", y_loadings_base))
+        for key, base in html_targets:
             html_path = base.with_suffix(".html")
             if html_path.exists():
                 artifacts[key] = _rel(html_path)

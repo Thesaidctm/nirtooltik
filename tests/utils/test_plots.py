@@ -6,7 +6,12 @@ import plotly.graph_objects as go
 import pytest
 
 from nircls.utils.palettes import PALETTE_MAP, Palette
-from nircls.utils.plots import _export, plot_pls_loadings, plot_pls_weights
+from nircls.utils.plots import (
+    _export,
+    plot_pls_loadings,
+    plot_pls_weights,
+    plot_pls_y_loadings,
+)
 
 
 def _figure() -> go.Figure:
@@ -162,6 +167,47 @@ def test_plot_pls_loadings_no_components_skips_export(tmp_path, monkeypatch):
 
     assert df.empty
     assert called is False
+
+
+def test_plot_pls_y_loadings_returns_dataframe_and_exports(tmp_path, monkeypatch):
+    export_args = {}
+
+    def fake_export(fig, out_base, interactive):
+        export_args["fig"] = fig
+        export_args["out_base"] = out_base
+        export_args["interactive"] = interactive
+
+    monkeypatch.setattr("nircls.utils.plots._export", fake_export)
+
+    values = np.array([[0.1, 0.2], [0.3, 0.4]])
+    df = plot_pls_y_loadings(
+        values,
+        feature_names=["A", "B"],
+        out_base=tmp_path / "y_loadings",
+        interactive=True,
+    )
+
+    expected = pd.DataFrame.from_records(
+        [
+            {"feature": "A", "component": "Comp 1", "component_index": 1, "value": 0.1},
+            {"feature": "B", "component": "Comp 1", "component_index": 1, "value": 0.3},
+            {"feature": "A", "component": "Comp 2", "component_index": 2, "value": 0.2},
+            {"feature": "B", "component": "Comp 2", "component_index": 2, "value": 0.4},
+        ]
+    )
+    pd.testing.assert_frame_equal(df, expected)
+
+    assert export_args["out_base"] == tmp_path / "y_loadings"
+    assert export_args["interactive"] is True
+    fig = export_args["fig"]
+    assert fig.layout.title.text == "PLS Y Loadings"
+    assert fig.layout.yaxis.title.text == "Loading"
+    assert list(fig.layout.colorway) == PALETTE_MAP[Palette.VIRIDIS]
+
+
+def test_plot_pls_y_loadings_requires_2d_array(tmp_path):
+    with pytest.raises(ValueError, match="values must be a 2-D array"):
+        plot_pls_y_loadings(np.array([1.0, 2.0]), None, tmp_path / "y_loadings")
 
 
 def test_plot_pls_weights_requires_2d_array(tmp_path):
