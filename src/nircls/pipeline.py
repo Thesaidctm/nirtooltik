@@ -565,6 +565,10 @@ def _save_metrics(
         row["preprocess_steps"] = _normalize_preprocess_value(
             row.get("preprocess_steps")
         )
+        if row.get("preprocess_steps") == "RAW":
+            row["result"] = "RAW"
+        else:
+            row.setdefault("result", None)
         row.setdefault("overfit_warning", False)
     df_new = pd.DataFrame(rows)
     metrics_path = out_dir / "metrics.json"
@@ -591,7 +595,17 @@ def _save_metrics(
 
     combined_df = combined_df.drop_duplicates(ignore_index=True)
 
-    id_cols = ["file", "target", "model", "preprocess_steps", "calibrated"]
+    if "result" not in combined_df.columns:
+        combined_df["result"] = None
+
+    id_cols = [
+        "file",
+        "target",
+        "model",
+        "preprocess_steps",
+        "result",
+        "calibrated",
+    ]
 
     if append:
         if not df_new.empty:
@@ -1371,6 +1385,10 @@ def _run_cv(
                 row["preprocess_steps"] = best_steps_repr or "None"
                 if step_label and row["preprocess_steps"] == "None":
                     row["preprocess_steps"] = step_label
+                if row.get("preprocess_steps") == "RAW":
+                    row["result"] = "RAW"
+                else:
+                    row.setdefault("result", None)
                 pls_artifacts = _save_pls_diagnostics(
                     template_pipe=pipe,
                     best_params=best_params,
@@ -1602,6 +1620,10 @@ def _run_cv(
             row["preprocess_steps"] = best_steps_repr or "None"
             if step_label and row["preprocess_steps"] == "None":
                 row["preprocess_steps"] = step_label
+            if row.get("preprocess_steps") == "RAW":
+                row["result"] = "RAW"
+            else:
+                row.setdefault("result", None)
             pls_artifacts = _save_pls_diagnostics(
                 template_pipe=pipe,
                 best_params=best_params_example,
@@ -1836,6 +1858,10 @@ def _run_holdout(
                     row["Yscramble_mean"] = None
                     row["Yscramble_p95"] = None
             row["preprocess_steps"] = preprocess_steps
+            if row.get("preprocess_steps") == "RAW":
+                row["result"] = "RAW"
+            else:
+                row.setdefault("result", None)
             pls_artifacts = _save_pls_diagnostics(
                 template_pipe=pipe,
                 best_params=gs.best_params_,
@@ -2359,6 +2385,10 @@ def train_and_save(
             }
             row["n_components"] = n_comp
             row["preprocess_steps"] = preprocess_steps
+            if row.get("preprocess_steps") == "RAW":
+                row["result"] = "RAW"
+            else:
+                row.setdefault("result", None)
             _update_row_with_best_params(row, gs.best_params_)
             proba_fn = getattr(best, "predict_proba", None)
             proba = None

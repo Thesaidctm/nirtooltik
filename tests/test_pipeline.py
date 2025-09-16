@@ -295,7 +295,18 @@ def test_pipeline_runs_with_spxy_cv_method(tmp_path, method):
 
     out_dir = tmp_path / "cv_spxy"
     run_multiple_eval(cfg, out_dir, n_jobs=1)
-    assert (out_dir / "kfold_2" / "metrics_summary.xlsx").exists()
+    metrics_dir = out_dir / "kfold_2"
+    metrics_summary = metrics_dir / "metrics_summary.xlsx"
+    assert metrics_summary.exists()
+    metrics_json_path = metrics_dir / "metrics.json"
+    assert metrics_json_path.exists()
+    with open(metrics_json_path) as f:
+        metrics_data = json.load(f)
+    assert metrics_data
+    assert all(row.get("result") == "RAW" for row in metrics_data)
+    val_df = pd.read_excel(metrics_summary, sheet_name="validation")
+    assert not val_df.empty
+    assert set(val_df["result"]) == {"RAW"}
 
 
 @pytest.mark.parametrize("method", METHODS)
