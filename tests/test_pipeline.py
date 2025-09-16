@@ -95,6 +95,9 @@ def test_end_to_end_cv_and_export(tmp_path, method):
         assert {"Yscramble_mean", "Yscramble_p95"}.issubset(val_df.columns)
         assert set(val_df["preprocess_steps"]).issuperset(expected_steps)
         assert set(calib_df["preprocess_steps"]).issuperset(expected_steps)
+        expected_method_label = f"PLS-{method.upper()}"
+        observed_methods = {m for m in val_df.get("method", []) if isinstance(m, str)}
+        assert expected_method_label in observed_methods
         assert any((strat_dir / "figures").glob("*.png"))
         assert (strat_dir / "report.md").exists()
         assert (strat_dir / "astm_classification.json").exists()
@@ -110,6 +113,10 @@ def test_end_to_end_cv_and_export(tmp_path, method):
             for entry in metrics_by_step[label]:
                 assert entry["best_clf__n_components"] == 2
                 assert entry["best_clf__method"] == method
+                model_label = entry["model"].upper()
+                assert model_label.startswith("PLS-")
+                assert model_label.startswith(expected_method_label)
+                assert entry["method"] == expected_method_label
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
