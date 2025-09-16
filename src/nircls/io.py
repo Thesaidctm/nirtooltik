@@ -252,7 +252,8 @@ def summarize_dataset(ds_list: List[Dict[str, Any]]) -> pd.DataFrame:
     -------
     pandas.DataFrame
         Table with columns ``target``, ``class``, ``count``, ``spectral_min``,
-        ``spectral_max`` and ``n_nans`` summarising each dataset.
+        ``spectral_max``, ``n_nans``, ``preprocess_steps`` and ``result``
+        summarising each dataset.
     """
 
     rows: List[Dict[str, Any]] = []
@@ -262,6 +263,24 @@ def summarize_dataset(ds_list: List[Dict[str, Any]]) -> pd.DataFrame:
         spectral_min = float(min(X.columns)) if not X.empty else float("nan")
         spectral_max = float(max(X.columns)) if not X.empty else float("nan")
         n_nans = int(ds.get("n_nans", 0))
+        preprocess_steps = ds.get("preprocess_steps")
+        result = ds.get("result")
+
+        steps_value = preprocess_steps
+        if steps_value is None or (
+            isinstance(steps_value, float) and np.isnan(steps_value)
+        ):
+            steps_empty = True
+        elif isinstance(steps_value, str):
+            steps_empty = steps_value.strip() == ""
+        else:
+            try:
+                steps_empty = len(steps_value) == 0  # type: ignore[arg-type]
+            except TypeError:
+                steps_empty = False
+
+        if steps_empty:
+            result = "RAW"
         counts = y.value_counts()
         for cls, cnt in counts.items():
             rows.append(
@@ -272,6 +291,8 @@ def summarize_dataset(ds_list: List[Dict[str, Any]]) -> pd.DataFrame:
                     "spectral_min": spectral_min,
                     "spectral_max": spectral_max,
                     "n_nans": n_nans,
+                    "preprocess_steps": preprocess_steps,
+                    "result": result,
                 }
             )
     return pd.DataFrame(rows)
