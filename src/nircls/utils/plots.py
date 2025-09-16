@@ -127,6 +127,49 @@ def _pls_component_records(
     return records
 
 
+def _plot_pls_components(
+    values: np.ndarray,
+    feature_names: Sequence[object] | pd.Index | None,
+    out_base: Path,
+    interactive: bool,
+    title: str,
+    yaxis: str,
+    *,
+    palette: Palette,
+) -> pd.DataFrame:
+    """Shared implementation for plotting PLS-related component matrices."""
+
+    values = np.asarray(values, dtype=float)
+    if values.ndim != 2:
+        raise ValueError("values must be a 2-D array")
+    n_features, n_components = values.shape
+    if n_components == 0:
+        return pd.DataFrame(columns=["feature", "component", "component_index", "value"])
+
+    features = _coerce_feature_names(feature_names, n_features)
+    fig = go.Figure()
+    fig.update_layout(
+        title=title,
+        xaxis_title="Feature",
+        yaxis_title=yaxis,
+        colorway=PALETTE_MAP[palette],
+    )
+    component_labels = [f"Comp {i + 1}" for i in range(n_components)]
+    for idx, label in enumerate(component_labels):
+        fig.add_trace(
+            go.Scatter(
+                x=features,
+                y=values[:, idx],
+                mode="lines",
+                name=label,
+            )
+        )
+    _export(fig, out_base, interactive)
+
+    records = _pls_component_records(values, features)
+    return pd.DataFrame.from_records(records)
+
+
 def plot_pls_loadings(
     loadings: np.ndarray,
     feature_names: Sequence[object] | pd.Index | None,
@@ -137,35 +180,20 @@ def plot_pls_loadings(
 ) -> pd.DataFrame:
     """Plot PLS loadings and return the underlying values."""
 
-    loadings = np.asarray(loadings, dtype=float)
-    if loadings.ndim != 2:
-        raise ValueError("loadings must be a 2-D array")
-    n_features, n_components = loadings.shape
-    if n_components == 0:
-        return pd.DataFrame(columns=["feature", "component", "component_index", "value"])
-
-    features = _coerce_feature_names(feature_names, n_features)
-    fig = go.Figure()
-    fig.update_layout(
-        title="PLS Loadings",
-        xaxis_title="Feature",
-        yaxis_title="Loading",
-        colorway=PALETTE_MAP[palette],
-    )
-    component_labels = [f"Comp {i + 1}" for i in range(n_components)]
-    for idx, label in enumerate(component_labels):
-        fig.add_trace(
-            go.Scatter(
-                x=features,
-                y=loadings[:, idx],
-                mode="lines",
-                name=label,
-            )
+    try:
+        return _plot_pls_components(
+            loadings,
+            feature_names,
+            out_base,
+            interactive,
+            "PLS Loadings",
+            "Loading",
+            palette=palette,
         )
-    _export(fig, out_base, interactive)
-
-    records = _pls_component_records(loadings, features)
-    return pd.DataFrame.from_records(records)
+    except ValueError as exc:  # pragma: no cover - defensive consistency
+        if str(exc) == "values must be a 2-D array":
+            raise ValueError("loadings must be a 2-D array") from exc
+        raise
 
 
 def plot_pls_weights(
@@ -178,35 +206,20 @@ def plot_pls_weights(
 ) -> pd.DataFrame:
     """Plot PLS weights for each component and return numeric values."""
 
-    weights = np.asarray(weights, dtype=float)
-    if weights.ndim != 2:
-        raise ValueError("weights must be a 2-D array")
-    n_features, n_components = weights.shape
-    if n_components == 0:
-        return pd.DataFrame(columns=["feature", "component", "component_index", "value"])
-
-    features = _coerce_feature_names(feature_names, n_features)
-    fig = go.Figure()
-    fig.update_layout(
-        title="PLS Weights",
-        xaxis_title="Feature",
-        yaxis_title="Weight",
-        colorway=PALETTE_MAP[palette],
-    )
-    component_labels = [f"Comp {i + 1}" for i in range(n_components)]
-    for idx, label in enumerate(component_labels):
-        fig.add_trace(
-            go.Scatter(
-                x=features,
-                y=weights[:, idx],
-                mode="lines",
-                name=label,
-            )
+    try:
+        return _plot_pls_components(
+            weights,
+            feature_names,
+            out_base,
+            interactive,
+            "PLS Weights",
+            "Weight",
+            palette=palette,
         )
-    _export(fig, out_base, interactive)
-
-    records = _pls_component_records(weights, features)
-    return pd.DataFrame.from_records(records)
+    except ValueError as exc:  # pragma: no cover - defensive consistency
+        if str(exc) == "values must be a 2-D array":
+            raise ValueError("weights must be a 2-D array") from exc
+        raise
 
 
 def plot_vip(
