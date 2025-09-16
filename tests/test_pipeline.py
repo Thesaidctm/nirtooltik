@@ -92,6 +92,11 @@ def test_end_to_end_cv_and_export(tmp_path, method):
         assert set(xls.sheet_names) == {"validation", "calibration"}
         val_df = xls.parse("validation")
         calib_df = xls.parse("calibration")
+        method_label = "PLS-LR" if method == "logreg" else "PLS-LDA"
+        assert val_df["model_label"].eq(method_label).all()
+        assert calib_df["model_label"].eq(method_label).all()
+        assert val_df["model"].str.startswith(method_label).all()
+        assert calib_df["model"].str.startswith(method_label).all()
         assert {"Yscramble_mean", "Yscramble_p95"}.issubset(val_df.columns)
         assert set(val_df["preprocess_steps"]).issuperset(expected_steps)
         assert set(calib_df["preprocess_steps"]).issuperset(expected_steps)
@@ -110,6 +115,8 @@ def test_end_to_end_cv_and_export(tmp_path, method):
             for entry in metrics_by_step[label]:
                 assert entry["best_clf__n_components"] == 2
                 assert entry["best_clf__method"] == method
+                assert entry["model_label"] == method_label
+                assert entry["model"].startswith(method_label)
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()

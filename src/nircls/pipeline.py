@@ -439,6 +439,35 @@ def _update_row_with_best_params(
         row[f"best_{key}"] = _coerce_param_value(value)
 
 
+def _plsda_method_slug_label(method: str) -> Tuple[str, str]:
+    """Return slug and display label for a PLS-DA classifier ``method``."""
+
+    mapping = {
+        "logreg": ("pls-lr", "PLS-LR"),
+        "lda": ("pls-lda", "PLS-LDA"),
+        "qda": ("pls-qda", "PLS-QDA"),
+        "svm": ("pls-svm", "PLS-SVM"),
+        "knn": ("pls-knn", "PLS-KNN"),
+    }
+    m = (method or "").lower()
+    return mapping.get(m, (f"pls-{m}", f"PLS-{m.upper()}"))
+
+
+def _format_model_identifier(name: str, method: Optional[str]) -> Tuple[str, Optional[str]]:
+    """Replace PLSDA prefix with method label while preserving suffix."""
+
+    if not method:
+        return name, None
+    _slug, label = _plsda_method_slug_label(method)
+    base, suffix = (name.split("__", 1) + [""])[:2]
+    suffix = f"__{suffix}" if suffix else ""
+    if base.startswith("PLS") and base != label:
+        base = label
+    elif base.startswith(label):
+        base = label
+    return f"{base}{suffix}", label
+
+
 def _save_metrics(
     rows: List[Dict[str, Any]],
     out_dir: Path,
@@ -456,6 +485,8 @@ def _save_metrics(
         row["preprocess_steps"] = _normalize_preprocess_value(
             row.get("preprocess_steps")
         )
+        # ensure a human-friendly label is always available
+        row.setdefault("model_label", row.get("model"))
         row.setdefault("overfit_warning", False)
     df_new = pd.DataFrame(rows)
     metrics_path = out_dir / "metrics.json"
@@ -482,7 +513,14 @@ def _save_metrics(
 
     combined_df = combined_df.drop_duplicates(ignore_index=True)
 
-    id_cols = ["file", "target", "model", "preprocess_steps", "calibrated"]
+    id_cols = [
+        "file",
+        "target",
+        "model",
+        "model_label",
+        "preprocess_steps",
+        "calibrated",
+    ]
 
     if append:
         if not df_new.empty:
@@ -1135,6 +1173,11 @@ def _run_cv(
                 if n_comp_list:
                     row["n_components"] = int(np.median(n_comp_list))
                 row["preprocess_steps"] = best_steps_repr or "None"
+                name, model_label = _format_model_identifier(
+                    name, row.get("best_clf__method")
+                )
+                row["model"] = name
+                row["model_label"] = model_label or name
                 pls_artifacts = _save_pls_diagnostics(
                     template_pipe=pipe,
                     best_params=best_params,
@@ -1360,6 +1403,11 @@ def _run_cv(
             if n_comp_list:
                 row["n_components"] = int(np.median(n_comp_list))
             row["preprocess_steps"] = best_steps_repr or "None"
+            name, model_label = _format_model_identifier(
+                name, row.get("best_clf__method")
+            )
+            row["model"] = name
+            row["model_label"] = model_label or name
             pls_artifacts = _save_pls_diagnostics(
                 template_pipe=pipe,
                 best_params=best_params_example,
@@ -1590,6 +1638,11 @@ def _run_holdout(
                     row["Yscramble_mean"] = None
                     row["Yscramble_p95"] = None
             row["preprocess_steps"] = preprocess_steps
+            name, model_label = _format_model_identifier(
+                name, row.get("best_clf__method")
+            )
+            row["model"] = name
+            row["model_label"] = model_label or name
             pls_artifacts = _save_pls_diagnostics(
                 template_pipe=pipe,
                 best_params=gs.best_params_,
@@ -2085,6 +2138,9 @@ def train_and_save(
             save_task = progress.add_task("Salvando", total=None)
             dump(best, out_dir / "model.joblib")
             export_xy_xlsx(out_dir / "prepared_XY.xlsx", X, y)
+            name, model_label = _format_model_identifier(
+                name, gs.best_params_.get("clf__method")
+            )
             (out_dir / "model_card.md").write_text(
                 f"# Model Card\nBest model: {name}\nBest params: {gs.best_params_}\n",
             )
@@ -2102,6 +2158,7 @@ def train_and_save(
             row["n_components"] = n_comp
             row["preprocess_steps"] = preprocess_steps
             _update_row_with_best_params(row, gs.best_params_)
+            row["model_label"] = model_label or name
             proba_fn = getattr(best, "predict_proba", None)
             proba = None
             if proba_fn is not None:
