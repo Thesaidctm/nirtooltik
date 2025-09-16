@@ -1960,6 +1960,15 @@ def run_multiple_eval(
                     variant_steps = [raw_steps]
                 variant_steps_repr = _format_preprocess_steps(variant_steps)
                 step_desc = step_label or variant_steps_repr or "None"
+                safe_step = None
+                if step_label:
+                    safe_step = re.sub(r"[^\w.-]+", "_", step_label.lower()).strip("_")
+                    if not safe_step:
+                        fallback = variant_steps_repr or step_label
+                        safe_step = (
+                            re.sub(r"[^\w.-]+", "_", fallback.lower()).strip("_")
+                            or "step"
+                        )
                 for strat in strategies:
                     stype = strat.get("type", "").lower()
                     desc = f"Strategy: {stype}"
@@ -1993,7 +2002,10 @@ def run_multiple_eval(
                                         shuffle=True,
                                         random_state=random_state,
                                     )
-                            sub = out_dir / f"kfold_{k}"
+                            if safe_step:
+                                sub = out_dir / f"kfold_{k}__{safe_step}"
+                            else:
+                                sub = out_dir / f"kfold_{k}"
                             sub.mkdir(parents=True, exist_ok=True)
                             _run_cv(
                                 cfg_variant,
@@ -2022,13 +2034,6 @@ def run_multiple_eval(
                                     "preprocess_steps": variant_steps_repr or "None",
                                 }
                                 run_name = sub.name
-                                if step_label:
-                                    safe_step = (
-                                        step_label.lower()
-                                        .replace(" ", "_")
-                                        .replace("/", "_")
-                                    )
-                                    run_name = f"{run_name}__{safe_step}"
                                 with mlflow.start_run(run_name=run_name, nested=True):
                                     mlflow.log_params(params)
                                     try:
@@ -2052,7 +2057,10 @@ def run_multiple_eval(
                             raise ModelError(
                                 "cv_method 'group' não suportado com estratégia LOO"
                             )
-                        sub = out_dir / "loo"
+                        if safe_step:
+                            sub = out_dir / f"loo__{safe_step}"
+                        else:
+                            sub = out_dir / "loo"
                         sub.mkdir(parents=True, exist_ok=True)
                         _run_cv(
                             cfg_variant,
@@ -2079,11 +2087,6 @@ def run_multiple_eval(
                                 "preprocess_steps": variant_steps_repr or "None",
                             }
                             run_name = sub.name
-                            if step_label:
-                                safe_step = (
-                                    step_label.lower().replace(" ", "_").replace("/", "_")
-                                )
-                                run_name = f"{run_name}__{safe_step}"
                             with mlflow.start_run(run_name=run_name, nested=True):
                                 mlflow.log_params(params)
                                 try:
@@ -2107,7 +2110,10 @@ def run_multiple_eval(
                             raise ModelError(
                                 "cv_method 'group' não suportado com estratégia holdout"
                             )
-                        sub = out_dir / "holdout"
+                        if safe_step:
+                            sub = out_dir / f"holdout__{safe_step}"
+                        else:
+                            sub = out_dir / "holdout"
                         sub.mkdir(parents=True, exist_ok=True)
                         test_size = float(strat.get("test_size", 0.3))
                         _run_holdout(
@@ -2134,11 +2140,6 @@ def run_multiple_eval(
                                 "preprocess_steps": variant_steps_repr or "None",
                             }
                             run_name = sub.name
-                            if step_label:
-                                safe_step = (
-                                    step_label.lower().replace(" ", "_").replace("/", "_")
-                                )
-                                run_name = f"{run_name}__{safe_step}"
                             with mlflow.start_run(run_name=run_name, nested=True):
                                 mlflow.log_params(params)
                                 try:

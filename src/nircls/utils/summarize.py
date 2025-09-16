@@ -13,13 +13,16 @@ def summarize_runs(base_dir: Path | str) -> pd.DataFrame:
     Parameters
     ----------
     base_dir:
-        Directory containing run subfolders with ``metrics.json`` files.
+        Directory containing run subfolders with ``metrics.json`` files. Each
+        strategy and preprocessing combination has its own subdirectory (for
+        example, ``kfold_5__snv``).
 
     Returns
     -------
     pandas.DataFrame
         Concatenated metrics with an additional ``run`` column indicating the
-        run folder name. Returns an empty DataFrame if no metrics are found.
+        strategy and preprocessing step folder. Returns an empty DataFrame if
+        no metrics are found.
     """
 
     base_path = Path(base_dir)

@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 import sys
 
 import numpy as np
@@ -18,10 +19,15 @@ from nircls.pipeline import (  # noqa: E402
     predict_with_model,
     run_multiple_eval,
     train_and_save,
+    _format_preprocess_step,
 )
 from nircls.utils.errors import DataError, ModelError  # noqa: E402
 
 METHODS = ["logreg", "lda"]
+
+
+def _sanitize_step_label(label: str) -> str:
+    return re.sub(r"[^\w.-]+", "_", label.lower()).strip("_")
 
 
 @pytest.mark.parametrize("method", METHODS)
@@ -82,10 +88,17 @@ def test_end_to_end_cv_and_export(tmp_path, method):
     out_dir = tmp_path / "cv_run"
     outputs = run_multiple_eval(cfg, out_dir, n_jobs=1)
     expected_steps = {"SNV", "SG(window=5,poly=2,deriv=1)"}
-    assert len(outputs) == 1
+    sanitized_steps = {
+        _sanitize_step_label(_format_preprocess_step(step) or str(step))
+        for step in cfg["preprocess"]["steps"]
+    }
+    expected_dirs = {f"kfold_2__{label}" for label in sanitized_steps}
+    assert len(outputs) == len(expected_dirs)
+    observed_dirs = {metrics_file.parent.name for metrics_file, _ in outputs}
+    assert observed_dirs == expected_dirs
+    observed_labels = set()
     for metrics_file, figs_dir in outputs:
         strat_dir = metrics_file.parent
-        assert strat_dir.name == "kfold_2"
         metrics_path = strat_dir / "metrics_summary.xlsx"
         assert metrics_path.exists()
         xls = pd.ExcelFile(metrics_path)
@@ -93,8 +106,8 @@ def test_end_to_end_cv_and_export(tmp_path, method):
         val_df = xls.parse("validation")
         calib_df = xls.parse("calibration")
         assert {"Yscramble_mean", "Yscramble_p95"}.issubset(val_df.columns)
-        assert set(val_df["preprocess_steps"]).issuperset(expected_steps)
-        assert set(calib_df["preprocess_steps"]).issuperset(expected_steps)
+        assert len(set(val_df["preprocess_steps"])) == 1
+        assert len(set(calib_df["preprocess_steps"])) == 1
         expected_method_label = f"PLS-{method.upper()}"
         observed_methods = {m for m in val_df.get("method", []) if isinstance(m, str)}
         assert expected_method_label in observed_methods
@@ -126,15 +139,19 @@ def test_end_to_end_cv_and_export(tmp_path, method):
         metrics_by_step = {}
         for row in metrics_json:
             metrics_by_step.setdefault(row["preprocess_steps"], []).append(row)
-        for label in expected_steps:
-            assert label in metrics_by_step
-            for entry in metrics_by_step[label]:
-                assert entry["best_clf__n_components"] == 2
-                assert entry["best_clf__method"] == method
-                model_label = entry["model"].upper()
-                assert model_label.startswith("PLS-")
-                assert model_label.startswith(expected_method_label)
-                assert entry["method"] == expected_method_label
+        assert len(metrics_by_step) == 1
+        observed_label = next(iter(metrics_by_step))
+        observed_labels.add(observed_label)
+        assert set(val_df["preprocess_steps"]) == {observed_label}
+        assert set(calib_df["preprocess_steps"]) == {observed_label}
+        for entry in metrics_by_step[observed_label]:
+            assert entry["best_clf__n_components"] == 2
+            assert entry["best_clf__method"] == method
+            model_label = entry["model"].upper()
+            assert model_label.startswith("PLS-")
+            assert model_label.startswith(expected_method_label)
+            assert entry["method"] == expected_method_label
+    assert observed_labels == expected_steps
 
     train_dir = tmp_path / "train_run"
     train_dir.mkdir()
@@ -179,14 +196,24 @@ def test_metrics_reflect_applied_preprocess_steps(tmp_path):
     out_dir = tmp_path / "cv_steps"
     outputs = run_multiple_eval(cfg, out_dir, n_jobs=1)
     expected_steps = {"SNV", "SG(window=5,poly=2,deriv=1)"}
-    assert len(outputs) == 1
+    sanitized_steps = {
+        _sanitize_step_label(_format_preprocess_step(step) or str(step))
+        for step in cfg["preprocess"]["steps"]
+    }
+    expected_dirs = {f"kfold_2__{label}" for label in sanitized_steps}
+    assert len(outputs) == len(expected_dirs)
+    observed_dirs = {metrics_path.parent.name for metrics_path, _ in outputs}
+    assert observed_dirs == expected_dirs
+    observed_labels = set()
     for metrics_path, _ in outputs:
         with open(metrics_path) as f:
             metrics = json.load(f)
         assert metrics
         observed = {row["preprocess_steps"] for row in metrics}
-        for label in expected_steps:
-            assert label in observed
+        assert len(observed) == 1
+        label = observed.pop()
+        observed_labels.add(label)
+    assert observed_labels == expected_steps
 
 
 @pytest.mark.parametrize("method", METHODS)

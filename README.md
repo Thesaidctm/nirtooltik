@@ -466,9 +466,11 @@ Para permitir que outros reproduzam seus resultados:
 
 ## Resultados gerados
 
-Cada execução cria uma pasta em `results/<run_id>/<estratégia>/` onde
-`<run_id>` identifica a data/hora do experimento. Dentro de cada estratégia são
-produzidos:
+Cada execução cria uma pasta em `results/<run_id>/<estratégia>__<preprocessamento>/`
+onde `<run_id>` identifica a data/hora do experimento. Quando apenas uma cadeia
+de pré-processamento é utilizada, o sufixo `__<preprocessamento>` é omitido e o
+diretório segue como `results/<run_id>/<estratégia>/`. Dentro de cada
+estratégia/etapa de pré-processamento são produzidos:
 
 * `metrics.json` – métricas detalhadas por partição;
 * `metrics_summary.csv` – resumo das métricas agregadas;
@@ -676,9 +678,11 @@ Após instalar o pacote, o comando ``nircls list-models`` mostrará o novo model
 e ele poderá ser referenciado nas configurações YAML ou no assistente
 ``nircls wizard``.
 
-Os resultados serão salvos em `results/<run_id>/<estratégia>/`. Cada pasta de
-estratégia contém as métricas (`metrics.json`, `metrics_summary.xlsx`), as figuras
-geradas e um relatório final em Markdown (`report.md`).
+Os resultados serão salvos em `results/<run_id>/<estratégia>__<preprocessamento>/`.
+Quando apenas uma cadeia de pré-processamento é utilizada, o sufixo é omitido e o
+diretório segue como `results/<run_id>/<estratégia>/`. Cada pasta de estratégia
+e pré-processamento contém as métricas (`metrics.json`, `metrics_summary.xlsx`),
+as figuras geradas e um relatório final em Markdown (`report.md`).
 
 ## Rastreamento com MLflow
 
