@@ -84,6 +84,7 @@ STRINGS = {
         "run_all_models_help": "Use all available models (requires optional dependencies)",
         "run_all_preprocess_help": "Apply all preprocessing steps (SNV, MSC, DETREND, SG, EMSC, EPO, SCALE)",
         "dashboard_results_help": "Folder with results",
+        "summary_help": "Summarize saved metrics with preprocessing/result info",
         "models_help": "List available model builders",
         "mlflow_not_installed": "'mlflow' is not installed. Install with `pip install mlflow`.",
         "model_dep_missing": "Skipping {name}: {err}",
@@ -137,6 +138,7 @@ STRINGS = {
             "EMSC, EPO, SCALE)"
         ),
         "dashboard_results_help": "Pasta com resultados",
+        "summary_help": "Resumir métricas salvas com informações de pré-processamento/resultado",
         "models_help": "Listar modelos disponíveis",
         "mlflow_not_installed": "'mlflow' não está instalado. Instale com `pip install mlflow`.",
         "model_dep_missing": "Ignorando {name}: {err}",
@@ -217,6 +219,74 @@ def _print_metrics_table(metrics_json: Path) -> None:
             df[base] = df[col].map(lambda x: f"{x:.3f}")
     display_cols = id_cols + [c[:-5] for c in metrics_cols]
     print(df[display_cols].to_string(index=False))
+
+
+def _format_summary_steps(value: Any) -> str:
+    """Return a user-friendly representation of ``value``."""
+
+    items: list[str] = []
+
+    def _collect_steps(step: Any) -> None:
+        if isinstance(step, (list, tuple, set)):
+            for inner in step:
+                _collect_steps(inner)
+            return
+        if step is None:
+            return
+        try:
+            if pd.isna(step):
+                return
+        except (TypeError, ValueError):
+            pass
+        step_str = str(step).strip()
+        if step_str:
+            items.append(step_str)
+
+    _collect_steps(value)
+    if not items:
+        return ""
+    descriptions = _describe_preprocess_steps(items)
+    if descriptions:
+        return ", ".join(descriptions)
+    return ", ".join(items)
+
+
+def _format_summary_result(value: Any) -> str:
+    """Render the ``result`` value as a readable string."""
+
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(value)
+
+
+def _print_dataset_summary(summary: pd.DataFrame) -> None:
+    """Print ``summary`` with friendly preprocessing/result columns."""
+
+    if summary.empty:
+        return
+    df = summary.copy()
+    if "preprocess_steps" in df.columns:
+        df["preprocess_steps"] = df["preprocess_steps"].map(_format_summary_steps)
+    if "result" in df.columns:
+        df["result"] = df["result"].map(_format_summary_result)
+    ordered_cols = [
+        "target",
+        "class",
+        "count",
+        "spectral_min",
+        "spectral_max",
+        "n_nans",
+        "preprocess_steps",
+        "result",
+    ]
+    display_cols = [c for c in ordered_cols if c in df.columns]
+    with pd.option_context("display.max_colwidth", None):
+        print(df[display_cols].to_string(index=False))
 
 
 def _load_preprocess_steps(metrics_json: Path) -> list[str]:
@@ -443,7 +513,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_ex.add_argument("--output", default=str(RESULTS_DIR))
     p_db = sp.add_parser("dashboard")
     p_db.add_argument("--results", required=True, help=t("dashboard_results_help"))
-    p_sum = sp.add_parser("summary")
+    p_sum = sp.add_parser("summary", help=t("summary_help"))
     p_sum.add_argument("--results", required=True, help=t("dashboard_results_help"))
     args = parser.parse_args(argv)
     set_seed(args.seed)
@@ -504,8 +574,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         summary = summarize_dataset(ds_list)
-        if not summary.empty:
-            print(summary.to_string(index=False))
+        _print_dataset_summary(summary)
         if args.run == "one":
             ds_list = ds_list[:1]
         for ds in ds_list:
@@ -532,8 +601,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         summary = summarize_dataset(ds_list)
-        if not summary.empty:
-            print(summary.to_string(index=False))
+        _print_dataset_summary(summary)
         try:
             metrics_path, figs_dir = train_and_save(
                 cfg.dict(exclude_defaults=True, exclude_none=True),
@@ -572,8 +640,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         summary = summarize_dataset(ds_list)
-        if not summary.empty:
-            print(summary.to_string(index=False))
+        _print_dataset_summary(summary)
         if args.run == "one" and ds_list:
             cfg.data.target_cols = ds_list[0]["target"]
         run_id = make_run_id("cv")
@@ -657,8 +724,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         summary = summarize_dataset(ds_list)
-        if not summary.empty:
-            print(summary.to_string(index=False))
+        _print_dataset_summary(summary)
         if args.run == "one" and ds_list:
             data_cfg["target_cols"] = ds_list[0]["target"]
         train_dir = base_dir / "train"
