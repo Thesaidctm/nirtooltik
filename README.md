@@ -609,6 +609,10 @@ nircls train --config experimento.yml
 ```
 
 Será criado um diretório com `model.joblib`, `prepared_XY.xlsx` e `model_card.md`.
+Os diagnósticos de PLS (loadings, pesos, VIP e scores X/Y) ficam armazenados em
+arquivos CSV dentro da subpasta `results/` gerada no mesmo diretório de
+processamento: `pls_loadings.csv`, `pls_weights.csv`, `vip.csv`,
+`pls_x_scores.csv` e `pls_y_scores.csv`.
 Para realizar predições com o modelo salvo, utilize a função `predict_with_model`
 ou o subcomando `predict`:
 
