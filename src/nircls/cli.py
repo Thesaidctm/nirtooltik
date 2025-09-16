@@ -84,7 +84,7 @@ STRINGS = {
         "run_all_models_help": "Use all available models (requires optional dependencies)",
         "run_all_preprocess_help": "Apply all preprocessing steps (SNV, MSC, DETREND, SG, EMSC, EPO, SCALE)",
         "dashboard_results_help": "Folder with results",
-        "summary_help": "Summarize saved metrics with preprocessing/result info",
+        "summary_help": "Summarize saved metrics including preprocess/result columns",
         "models_help": "List available model builders",
         "mlflow_not_installed": "'mlflow' is not installed. Install with `pip install mlflow`.",
         "model_dep_missing": "Skipping {name}: {err}",
@@ -138,7 +138,9 @@ STRINGS = {
             "EMSC, EPO, SCALE)"
         ),
         "dashboard_results_help": "Pasta com resultados",
-        "summary_help": "Resumir métricas salvas com informações de pré-processamento/resultado",
+        "summary_help": (
+            "Resumir métricas salvas incluindo colunas de pré-processamento/resultado"
+        ),
         "models_help": "Listar modelos disponíveis",
         "mlflow_not_installed": "'mlflow' não está instalado. Instale com `pip install mlflow`.",
         "model_dep_missing": "Ignorando {name}: {err}",
@@ -254,14 +256,50 @@ def _format_summary_steps(value: Any) -> str:
 def _format_summary_result(value: Any) -> str:
     """Render the ``result`` value as a readable string."""
 
-    if value is None:
+    items: list[str] = []
+
+    def _collect(entry: Any) -> None:
+        if isinstance(entry, (list, tuple, set)):
+            for inner in entry:
+                _collect(inner)
+            return
+        if entry is None:
+            return
+        try:
+            if pd.isna(entry):
+                return
+        except (TypeError, ValueError):
+            pass
+        entry_str = str(entry).strip()
+        if entry_str:
+            items.append(entry_str)
+
+    _collect(value)
+    if not items:
         return ""
-    try:
-        if pd.isna(value):
-            return ""
-    except (TypeError, ValueError):
-        pass
-    return str(value)
+    return ", ".join(items)
+
+
+def _prepare_summary_display(
+    summary: pd.DataFrame, ordered_cols: Sequence[str] | None = None
+) -> pd.DataFrame:
+    """Return a formatted copy of ``summary`` for console display."""
+
+    if summary.empty:
+        return summary
+    df = summary.copy()
+    if "preprocess_steps" in df.columns:
+        df["preprocess_steps"] = df["preprocess_steps"].map(_format_summary_steps)
+    if "result" in df.columns:
+        df["result"] = df["result"].map(_format_summary_result)
+    if ordered_cols:
+        preferred = [col for col in ordered_cols if col in df.columns]
+        remaining = [col for col in df.columns if col not in preferred]
+        if remaining:
+            return df[preferred + remaining]
+        if preferred:
+            return df[preferred]
+    return df
 
 
 def _print_dataset_summary(summary: pd.DataFrame) -> None:
@@ -269,11 +307,6 @@ def _print_dataset_summary(summary: pd.DataFrame) -> None:
 
     if summary.empty:
         return
-    df = summary.copy()
-    if "preprocess_steps" in df.columns:
-        df["preprocess_steps"] = df["preprocess_steps"].map(_format_summary_steps)
-    if "result" in df.columns:
-        df["result"] = df["result"].map(_format_summary_result)
     ordered_cols = [
         "target",
         "class",
@@ -284,9 +317,9 @@ def _print_dataset_summary(summary: pd.DataFrame) -> None:
         "preprocess_steps",
         "result",
     ]
-    display_cols = [c for c in ordered_cols if c in df.columns]
+    df = _prepare_summary_display(summary, ordered_cols=ordered_cols)
     with pd.option_context("display.max_colwidth", None):
-        print(df[display_cols].to_string(index=False))
+        print(df.to_string(index=False))
 
 
 def _load_preprocess_steps(metrics_json: Path) -> list[str]:
@@ -993,7 +1026,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.cmd == "summary":
         df = summarize_runs(Path(args.results))
         if not df.empty:
-            print(df.to_string(index=False))
+            ordered_cols = [
+                "run",
+                "target",
+                "model",
+                "preprocess_steps",
+                "result",
+            ]
+            df = _prepare_summary_display(df, ordered_cols=ordered_cols)
+            with pd.option_context(
+                "display.max_columns", None, "display.max_colwidth", None
+            ):
+                print(df.to_string(index=False))
     elif args.cmd == "dashboard":
         run_dashboard(Path(args.results))
     return 0
