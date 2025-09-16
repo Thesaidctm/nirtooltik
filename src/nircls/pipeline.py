@@ -763,20 +763,24 @@ def _maybe_run_qc(
                 )
             )
 
-            excel_name = f"qc_pca_{step_slug}.xlsx"
-            entry[f"{key}_file"] = excel_name
+            excel_rel = Path(step_slug) / f"qc_pca_{step_slug}.xlsx"
+            entry[f"{key}_file"] = excel_rel.as_posix()
 
             fig_stem = f"{Path(ds['file']).stem}__{ds['target']}__pca_{step_slug}"
-            fig_rel = Path("figures") / fig_stem
+            fig_rel = Path(step_slug) / "figures" / fig_stem
             entry[f"{key}_figure"] = fig_rel.with_suffix(".png").as_posix()
-            plot_pca_scores(scores, labels, out_dir / fig_rel, interactive=interactive)
+            fig_path = out_dir / fig_rel
+            fig_path.parent.mkdir(parents=True, exist_ok=True)
+            plot_pca_scores(scores, labels, fig_path, interactive=interactive)
 
         report.append(entry)
 
     for slug, frames in per_step_frames.items():
         if not frames:
             continue
-        xlsx_path = out_dir / f"qc_pca_{slug}.xlsx"
+        excel_rel = Path(slug) / f"qc_pca_{slug}.xlsx"
+        xlsx_path = out_dir / excel_rel
+        xlsx_path.parent.mkdir(parents=True, exist_ok=True)
         with pd.ExcelWriter(xlsx_path) as writer:
             for sheet_name, frame in frames:
                 frame.to_excel(writer, sheet_name=sheet_name, index=True)
