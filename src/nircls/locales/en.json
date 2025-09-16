@@ -79,5 +79,9 @@
   "PCA": "PCA",
   "Rodar PCA": "Run PCA",
   "Nenhuma coluna numérica encontrada.": "No numeric columns found.",
-  "Erro ao executar PCA: {exc}": "Error running PCA: {exc}"
+  "Erro ao executar PCA: {exc}": "Error running PCA: {exc}",
+  "Figura QC: {path}": "QC figure: {path}",
+  "Figura QC ausente: {path}": "Missing QC figure: {path}",
+  "Planilha QC: {path}": "QC spreadsheet: {path}",
+  "Planilha QC ausente: {path}": "Missing QC spreadsheet: {path}"
 }

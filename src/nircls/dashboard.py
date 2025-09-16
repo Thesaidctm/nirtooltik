@@ -949,6 +949,47 @@ def _render_dashboard(results_dir: Path) -> None:
                                             },
                                         )
                                         st.plotly_chart(fig, width="stretch")
+                                        figure_fields = [
+                                            Path(rel)
+                                            for name, rel in item.items()
+                                            if name.endswith("_figure") and isinstance(rel, str)
+                                        ]
+                                        for rel_path in sorted(
+                                            figure_fields, key=lambda p: p.as_posix()
+                                        ):
+                                            abs_path = strat_dir / rel_path
+                                            if abs_path.exists():
+                                                st.image(
+                                                    str(abs_path),
+                                                    caption=rel_path.as_posix(),
+                                                )
+                                            else:
+                                                st.caption(
+                                                    tr("Figura QC ausente: {path}").format(
+                                                        path=rel_path.as_posix()
+                                                    )
+                                                )
+                                        file_fields = [
+                                            Path(rel)
+                                            for name, rel in item.items()
+                                            if name.endswith("_file") and isinstance(rel, str)
+                                        ]
+                                        for rel_path in sorted(
+                                            file_fields, key=lambda p: p.as_posix()
+                                        ):
+                                            abs_path = strat_dir / rel_path
+                                            if abs_path.exists():
+                                                st.caption(
+                                                    tr("Planilha QC: {path}").format(
+                                                        path=rel_path.as_posix()
+                                                    )
+                                                )
+                                            else:
+                                                st.caption(
+                                                    tr("Planilha QC ausente: {path}").format(
+                                                        path=rel_path.as_posix()
+                                                    )
+                                                )
                                 except (
                                     Exception
                                 ) as exc:  # pragma: no cover - display error

@@ -79,5 +79,9 @@
   "PCA": "PCA",
   "Rodar PCA": "Rodar PCA",
   "Nenhuma coluna numérica encontrada.": "Nenhuma coluna numérica encontrada.",
-  "Erro ao executar PCA: {exc}": "Erro ao executar PCA: {exc}"
+  "Erro ao executar PCA: {exc}": "Erro ao executar PCA: {exc}",
+  "Figura QC: {path}": "Figura QC: {path}",
+  "Figura QC ausente: {path}": "Figura QC ausente: {path}",
+  "Planilha QC: {path}": "Planilha QC: {path}",
+  "Planilha QC ausente: {path}": "Planilha QC ausente: {path}"
 }
