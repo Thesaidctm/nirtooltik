@@ -763,11 +763,12 @@ def _maybe_run_qc(
                 )
             )
 
-            excel_rel = Path(step_slug) / f"qc_pca_{step_slug}.xlsx"
+            step_dir = Path(step_slug)
+            excel_rel = step_dir / f"qc_pca_{step_slug}.xlsx"
             entry[f"{key}_file"] = excel_rel.as_posix()
 
             fig_stem = f"{Path(ds['file']).stem}__{ds['target']}__pca_{step_slug}"
-            fig_rel = Path(step_slug) / "figures" / fig_stem
+            fig_rel = step_dir / "figures" / fig_stem
             entry[f"{key}_figure"] = fig_rel.with_suffix(".png").as_posix()
             fig_path = out_dir / fig_rel
             fig_path.parent.mkdir(parents=True, exist_ok=True)
@@ -778,7 +779,8 @@ def _maybe_run_qc(
     for slug, frames in per_step_frames.items():
         if not frames:
             continue
-        excel_rel = Path(slug) / f"qc_pca_{slug}.xlsx"
+        step_dir = Path(slug)
+        excel_rel = step_dir / f"qc_pca_{slug}.xlsx"
         xlsx_path = out_dir / excel_rel
         xlsx_path.parent.mkdir(parents=True, exist_ok=True)
         with pd.ExcelWriter(xlsx_path) as writer:
