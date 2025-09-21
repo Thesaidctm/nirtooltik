@@ -41,7 +41,14 @@ def compute_rmsecv(
     y_true: Sequence[float] | np.ndarray | Iterable[float],
     y_pred: Sequence[float] | np.ndarray | Iterable[float],
 ) -> float:
-    """Compute the RMSE of cross-validation predictions."""
+    """Compute the RMSE of cross-validation predictions.
+
+    Parameters
+    ----------
+    y_true, y_pred:
+        Sequences containing the concatenated ground-truth and predicted
+        responses from every validation fold.
+    """
 
     return compute_rmse(y_true, y_pred)
 

@@ -16,7 +16,7 @@ from sklearn.ensemble import (
     RandomForestRegressor,
 )
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
-from sklearn.model_selection import GridSearchCV, LeaveOneOut, StratifiedKFold
+from sklearn.model_selection import GridSearchCV, KFold, LeaveOneOut, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.neural_network import MLPRegressor
@@ -37,6 +37,7 @@ from nircls.pipeline import (  # noqa: E402
     _save_pls_diagnostics,
     _train_and_save_regression,
 )
+from nircls.metrics.regression import compute_rmsecv  # noqa: E402
 from nircls.models.plsda import PLSDA  # noqa: E402
 from nircls.utils.errors import DataError, ModelError  # noqa: E402
 from nircls.utils.palettes import Palette  # noqa: E402
@@ -427,6 +428,51 @@ def test_end_to_end_regression(tmp_path):
     assert all("Accuracy_mean" not in row for row in rows)
     assert not any("confusion" in p.name for p in figs_dir.rglob("*"))
     assert not (metrics_file.parent / "astm_classification.json").exists()
+
+    # Validate that RMSECV derives from aggregated cross-validation predictions
+    data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+    ds = data[0]
+    X = ds["X"]
+    y = pd.to_numeric(ds["Y"], errors="coerce").to_numpy(dtype=float)
+    seed = cfg.get("cv", {}).get("random_state", 42)
+    outer = KFold(n_splits=3, shuffle=True, random_state=seed)
+    outer_splits = list(outer.split(X, y))
+    _, pipe, grid = build_pipeline_from_config(cfg)[0]
+    inner_folds_cfg = cfg.get("cv", {}).get("inner_folds", 3)
+    inner_folds = max(2, int(inner_folds_cfg or 3))
+    y_true_val_all = []
+    y_pred_val_all = []
+    y_true_train_all = []
+    y_pred_train_all = []
+    for tr, te in outer_splits:
+        Xtr, Xte = X.iloc[tr].values, X.iloc[te].values
+        ytr, yte = y[tr], y[te]
+        allowed = len(Xtr)
+        n_splits = min(inner_folds, allowed)
+        inner = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
+        gs = GridSearchCV(
+            pipe,
+            grid,
+            scoring="neg_root_mean_squared_error",
+            cv=inner,
+            n_jobs=1,
+        )
+        gs.fit(Xtr, ytr)
+        best = gs.best_estimator_
+        y_true_val_all.append(np.asarray(yte, dtype=float))
+        y_pred_val_all.append(np.asarray(best.predict(Xte), dtype=float))
+        y_true_train_all.append(np.asarray(ytr, dtype=float))
+        y_pred_train_all.append(np.asarray(best.predict(Xtr), dtype=float))
+
+    row = rows[0]
+    expected_rmsecv = compute_rmsecv(
+        np.concatenate(y_true_val_all), np.concatenate(y_pred_val_all)
+    )
+    assert row["RMSECV_mean"] == pytest.approx(expected_rmsecv)
+    expected_train_rmsecv = compute_rmsecv(
+        np.concatenate(y_true_train_all), np.concatenate(y_pred_train_all)
+    )
+    assert row["train_RMSECV_mean"] == pytest.approx(expected_train_rmsecv)
 
     train_dir = tmp_path / "train_reg"
     metrics_path, figures_path = train_and_save(cfg, train_dir, n_jobs=1)
