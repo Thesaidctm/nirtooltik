@@ -56,6 +56,13 @@ from .io import export_xy_xlsx
 from .io import prepare_inputs as _prepare_inputs
 from .io import read_tabular, read_xlsx_xy, summarize_dataset
 from .metrics.calibration import expected_calibration_error
+from .metrics.regression import (
+    compute_mae_percent,
+    compute_rpd,
+    compute_rmsecv,
+    compute_rmsep,
+    compute_rmse,
+)
 from .models.factory import make_models_from_config
 from .preprocessors.spectro import (
     EMSC,
@@ -99,7 +106,7 @@ def _rmse(
 ) -> float:
     """Compute root mean squared error compatible with older sklearn versions."""
 
-    return float(np.sqrt(mean_squared_error(y_true, y_pred)))
+    return float(compute_rmse(y_true, y_pred))
 
 
 class LoggingGridSearchCV(GridSearchCV):
@@ -1850,8 +1857,22 @@ def _run_cv_regression(
                 continue
             _ = model_cfgs[idx % len(model_cfgs)]
             logger.info("Running %s", name)
-            scores_val: Dict[str, List[float]] = {"RMSE": [], "MAE": [], "R2": []}
-            scores_train: Dict[str, List[float]] = {"RMSE": [], "MAE": [], "R2": []}
+            scores_val: Dict[str, List[float]] = {
+                "RMSE": [],
+                "MAE": [],
+                "MAE_percent": [],
+                "R2": [],
+            }
+            scores_train: Dict[str, List[float]] = {
+                "RMSE": [],
+                "MAE": [],
+                "MAE_percent": [],
+                "R2": [],
+            }
+            y_true_val_all: List[np.ndarray] = []
+            y_pred_val_all: List[np.ndarray] = []
+            y_true_train_all: List[np.ndarray] = []
+            y_pred_train_all: List[np.ndarray] = []
             best_steps_repr: Optional[str] = None
             best_params_example: Optional[Dict[str, Any]] = None
             n_comp_list: List[int] = []
@@ -1899,11 +1920,17 @@ def _run_cv_regression(
 
                 yhat = best.predict(Xte)
                 yhat_tr = best.predict(Xtr)
+                y_true_val_all.append(np.asarray(yte, dtype=float))
+                y_pred_val_all.append(np.asarray(yhat, dtype=float))
+                y_true_train_all.append(np.asarray(ytr, dtype=float))
+                y_pred_train_all.append(np.asarray(yhat_tr, dtype=float))
                 scores_val["RMSE"].append(_rmse(yte, yhat))
                 scores_val["MAE"].append(float(mean_absolute_error(yte, yhat)))
+                scores_val["MAE_percent"].append(compute_mae_percent(yte, yhat))
                 scores_val["R2"].append(float(r2_score(yte, yhat)))
                 scores_train["RMSE"].append(_rmse(ytr, yhat_tr))
                 scores_train["MAE"].append(float(mean_absolute_error(ytr, yhat_tr)))
+                scores_train["MAE_percent"].append(compute_mae_percent(ytr, yhat_tr))
                 scores_train["R2"].append(float(r2_score(ytr, yhat_tr)))
                 progress.advance(fold_task)
             progress.remove_task(fold_task)
@@ -1915,19 +1942,54 @@ def _run_cv_regression(
                 "model": model_label,
                 "calibrated": False,
             }
-            for metric in ["RMSE", "MAE", "R2"]:
-                values = scores_val[metric]
-                if values:
-                    row[f"{metric}_mean"] = float(np.mean(values))
-                    if len(values) > 1:
-                        row[f"{metric}_std"] = float(np.std(values, ddof=1))
-                train_values = scores_train[metric]
-                if train_values:
-                    row[f"train_{metric}_mean"] = float(np.mean(train_values))
-                    if len(train_values) > 1:
-                        row[f"train_{metric}_std"] = float(
-                            np.std(train_values, ddof=1)
-                        )
+            for metric in ["RMSE", "MAE", "MAE_percent", "R2"]:
+                values = np.asarray(scores_val[metric], dtype=float)
+                if values.size:
+                    valid_mask = np.isfinite(values)
+                    if np.any(valid_mask):
+                        mean_val = float(np.mean(values[valid_mask]))
+                        row[f"{metric}_mean"] = mean_val
+                        if np.sum(valid_mask) > 1:
+                            row[f"{metric}_std"] = float(
+                                np.std(values[valid_mask], ddof=1)
+                            )
+                train_values = np.asarray(scores_train[metric], dtype=float)
+                if train_values.size:
+                    valid_train = np.isfinite(train_values)
+                    if np.any(valid_train):
+                        train_mean = float(np.mean(train_values[valid_train]))
+                        row[f"train_{metric}_mean"] = train_mean
+                        if np.sum(valid_train) > 1:
+                            row[f"train_{metric}_std"] = float(
+                                np.std(train_values[valid_train], ddof=1)
+                            )
+            if "RMSE_mean" in row:
+                row["RMSECV_mean"] = row["RMSE_mean"]
+            if "RMSE_std" in row:
+                row["RMSECV_std"] = row["RMSE_std"]
+            if "train_RMSE_mean" in row:
+                row["train_RMSECV_mean"] = row["train_RMSE_mean"]
+            if "train_RMSE_std" in row:
+                row["train_RMSECV_std"] = row["train_RMSE_std"]
+
+            if y_true_val_all and y_pred_val_all:
+                y_true_val = np.concatenate(y_true_val_all)
+                y_pred_val = np.concatenate(y_pred_val_all)
+                rmsep = compute_rmsep(y_true_val, y_pred_val)
+                if np.isfinite(rmsep):
+                    row["RMSEP"] = float(rmsep)
+                rpd = compute_rpd(y_true_val, y_pred_val)
+                if np.isfinite(rpd):
+                    row["RPD"] = float(rpd)
+            if y_true_train_all and y_pred_train_all:
+                y_true_train = np.concatenate(y_true_train_all)
+                y_pred_train = np.concatenate(y_pred_train_all)
+                train_rmsep = compute_rmsep(y_true_train, y_pred_train)
+                if np.isfinite(train_rmsep):
+                    row["train_RMSEP"] = float(train_rmsep)
+                train_rpd = compute_rpd(y_true_train, y_pred_train)
+                if np.isfinite(train_rpd):
+                    row["train_RPD"] = float(train_rpd)
             if n_comp_list:
                 row["n_components"] = int(np.median(n_comp_list))
             row["preprocess_steps"] = best_steps_repr or "None"
@@ -2285,9 +2347,15 @@ def _run_holdout_regression(
             rmse = _rmse(yte, yhat)
             mae = mean_absolute_error(yte, yhat)
             r2 = r2_score(yte, yhat)
+            mae_pct = compute_mae_percent(yte, yhat)
+            rmsep = compute_rmsep(yte, yhat)
+            rpd = compute_rpd(yte, yhat)
             rmse_tr = _rmse(ytr, yhat_tr)
             mae_tr = mean_absolute_error(ytr, yhat_tr)
             r2_tr = r2_score(ytr, yhat_tr)
+            mae_tr_pct = compute_mae_percent(ytr, yhat_tr)
+            rmsep_tr = compute_rmsep(ytr, yhat_tr)
+            rpd_tr = compute_rpd(ytr, yhat_tr)
             model_label, _ = _format_model_and_method_labels(name, pipe, gs.best_params_)
             row = {
                 "file": ds["file"],
@@ -2295,11 +2363,20 @@ def _run_holdout_regression(
                 "model": model_label,
                 "calibrated": False,
                 "RMSE_mean": float(rmse),
+                "RMSECV_mean": None,
                 "MAE_mean": float(mae),
+                "MAE_percent_mean": float(mae_pct) if np.isfinite(mae_pct) else None,
                 "R2_mean": float(r2),
+                "RMSEP": float(rmsep) if np.isfinite(rmsep) else None,
+                "RPD": float(rpd) if np.isfinite(rpd) else None,
                 "train_RMSE_mean": float(rmse_tr),
                 "train_MAE_mean": float(mae_tr),
+                "train_MAE_percent_mean": float(mae_tr_pct)
+                if np.isfinite(mae_tr_pct)
+                else None,
                 "train_R2_mean": float(r2_tr),
+                "train_RMSEP": float(rmsep_tr) if np.isfinite(rmsep_tr) else None,
+                "train_RPD": float(rpd_tr) if np.isfinite(rpd_tr) else None,
             }
             n_comp = _get_n_components(gs.best_params_)
             if n_comp is not None:
@@ -3103,18 +3180,30 @@ def _train_and_save_regression(
             )
 
             yhat = best.predict(X.values)
+            mae_pct = compute_mae_percent(y, yhat)
+            rmsep = compute_rmsep(y, yhat)
+            rpd = compute_rpd(y, yhat)
             row = {
                 "file": ds["file"],
                 "target": ds["target"],
                 "model": model_label,
                 "calibrated": False,
                 "RMSE_mean": _rmse(y, yhat),
+                "RMSECV_mean": None,
                 "MAE_mean": float(mean_absolute_error(y, yhat)),
+                "MAE_percent_mean": float(mae_pct) if np.isfinite(mae_pct) else None,
                 "R2_mean": float(r2_score(y, yhat)),
+                "RMSEP": float(rmsep) if np.isfinite(rmsep) else None,
+                "RPD": float(rpd) if np.isfinite(rpd) else None,
                 "preprocess_steps": preprocess_steps,
                 "train_RMSE_mean": _rmse(y, yhat),
                 "train_MAE_mean": float(mean_absolute_error(y, yhat)),
+                "train_MAE_percent_mean": float(mae_pct)
+                if np.isfinite(mae_pct)
+                else None,
                 "train_R2_mean": float(r2_score(y, yhat)),
+                "train_RMSEP": float(rmsep) if np.isfinite(rmsep) else None,
+                "train_RPD": float(rpd) if np.isfinite(rpd) else None,
             }
             if n_comp is not None:
                 row["n_components"] = int(n_comp)
