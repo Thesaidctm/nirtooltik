@@ -32,6 +32,9 @@ class DataConfig(BaseModel):
         None, description="Lower and upper wavelength limits"
     )
     drop_nans: Optional[bool] = True
+    target_type: Literal["classification", "regression"] = Field(
+        "classification", description="Task type for the provided targets"
+    )
     out_dir: Optional[str] = Field(
         default_factory=lambda: str(RESULTS_DIR),
         description="Base output directory",

@@ -464,6 +464,40 @@ def test_summarize_dataset_with_preprocess_info():
     assert summary["result"].unique().tolist() == ["snv_sg"]
 
 
+def test_summarize_dataset_handles_regression_targets(tmp_path):
+    rng = np.random.RandomState(0)
+    X = rng.rand(5, 3)
+    y = rng.rand(5)
+    df = pd.DataFrame(X, columns=[str(i) for i in range(3)])
+    df["target"] = y
+    data_file = tmp_path / "data.csv"
+    df.to_csv(data_file, index=False)
+
+    cfg = {
+        "input_path": str(data_file),
+        "target_cols": ["target"],
+        "target_type": "regression",
+    }
+    ds_list = prepare_inputs(cfg)
+    assert ds_list[0]["Y"].dtype.kind == "f"
+
+    summary = summarize_dataset(ds_list)
+
+    assert set(summary.columns) == {
+        "target",
+        "class",
+        "count",
+        "spectral_min",
+        "spectral_max",
+        "n_nans",
+        "preprocess_steps",
+        "result",
+    }
+    assert summary["class"].isna().all()
+    assert summary["count"].iloc[0] == len(y)
+    assert summary["result"].unique().tolist() == ["RAW"]
+
+
 @pytest.mark.parametrize("method", METHODS)
 def test_nested_crossval_report(tmp_path, method):
     rng = np.random.RandomState(2)

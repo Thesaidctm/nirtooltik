@@ -163,6 +163,9 @@ def prepare_inputs(
     sp = (float(sp[0]), float(sp[1])) if sp else None
     out_dir = Path(cfg.get("out_dir", RESULTS_DIR))
     cache_dir = out_dir / "cache"
+    target_type = str(cfg.get("target_type", "classification")).lower()
+    if target_type not in {"classification", "regression"}:
+        raise DataError(f"Tipo de alvo inválido: {cfg.get('target_type')}")
 
     cached_items: List[Tuple[Path, Dict[str, Any]]] = []
     for f in files:
@@ -203,9 +206,12 @@ def prepare_inputs(
                 cfg.get("y_sheet", "Y"),
                 tgt,
                 grp,
+                target_type=target_type,
             )
         else:
-            _, y_list, groups = read_tabular(f, tgt, grp)
+            _, y_list, groups = read_tabular(
+                f, tgt, grp, target_type=target_type
+            )
         groups_reset = None
         if groups is not None:
             groups_reset = groups.loc[keep_idx].reset_index(drop=True)
@@ -217,6 +223,7 @@ def prepare_inputs(
                 "X": X,
                 "Y": y,
                 "n_nans": n_nans,
+                "target_type": target_type,
             }
             if groups_reset is not None:
                 ds["groups"] = groups_reset

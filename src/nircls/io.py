@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from glob import glob
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast, Literal
 
 import numpy as np
 import pandas as pd
@@ -43,32 +43,82 @@ def _filter_range(
     return df.loc[:, keep]
 
 
+TargetType = Literal["classification", "regression"]
+
+
 def _extract_targets_and_groups(
     df: pd.DataFrame,
     target_cols: Optional[Sequence[str] | str],
     group_col: Optional[str],
+    target_type: TargetType = "classification",
 ) -> Tuple[List[str], List[Tuple[str, pd.Series]], Optional[pd.Series]]:
     source = df.attrs.get("_source_path")
     source_str = f" em {source}" if source else ""
     default_to_all = bool(df.attrs.get("_default_all_target_cols"))
+    tt_normalized = str(target_type).lower()
+    if tt_normalized not in {"classification", "regression"}:
+        raise DataError(f"Tipo de alvo inválido: {target_type}")
+    is_classification = tt_normalized == "classification"
     if target_cols in [None, "all"]:
         if default_to_all:
             target_cols_list = [c for c in df.columns if c != group_col]
         else:
-            target_cols_list = [
-                c
-                for c in df.columns
-                if c != group_col and not pd.api.types.is_numeric_dtype(df[c])
-            ]
+            if is_classification:
+                target_cols_list = [
+                    c
+                    for c in df.columns
+                    if c != group_col and not pd.api.types.is_numeric_dtype(df[c])
+                ]
+            else:
+                numeric_candidates = [
+                    c
+                    for c in df.columns
+                    if c != group_col and pd.api.types.is_numeric_dtype(df[c])
+                ]
+                if len(numeric_candidates) == 1:
+                    target_cols_list = numeric_candidates
+                else:
+                    target_cols_list = []
+                    if len(numeric_candidates) > 1:
+                        raise DataError(
+                            "Não foi possível inferir colunas alvo numéricas. Informe 'target_cols'."
+                        )
     elif isinstance(target_cols, str):
         target_cols_list = [target_cols]
     else:
         target_cols_list = list(cast(Sequence[str], target_cols))
+    if not target_cols_list:
+        if is_classification:
+            target_cols_list = []
+            y_list: List[Tuple[str, pd.Series]] = []
+            groups = None
+            if group_col:
+                if group_col not in df.columns:
+                    raise DataError(
+                        f"Coluna de grupos {group_col} não encontrada{source_str}"
+                    )
+                groups = df[group_col].astype("category")
+            return target_cols_list, y_list, groups
+        raise DataError(
+            "Nenhuma coluna alvo numérica encontrada. Informe 'target_cols' ou ajuste 'target_type'."
+        )
     y_list: List[Tuple[str, pd.Series]] = []
     for col in target_cols_list:
         if col not in df.columns:
             raise DataError(f"Coluna alvo {col} não encontrada{source_str}")
-        y_list.append((col, df[col].astype("category")))
+        series = df[col]
+        if is_classification:
+            y_list.append((col, series.astype("category")))
+        else:
+            try:
+                numeric = pd.to_numeric(series, errors="raise")
+            except (ValueError, TypeError) as exc:
+                raise DataError(
+                    f"Coluna alvo {col} deve conter valores numéricos para regressão"
+                ) from exc
+            if not pd.api.types.is_float_dtype(numeric.dtype):
+                numeric = numeric.astype(float)
+            y_list.append((col, numeric))
     groups = None
     if group_col:
         if group_col not in df.columns:
@@ -90,6 +140,8 @@ def read_xlsx_xy(
     y_sheet: str = "Y",
     target_cols: Optional[Sequence[str] | str] = None,
     group_col: Optional[str] = None,
+    *,
+    target_type: TargetType = "classification",
 ) -> Tuple[pd.DataFrame, List[Tuple[str, pd.Series]], Optional[pd.Series]]:
     try:
         X = pd.read_excel(path, sheet_name=x_sheet)
@@ -100,7 +152,9 @@ def read_xlsx_xy(
         raise DataError(str(e)) from e
     Ydf.attrs["_source_path"] = str(path)
     Ydf.attrs["_default_all_target_cols"] = True
-    _, out, groups = _extract_targets_and_groups(Ydf, target_cols, group_col)
+    _, out, groups = _extract_targets_and_groups(
+        Ydf, target_cols, group_col, target_type=target_type
+    )
     X = X.select_dtypes(include=[np.number])
     if len(X) != len(Ydf):
         raise DataError("X e Y com n_amostras diferente")
@@ -111,6 +165,7 @@ def read_tabular(
     path: Path,
     target_cols: Optional[Sequence[str] | str] = None,
     group_col: Optional[str] = None,
+    target_type: TargetType = "classification",
     *,
     encoding: Optional[str] = None,
     sep: str = ",",
@@ -134,7 +189,7 @@ def read_tabular(
         raise DataError(str(e)) from e
     df.attrs["_source_path"] = str(path)
     target_cols_list, y_list, groups = _extract_targets_and_groups(
-        df, target_cols, group_col
+        df, target_cols, group_col, target_type=target_type
     )
     drop_cols = list(target_cols_list)
     if group_col:
@@ -178,6 +233,9 @@ def prepare_inputs(
     if tgt is None and "target_col" in data_cfg:
         tgt = data_cfg["target_col"]
     grp = data_cfg.get("group_col")
+    target_type = str(data_cfg.get("target_type", "classification")).lower()
+    if target_type not in {"classification", "regression"}:
+        raise DataError(f"Tipo de alvo inválido: {data_cfg.get('target_type')}")
     out = []
     for f in files:
         if f.suffix.lower() in [".xlsx", ".xls"] and (
@@ -189,12 +247,14 @@ def prepare_inputs(
                 data_cfg.get("y_sheet", "Y"),
                 tgt,
                 grp,
+                target_type=target_type,
             )
         else:
             X, y_list, groups = read_tabular(
                 f,
                 tgt,
                 grp,
+                target_type=target_type,
                 encoding=data_cfg.get("encoding"),
                 sep=data_cfg.get("sep", ","),
                 decimal=data_cfg.get("decimal", "."),
@@ -233,6 +293,7 @@ def prepare_inputs(
                 "X": X_reset,
                 "Y": y.reset_index(drop=True),
                 "n_nans": n_nans,
+                "target_type": target_type,
             }
             if groups_reset is not None:
                 ds["groups"] = groups_reset
@@ -281,13 +342,27 @@ def summarize_dataset(ds_list: List[Dict[str, Any]]) -> pd.DataFrame:
 
         if steps_empty:
             result = "RAW"
-        counts = y.value_counts()
-        for cls, cnt in counts.items():
+        if pd.api.types.is_categorical_dtype(y):
+            counts = y.value_counts()
+            for cls, cnt in counts.items():
+                rows.append(
+                    {
+                        "target": ds["target"],
+                        "class": cls,
+                        "count": int(cnt),
+                        "spectral_min": spectral_min,
+                        "spectral_max": spectral_max,
+                        "n_nans": n_nans,
+                        "preprocess_steps": preprocess_steps,
+                        "result": result,
+                    }
+                )
+        else:
             rows.append(
                 {
                     "target": ds["target"],
-                    "class": cls,
-                    "count": int(cnt),
+                    "class": float("nan"),
+                    "count": int(len(y)),
                     "spectral_min": spectral_min,
                     "spectral_max": spectral_max,
                     "n_nans": n_nans,
