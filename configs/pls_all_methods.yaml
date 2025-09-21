@@ -1,0 +1,21 @@
+data:
+  input_path: data/raw/data.xlsx
+  x_sheet: X
+  y_sheet: Y
+  target_cols: all
+  spectral_range: null
+  drop_nans: true
+  out_dir: results
+
+preprocess:
+  steps: [None]
+  evaluate_individual: false
+
+models:
+  - name: PLSDA
+    # Avalia todas as opções de classificador disponíveis após a etapa PLS.
+    # Ajuste a grade de `n_components` conforme o limite recomendado
+    # (80% de min(n_amostras - 1, n_variaveis)).
+    grid:
+      n_components: [2, 4, 6]
+      method: [logreg, lda, qda, svm, knn]
