@@ -2,6 +2,7 @@ import json
 import pathlib
 import re
 import sys
+from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,7 @@ from sklearn.ensemble import (
     RandomForestRegressor,
 )
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.model_selection import GridSearchCV, LeaveOneOut, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.neural_network import MLPRegressor
@@ -31,13 +32,51 @@ from nircls.pipeline import (  # noqa: E402
     run_multiple_eval,
     train_and_save,
     _format_preprocess_step,
+    _run_cv_regression,
+    _run_holdout_regression,
     _save_pls_diagnostics,
+    _train_and_save_regression,
 )
 from nircls.models.plsda import PLSDA  # noqa: E402
 from nircls.utils.errors import DataError, ModelError  # noqa: E402
 from nircls.utils.palettes import Palette  # noqa: E402
 
 METHODS = ["logreg", "lda"]
+
+
+class DummyProgress:
+    """Minimal progress helper compatible with pipeline expectations."""
+
+    def __init__(self):
+        self._counter = 0
+
+    def add_task(self, *args, **kwargs):
+        self._counter += 1
+        return self._counter
+
+    def update(self, *args, **kwargs):  # pragma: no cover - no side effects
+        return None
+
+    def advance(self, *args, **kwargs):  # pragma: no cover - no side effects
+        return None
+
+    def remove_task(self, *args, **kwargs):  # pragma: no cover - no side effects
+        return None
+
+
+class DummyOuterSplit:
+    """Yield a single split to exercise validation logic."""
+
+    def split(self, X, y=None, groups=None):
+        n_samples = len(X)
+        if n_samples == 0:
+            return
+        if n_samples == 1:
+            yield np.array([], dtype=int), np.array([0])
+            return
+        train_idx = np.arange(n_samples - 1)
+        test_idx = np.array([n_samples - 1])
+        yield train_idx, test_idx
 
 
 def _sanitize_step_label(label: str) -> str:
@@ -888,6 +927,129 @@ def test_train_and_save_model_incompatible(monkeypatch, tmp_path, method):
     monkeypatch.setattr("nircls.pipeline.build_pipeline_from_config", raise_model_error)
     with pytest.raises(ModelError, match="modelo incompatível"):
         train_and_save(cfg, tmp_path, n_jobs=1)
+
+
+def _minimal_regression_cfg(cv_method: str = "stratified") -> Dict[str, Any]:
+    return {
+        "data": {
+            "input_path": "dummy.csv",
+            "target_cols": ["target"],
+            "target_type": "regression",
+        },
+        "models": [{"name": "LINEAR_REG", "grid": {}}],
+        "cv": {"inner_folds": 3, "cv_method": cv_method},
+    }
+
+
+def _single_sample_dataset() -> Dict[str, Any]:
+    X = pd.DataFrame([[1.0, 2.0]], columns=["f1", "f2"])
+    y = pd.Series([1.0], name="target")
+    return {"X": X, "Y": y, "file": "dummy.csv", "target": "target"}
+
+
+def _two_sample_same_group_dataset() -> Dict[str, Any]:
+    X = pd.DataFrame([[1.0], [2.0]], columns=["f1"])
+    y = pd.Series([1.0, 2.0], name="target")
+    groups = pd.Series(["A", "A"], name="group")
+    return {"X": X, "Y": y, "groups": groups, "file": "dummy.csv", "target": "target"}
+
+
+def test_run_cv_regression_raises_on_single_sample(monkeypatch, tmp_path):
+    cfg = _minimal_regression_cfg(cv_method="stratified")
+    monkeypatch.setattr(
+        "nircls.pipeline.prepare_inputs",
+        lambda *_args, **_kwargs: [_single_sample_dataset()],
+    )
+    progress = DummyProgress()
+    with pytest.raises(
+        DataError, match="Número insuficiente de amostras para validação cruzada"
+    ):
+        _run_cv_regression(
+            cfg,
+            tmp_path,
+            DummyOuterSplit(),
+            progress,
+            random_state=0,
+            n_jobs=1,
+        )
+
+
+def test_run_cv_regression_group_raises_on_single_group(monkeypatch, tmp_path):
+    cfg = _minimal_regression_cfg(cv_method="group")
+    dataset = _two_sample_same_group_dataset()
+    monkeypatch.setattr(
+        "nircls.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
+    )
+    progress = DummyProgress()
+    with pytest.raises(
+        DataError, match="Número insuficiente de grupos distintos para validação cruzada"
+    ):
+        _run_cv_regression(
+            cfg,
+            tmp_path,
+            DummyOuterSplit(),
+            progress,
+            random_state=0,
+            n_jobs=1,
+        )
+
+
+def test_run_holdout_regression_raises_on_single_train_sample(monkeypatch, tmp_path):
+    cfg = _minimal_regression_cfg(cv_method="stratified")
+    dataset = _two_sample_same_group_dataset()
+    dataset.pop("groups", None)
+    monkeypatch.setattr(
+        "nircls.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
+    )
+    with pytest.raises(
+        DataError, match="Número insuficiente de amostras para validação cruzada"
+    ):
+        _run_holdout_regression(
+            cfg,
+            tmp_path,
+            test_size=0.5,
+            random_state=0,
+            n_jobs=1,
+        )
+
+
+def test_run_holdout_regression_spxy_raises_on_single_train_sample(
+    monkeypatch, tmp_path
+):
+    cfg = _minimal_regression_cfg(cv_method="spxy")
+    dataset = _two_sample_same_group_dataset()
+    dataset.pop("groups", None)
+    monkeypatch.setattr(
+        "nircls.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
+    )
+    with pytest.raises(
+        DataError, match="Número insuficiente de amostras para validação cruzada"
+    ):
+        _run_holdout_regression(
+            cfg,
+            tmp_path,
+            test_size=0.5,
+            random_state=0,
+            n_jobs=1,
+        )
+
+
+def test_train_and_save_regression_raises_on_single_sample(monkeypatch, tmp_path):
+    cfg = _minimal_regression_cfg(cv_method="stratified")
+    monkeypatch.setattr(
+        "nircls.pipeline.prepare_inputs",
+        lambda *_args, **_kwargs: [_single_sample_dataset()],
+    )
+    with pytest.raises(
+        DataError, match="Número insuficiente de amostras para validação cruzada"
+    ):
+        _train_and_save_regression(
+            cfg,
+            tmp_path,
+            random_state=0,
+            n_jobs=1,
+            show_progress=False,
+        )
 
 
 def test_run_multiple_eval_sends_notification_email(tmp_path, monkeypatch):
