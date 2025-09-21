@@ -1,0 +1,39 @@
+data:
+  input_path: data/raw/data.xlsx
+  x_sheet: X
+  y_sheet: Y
+  target_cols: all
+  spectral_range: null
+  drop_nans: true
+  out_dir: results
+
+preprocess:
+  steps: [None]
+  evaluate_individual: false
+
+models:
+  - name: PLSDA
+    params: {method: logreg}
+    grid:
+      n_components: [2, 4, 6]
+      C: [0.1, 1.0, 10.0]
+  - name: PLSDA
+    params: {method: lda}
+    grid:
+      n_components: [2, 4, 6]
+  - name: PLSDA
+    params: {method: qda}
+    grid:
+      n_components: [2, 4, 6]
+      reg_param: [0.0, 0.1, 0.2]
+  - name: PLSDA
+    params: {method: svm}
+    grid:
+      n_components: [2, 4, 6]
+      C: [0.1, 1.0, 10.0]
+      gamma: [scale, auto]
+  - name: PLSDA
+    params: {method: knn}
+    grid:
+      n_components: [2, 4, 6]
+      n_neighbors: [3, 5, 7]
