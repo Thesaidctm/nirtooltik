@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import shutil
 import subprocess
+import textwrap
 from pathlib import Path
 
 import pandas as pd
@@ -116,7 +117,23 @@ def generate_report(
             )
     fig_md = "\n\n".join(fig_lines)
 
-    md = f"# Evaluation Report\n\n## Metrics\n\n{table_md}\n\n## Figures\n\n{fig_md}\n"
+    metric_notes = textwrap.dedent(
+        """
+        ### Metric definitions
+        - **RMSECV**: root mean squared error computed on cross-validation folds.
+        - **RMSEP**: root mean squared error on prediction/hold-out samples.
+        - **RPD**: residual predictive deviation (standard deviation of the reference values divided by RMSEP).
+        - **MAE_percent**: mean absolute error normalised by the mean absolute value of the reference target (×100).
+        """
+    ).strip()
+
+    md = (
+        "# Evaluation Report\n\n"
+        "## Metrics\n\n"
+        f"{table_md}\n\n{metric_notes}\n\n"
+        "## Figures\n\n"
+        f"{fig_md}\n"
+    )
 
     suffix = out_file.suffix.lower()
     if suffix in {".md", ".markdown"}:
@@ -308,7 +325,17 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
             fig_lines.append(f"![{fig.stem}]({rel})")
     fig_md = "\n\n".join(fig_lines)
 
-    md = summary_md + f"## Metrics\n\n{table_md}\n\n## Figures\n\n{fig_md}\n"
+    metric_notes = textwrap.dedent(
+        """
+        ### Metric definitions
+        - **RMSECV**: root mean squared error computed on cross-validation folds.
+        - **RMSEP**: root mean squared error on prediction/hold-out samples.
+        - **RPD**: residual predictive deviation (standard deviation of the reference values divided by RMSEP).
+        - **MAE_percent**: mean absolute error normalised by the mean absolute value of the reference target (×100).
+        """
+    ).strip()
+
+    md = summary_md + f"## Metrics\n\n{table_md}\n\n{metric_notes}\n\n## Figures\n\n{fig_md}\n"
 
     report_md = out_dir / "report.md"
     report_md.write_text(md)

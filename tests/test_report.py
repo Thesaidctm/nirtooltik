@@ -21,6 +21,8 @@ def test_generate_scientific_report_handles_missing_metrics(tmp_path: Path) -> N
     assert "| good | 0.500 ± 0.100 |" in content
     assert "| none | N/A |" in content
     assert "| nan | N/A |" in content
+    assert "Metric definitions" in content
+    assert "RMSECV" in content
 
 
 def test_generate_report_handles_mean_only_metrics(tmp_path: Path) -> None:
@@ -41,3 +43,5 @@ def test_generate_report_handles_mean_only_metrics(tmp_path: Path) -> None:
     assert "| good | 0.750 |" in content
     assert "| none | N/A |" in content
     assert "| nan | N/A |" in content
+    assert "Metric definitions" in content
+    assert "RMSEP" in content

@@ -137,6 +137,10 @@ def test_train_cli_regression(tmp_path: pathlib.Path) -> None:
         rows = json.load(f)
     assert rows
     assert "RMSE_mean" in rows[0]
+    assert "RMSECV_mean" in rows[0]
+    assert "RMSEP" in rows[0]
+    assert "RPD" in rows[0]
+    assert "MAE_percent_mean" in rows[0]
     assert "Accuracy_mean" not in rows[0]
     train_dir = metrics_path.parent
     assert not (train_dir / "classes.json").exists()

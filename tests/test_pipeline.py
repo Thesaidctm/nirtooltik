@@ -379,6 +379,10 @@ def test_end_to_end_regression(tmp_path):
         rows = json.load(f)
     assert rows
     assert all("RMSE_mean" in row for row in rows)
+    assert all("RMSECV_mean" in row for row in rows)
+    assert all("RMSEP" in row for row in rows)
+    assert all("RPD" in row for row in rows)
+    assert all("MAE_percent_mean" in row for row in rows)
     assert all("MAE_mean" in row for row in rows)
     assert all("R2_mean" in row for row in rows)
     assert all("Accuracy_mean" not in row for row in rows)
@@ -393,7 +397,10 @@ def test_end_to_end_regression(tmp_path):
         metrics_rows = json.load(f)
     assert metrics_rows
     train_row = metrics_rows[0]
-    assert "RMSE_mean" in train_row and "MAE_mean" in train_row and "R2_mean" in train_row
+    assert "RMSE_mean" in train_row and "RMSECV_mean" in train_row
+    assert "RMSEP" in train_row and "RPD" in train_row
+    assert "MAE_percent_mean" in train_row and "MAE_mean" in train_row
+    assert "R2_mean" in train_row
     assert "Accuracy_mean" not in train_row
     assert not (train_dir / "classes.json").exists()
     assert not (train_dir / "astm_classification.json").exists()
