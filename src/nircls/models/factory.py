@@ -8,16 +8,19 @@ from sklearn.cross_decomposition import PLSRegression
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.ensemble import (
     AdaBoostClassifier,
+    AdaBoostRegressor,
+    ExtraTreesRegressor,
     GradientBoostingClassifier,
+    GradientBoostingRegressor,
     RandomForestClassifier,
     RandomForestRegressor,
 )
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 from sklearn.naive_bayes import BernoulliNB, GaussianNB, MultinomialNB
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-from sklearn.neural_network import MLPClassifier
+from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.svm import SVR
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 from .base import BaseModelBuilder
 
@@ -80,7 +83,7 @@ def _lstm_builder():  # pragma: no cover - lazy import
 
 # Mapping from model identifier to human readable description. This dictionary
 # is also populated by third-party plugins registered via entry points.
-MODEL_DESCRIPTIONS: Dict[str, str] = {
+CLASSIFICATION_MODEL_DESCRIPTIONS: Dict[str, str] = {
     "PLSDA": "Partial Least Squares Discriminant Analysis",
     "SVM_RBF": "Support Vector Machine (RBF)",
     "SVM_LINEAR": "Support Vector Machine (Linear)",
@@ -107,19 +110,39 @@ MODEL_DESCRIPTIONS: Dict[str, str] = {
 REGRESSION_MODEL_DESCRIPTIONS: Dict[str, str] = {
     "PLSREGRESSION": "Partial Least Squares Regression",
     "PLSR": "Partial Least Squares Regression",
+    "PLS_REG": "Partial Least Squares Regression",
     "RANDOMFORESTREGRESSOR": "Random Forest Regressor",
     "RFR": "Random Forest Regressor",
+    "RF_REG": "Random Forest Regressor",
+    "GRADIENTBOOSTINGREGRESSOR": "Gradient Boosting Regressor",
+    "GB_REG": "Gradient Boosting Regressor",
+    "EXTRATREESREGRESSOR": "Extra Trees Regressor",
+    "ETR": "Extra Trees Regressor",
+    "ET_REG": "Extra Trees Regressor",
+    "ADABOOSTREGRESSOR": "AdaBoost Regressor",
+    "ADABOOST_REG": "AdaBoost Regressor",
     "SVR": "Support Vector Regressor",
+    "SVR_REG": "Support Vector Regressor",
+    "SVR_LINEAR_REG": "Support Vector Regressor (Linear)",
+    "SVR_RBF_REG": "Support Vector Regressor (RBF)",
     "RIDGE": "Ridge Regression",
     "LINEARREGRESSION": "Linear Regression",
+    "LINEAR_REG": "Linear Regression",
     "KNNR": "k-Nearest Neighbors Regressor",
     "KNEIGHBORSREGRESSOR": "k-Nearest Neighbors Regressor",
+    "KNN_REG": "k-Nearest Neighbors Regressor",
+    "MLPREGRESSOR": "Multilayer Perceptron Regressor",
+    "MLP_REG": "Multilayer Perceptron Regressor",
+    "DECISIONTREEREGRESSOR": "Decision Tree Regressor",
+    "DT_REG": "Decision Tree Regressor",
 }
+
+MODEL_DESCRIPTIONS: Dict[str, str] = CLASSIFICATION_MODEL_DESCRIPTIONS
 
 _ENTRYPOINT_GROUP = "nircls.model_builders"
 
 
-MODEL_BUILDERS = {
+CLASSIFICATION_MODEL_BUILDERS = {
     "PLSDA": lambda grid: PLSDA(),
     "SVM_RBF": lambda grid: _build_svm(grid, kernel="rbf"),
     "SVM_LINEAR": lambda grid: _build_svm(grid, kernel="linear"),
@@ -147,14 +170,34 @@ MODEL_BUILDERS = {
 REGRESSION_MODEL_BUILDERS = {
     "PLSREGRESSION": lambda grid: PLSRegression(),
     "PLSR": lambda grid: PLSRegression(),
+    "PLS_REG": lambda grid: PLSRegression(),
     "RANDOMFORESTREGRESSOR": lambda grid: RandomForestRegressor(),
     "RFR": lambda grid: RandomForestRegressor(),
+    "RF_REG": lambda grid: RandomForestRegressor(),
+    "GRADIENTBOOSTINGREGRESSOR": lambda grid: GradientBoostingRegressor(),
+    "GB_REG": lambda grid: GradientBoostingRegressor(),
+    "EXTRATREESREGRESSOR": lambda grid: ExtraTreesRegressor(),
+    "ETR": lambda grid: ExtraTreesRegressor(),
+    "ET_REG": lambda grid: ExtraTreesRegressor(),
+    "ADABOOSTREGRESSOR": lambda grid: AdaBoostRegressor(),
+    "ADABOOST_REG": lambda grid: AdaBoostRegressor(),
     "SVR": lambda grid: SVR(),
+    "SVR_REG": lambda grid: SVR(),
+    "SVR_LINEAR_REG": lambda grid: SVR(kernel="linear"),
+    "SVR_RBF_REG": lambda grid: SVR(kernel="rbf"),
     "RIDGE": lambda grid: Ridge(),
     "LINEARREGRESSION": lambda grid: LinearRegression(),
+    "LINEAR_REG": lambda grid: LinearRegression(),
     "KNNR": lambda grid: KNeighborsRegressor(),
     "KNEIGHBORSREGRESSOR": lambda grid: KNeighborsRegressor(),
+    "KNN_REG": lambda grid: KNeighborsRegressor(),
+    "MLPREGRESSOR": lambda grid: MLPRegressor(),
+    "MLP_REG": lambda grid: MLPRegressor(),
+    "DECISIONTREEREGRESSOR": lambda grid: DecisionTreeRegressor(),
+    "DT_REG": lambda grid: DecisionTreeRegressor(),
 }
+
+MODEL_BUILDERS = CLASSIFICATION_MODEL_BUILDERS
 
 
 DEFAULT_GRIDS = {
@@ -199,14 +242,55 @@ DEFAULT_GRIDS = {
 REGRESSION_DEFAULT_GRIDS = {
     "PLSREGRESSION": {"n_components": [2]},
     "PLSR": {"n_components": [2]},
-    "RANDOMFORESTREGRESSOR": {"n_estimators": [100]},
-    "RFR": {"n_estimators": [100]},
+    "PLS_REG": {"n_components": [2]},
+    "RANDOMFORESTREGRESSOR": {"n_estimators": [100], "max_depth": [None]},
+    "RFR": {"n_estimators": [100], "max_depth": [None]},
+    "RF_REG": {"n_estimators": [100], "max_depth": [None]},
+    "GRADIENTBOOSTINGREGRESSOR": {
+        "n_estimators": [100],
+        "learning_rate": [0.1],
+        "max_depth": [3],
+    },
+    "GB_REG": {"n_estimators": [100], "learning_rate": [0.1], "max_depth": [3]},
+    "EXTRATREESREGRESSOR": {"n_estimators": [100], "max_depth": [None]},
+    "ETR": {"n_estimators": [100], "max_depth": [None]},
+    "ET_REG": {"n_estimators": [100], "max_depth": [None]},
+    "ADABOOSTREGRESSOR": {"n_estimators": [50], "learning_rate": [1.0]},
+    "ADABOOST_REG": {"n_estimators": [50], "learning_rate": [1.0]},
     "SVR": {"kernel": ["rbf"], "C": [1.0]},
+    "SVR_REG": {"kernel": ["rbf"], "C": [1.0]},
+    "SVR_LINEAR_REG": {"kernel": ["linear"], "C": [1.0]},
+    "SVR_RBF_REG": {"kernel": ["rbf"], "C": [1.0]},
     "RIDGE": {"alpha": [1.0]},
     "LINEARREGRESSION": {},
+    "LINEAR_REG": {},
     "KNNR": {"n_neighbors": [5]},
     "KNEIGHBORSREGRESSOR": {"n_neighbors": [5]},
+    "KNN_REG": {"n_neighbors": [5]},
+    "MLPREGRESSOR": {"max_iter": [500], "early_stopping": [True]},
+    "MLP_REG": {"max_iter": [500], "early_stopping": [True]},
+    "DECISIONTREEREGRESSOR": {"max_depth": [None]},
+    "DT_REG": {"max_depth": [None]},
 }
+
+CLASSIFICATION_DEFAULT_GRIDS = DEFAULT_GRIDS
+
+TASK_MODEL_BUILDERS: Dict[str, Dict[str, Any]] = {
+    "classification": CLASSIFICATION_MODEL_BUILDERS,
+    "regression": REGRESSION_MODEL_BUILDERS,
+}
+
+TASK_DEFAULT_GRIDS: Dict[str, Dict[str, Dict[str, List[Any]]]] = {
+    "classification": CLASSIFICATION_DEFAULT_GRIDS,
+    "regression": REGRESSION_DEFAULT_GRIDS,
+}
+
+TASK_MODEL_DESCRIPTIONS: Dict[str, Dict[str, str]] = {
+    "classification": CLASSIFICATION_MODEL_DESCRIPTIONS,
+    "regression": REGRESSION_MODEL_DESCRIPTIONS,
+}
+
+TASK_SUFFIXES = {"classification": "_CLS", "regression": "_REG"}
 
 
 _EP_LOADED = False
@@ -239,21 +323,29 @@ def _load_entry_point_builders() -> None:  # pragma: no cover - simple metadata 
     _EP_LOADED = True
 
 
-def get_model_builders() -> Dict[str, Any]:
-    """Return mapping of available model builders.
-
-    Third-party plugins are loaded lazily on first call.
-    """
-
-    _load_entry_point_builders()
-    return MODEL_BUILDERS
+def _normalize_task_type(task_type: str | None) -> str:
+    normalized = str(task_type or "classification").strip().lower()
+    if normalized == "regression":
+        return "regression"
+    return "classification"
 
 
-def get_model_descriptions() -> Dict[str, str]:
+def get_model_builders(task_type: str = "classification") -> Dict[str, Any]:
+    """Return mapping of available model builders for ``task_type``."""
+
+    normalized = _normalize_task_type(task_type)
+    if normalized == "classification":
+        _load_entry_point_builders()
+    return TASK_MODEL_BUILDERS[normalized]
+
+
+def get_model_descriptions(task_type: str = "classification") -> Dict[str, str]:
     """Return mapping from model identifier to human readable description."""
 
-    _load_entry_point_builders()
-    return MODEL_DESCRIPTIONS
+    normalized = _normalize_task_type(task_type)
+    if normalized == "classification":
+        _load_entry_point_builders()
+    return TASK_MODEL_DESCRIPTIONS[normalized]
 
 
 def _normalize_grid_values(grid: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
@@ -313,25 +405,51 @@ def _normalize_grid_values(grid: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
 def make_models_from_config(
     models_cfg: List[Dict[str, Any]], *, task_type: str = "classification"
 ):
-    normalized_type = str(task_type or "classification").lower()
-    if normalized_type == "regression":
-        builders: Dict[str, Any] = REGRESSION_MODEL_BUILDERS
-        defaults = REGRESSION_DEFAULT_GRIDS
-    else:
-        builders = get_model_builders()
-        defaults = DEFAULT_GRIDS
+    normalized_type = _normalize_task_type(task_type)
+    builders = get_model_builders(normalized_type)
+    defaults = TASK_DEFAULT_GRIDS[normalized_type]
+    suffix = TASK_SUFFIXES[normalized_type]
+    other_suffix = (
+        TASK_SUFFIXES["regression"]
+        if normalized_type == "classification"
+        else TASK_SUFFIXES["classification"]
+    )
     out = []
     for m in models_cfg:
         m.setdefault("overfit_check", True)
         name = m["name"]
         upper = name.upper()
 
-        builder = builders.get(upper)
+        resolved_key = upper
+        builder = builders.get(resolved_key)
+
+        def _attempt(candidate_key: str) -> tuple[str, Any] | tuple[None, None]:
+            candidate_builder = builders.get(candidate_key)
+            if candidate_builder is None:
+                return None, None
+            return candidate_key, candidate_builder
+
+        if builder is None and not resolved_key.endswith(suffix):
+            candidate_key, candidate_builder = _attempt(f"{resolved_key}{suffix}")
+            if candidate_builder is not None:
+                resolved_key, builder = candidate_key, candidate_builder
+        if builder is None and other_suffix:
+            if resolved_key.endswith(other_suffix):
+                base = resolved_key[: -len(other_suffix)]
+                candidate_key, candidate_builder = _attempt(base)
+                if candidate_builder is None and suffix:
+                    candidate_key, candidate_builder = _attempt(f"{base}{suffix}")
+                if candidate_builder is not None:
+                    resolved_key, builder = candidate_key, candidate_builder
+            else:
+                candidate_key, candidate_builder = _attempt(f"{resolved_key}{other_suffix}")
+                if candidate_builder is not None:
+                    resolved_key, builder = candidate_key, candidate_builder
         if builder is None:
             raise ValueError(f"Modelo não suportado: {name}")
 
         grid = _normalize_grid_values(m.get("grid", {}) or {})
-        default_grid = defaults.get(upper, {})
+        default_grid = defaults.get(resolved_key, {})
         for k, v in default_grid.items():
             grid.setdefault(k, v)
 

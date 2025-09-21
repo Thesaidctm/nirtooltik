@@ -536,7 +536,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         help=t("astm_help"),
     )
     sp.add_parser("demo")
-    sp.add_parser("list-models", help=t("models_help"))
+    p_list = sp.add_parser("list-models", help=t("models_help"))
+    p_list.add_argument(
+        "--target-type",
+        choices=["classification", "regression"],
+        default="classification",
+        help=t("target_type_help"),
+    )
     p_all = sp.add_parser("run-all", help=t("run_all_help"))
     p_all.add_argument("--config", help=t("run_all_config_help"))
     p_all.add_argument(
@@ -595,8 +601,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         mlflow.set_tracking_uri(mlflow_uri)
     if args.cmd == "list-models":
-        builders = get_model_builders()
-        descs = get_model_descriptions()
+        target_type = getattr(args, "target_type", "classification")
+        builders = get_model_builders(target_type)
+        descs = get_model_descriptions(target_type)
         for name in sorted(builders.keys()):
             print(f"{name}: {descs.get(name, name)}")
         return 0

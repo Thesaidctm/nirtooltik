@@ -8,9 +8,19 @@ import pandas as pd
 import pytest
 from joblib import dump
 from sklearn.cross_decomposition import PLSRegression
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import (
+    AdaBoostRegressor,
+    ExtraTreesRegressor,
+    GradientBoostingRegressor,
+    RandomForestRegressor,
+)
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.pipeline import Pipeline
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.svm import SVR
+from sklearn.tree import DecisionTreeRegressor
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))  # noqa: E402
 from nircls.feature_selection.vip import compute_vip  # noqa: E402
@@ -123,6 +133,105 @@ def test_build_pipeline_regression_step_name():
     assert name == "PLSRegression"
     assert any(step[0] == "reg" for step in pipe.steps)
     assert all(not key.startswith("clf__") for key in grid)
+
+
+@pytest.mark.parametrize(
+    "identifier, expected_cls, grid_keys, extra_cfg, expected_attrs",
+    [
+        ("PLSR", PLSRegression, {"reg__n_components"}, None, {}),
+        (
+            "RF_REG",
+            RandomForestRegressor,
+            {"reg__n_estimators", "reg__max_depth"},
+            None,
+            {},
+        ),
+        (
+            "GB_REG",
+            GradientBoostingRegressor,
+            {"reg__n_estimators", "reg__learning_rate", "reg__max_depth"},
+            None,
+            {},
+        ),
+        (
+            "ET_REG",
+            ExtraTreesRegressor,
+            {"reg__n_estimators", "reg__max_depth"},
+            None,
+            {},
+        ),
+        (
+            "ADABOOST_REG",
+            AdaBoostRegressor,
+            {"reg__n_estimators", "reg__learning_rate"},
+            None,
+            {},
+        ),
+        ("SVR", SVR, {"reg__kernel", "reg__C"}, None, {"kernel": "rbf"}),
+        (
+            "SVR_REG",
+            SVR,
+            {"reg__kernel", "reg__C"},
+            None,
+            {"kernel": "rbf"},
+        ),
+        (
+            "SVR_RBF_REG",
+            SVR,
+            {"reg__kernel", "reg__C"},
+            None,
+            {"kernel": "rbf"},
+        ),
+        (
+            "SVR_LINEAR_REG",
+            SVR,
+            {"reg__kernel", "reg__C"},
+            None,
+            {"kernel": "linear"},
+        ),
+        ("RIDGE", Ridge, {"reg__alpha"}, None, {}),
+        ("LINEAR_REG", LinearRegression, set(), None, {}),
+        ("KNN_REG", KNeighborsRegressor, {"reg__n_neighbors"}, None, {}),
+        (
+            "MLP_REG",
+            MLPRegressor,
+            {"reg__max_iter", "reg__early_stopping"},
+            {"params": {"max_iter": 10, "early_stopping": False}},
+            {},
+        ),
+        ("DT_REG", DecisionTreeRegressor, {"reg__max_depth"}, None, {}),
+    ],
+)
+def test_regression_model_builders_are_trainable(
+    identifier, expected_cls, grid_keys, extra_cfg, expected_attrs
+):
+    rng = np.random.RandomState(0)
+    X = rng.rand(24, 6)
+    y = rng.rand(24)
+    model_cfg = {"name": identifier}
+    if extra_cfg:
+        model_cfg.update(extra_cfg)
+    cfg = {
+        "data": {
+            "input_path": "dummy.csv",
+            "target_cols": ["target"],
+            "target_type": "regression",
+        },
+        "preprocess": {"steps": []},
+        "models": [model_cfg],
+    }
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == identifier
+    assert isinstance(pipe.named_steps["reg"], expected_cls)
+    pipe.fit(X, y)
+    fitted = pipe.named_steps["reg"]
+    if grid_keys:
+        for key in grid_keys:
+            assert key in grid
+    else:
+        assert grid == {}
+    for attr, expected_value in (expected_attrs or {}).items():
+        assert getattr(fitted, attr) == expected_value
 
 
 @pytest.mark.parametrize("method", METHODS)
