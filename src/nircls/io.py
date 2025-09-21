@@ -294,6 +294,7 @@ def prepare_inputs(
                 "Y": y.reset_index(drop=True),
                 "n_nans": n_nans,
                 "target_type": target_type,
+                "task_type": target_type,
             }
             if groups_reset is not None:
                 ds["groups"] = groups_reset

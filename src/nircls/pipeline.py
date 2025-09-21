@@ -31,12 +31,17 @@ from sklearn.metrics import (
     brier_score_loss,
     confusion_matrix,
     f1_score,
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
 )
 from sklearn.model_selection import (
     GridSearchCV,
     GroupKFold,
+    KFold,
     LeaveOneOut,
     ParameterGrid,
+    RepeatedKFold,
     RepeatedStratifiedKFold,
     StratifiedKFold,
     cross_val_predict,
@@ -86,6 +91,15 @@ warnings.filterwarnings(
     message="This Pipeline instance is not fitted yet",
     category=FutureWarning,
 )
+
+
+def _rmse(
+    y_true: Sequence[float] | np.ndarray,
+    y_pred: Sequence[float] | np.ndarray,
+) -> float:
+    """Compute root mean squared error compatible with older sklearn versions."""
+
+    return float(np.sqrt(mean_squared_error(y_true, y_pred)))
 
 
 class LoggingGridSearchCV(GridSearchCV):
@@ -224,6 +238,7 @@ def prepare_inputs(
                 "Y": y,
                 "n_nans": n_nans,
                 "target_type": target_type,
+                "task_type": target_type,
             }
             if groups_reset is not None:
                 ds["groups"] = groups_reset
@@ -292,10 +307,54 @@ def _make_preprocess(
     return steps, grid
 
 
+def _infer_task_type(cfg: Mapping[str, Any]) -> str:
+    """Infer the task type (classification or regression) from ``cfg``."""
+
+    task_type = cfg.get("task_type")
+    if not task_type:
+        data_cfg = cfg.get("data") if isinstance(cfg, Mapping) else None
+        if isinstance(data_cfg, Mapping):
+            task_type = data_cfg.get("task_type")
+        if not task_type and isinstance(data_cfg, Mapping):
+            task_type = data_cfg.get("target_type")
+    normalized = str(task_type or "classification").lower()
+    if normalized not in {"classification", "regression"}:
+        raise DataError(f"Tipo de tarefa inválido: {task_type}")
+    return normalized
+
+
+def _get_model_step_name(pipe: Pipeline) -> str:
+    """Return the name of the final estimator step in ``pipe``."""
+
+    if hasattr(pipe, "named_steps") and pipe.named_steps:
+        for candidate in ("clf", "reg"):
+            if candidate in pipe.named_steps:
+                return candidate
+        # fall back to the last named step if available
+        try:
+            return next(reversed(pipe.named_steps))  # type: ignore[arg-type]
+        except StopIteration:  # pragma: no cover - empty pipeline
+            pass
+    if getattr(pipe, "steps", None):
+        return pipe.steps[-1][0]
+    return "clf"
+
+
+def _get_preprocess_steps_from_pipeline(pipe: Pipeline) -> List[Any]:
+    """Return preprocessing steps stored in ``pipe`` excluding the estimator."""
+
+    if not hasattr(pipe, "named_steps"):
+        return []
+    final_name = _get_model_step_name(pipe)
+    return [v for k, v in pipe.named_steps.items() if k != final_name]
+
+
 def build_pipeline_from_config(
     cfg: Dict[str, Any],
 ) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
     _validate_cfg(cfg, need_models=True)
+    task_type = _infer_task_type(cfg)
+    final_step_name = "clf" if task_type == "classification" else "reg"
     pre_cfg = cfg.get("preprocess", {})
     steps_cfg = pre_cfg.get("steps", [])
     evaluate_flag = pre_cfg.get("evaluate_individual")
@@ -308,21 +367,29 @@ def build_pipeline_from_config(
     def _build_models(
         pre_steps: List[Tuple[str, Any]], pre_grid: Dict[str, Any], suffix: str = ""
     ) -> None:
-        models = make_models_from_config(cfg["models"])
+        try:
+            models = make_models_from_config(cfg["models"], task_type=task_type)
+        except TypeError:
+            models = make_models_from_config(cfg["models"])
         for m in models:
             est = m["estimator"]
             grid = pre_grid.copy()
             model_grid = m.get("grid", {}) or {}
-            if not hasattr(est, "predict_proba"):
+            if task_type == "classification" and not hasattr(est, "predict_proba"):
                 calib_cfg = m.get("calibration") or {}
                 method = calib_cfg.get("method", "sigmoid")
                 cv = calib_cfg.get("cv", 5)
                 est = CalibratedClassifierCV(estimator=est, method=method, cv=cv)
-                grid.update({f"clf__estimator__{k}": v for k, v in model_grid.items()})
+                grid.update(
+                    {
+                        f"{final_step_name}__estimator__{k}": v
+                        for k, v in model_grid.items()
+                    }
+                )
             else:
-                grid.update({f"clf__{k}": v for k, v in model_grid.items()})
+                grid.update({f"{final_step_name}__{k}": v for k, v in model_grid.items()})
             name = m["name"] + suffix
-            pipe = Pipeline(pre_steps + [("clf", est)])
+            pipe = Pipeline(pre_steps + [(final_step_name, est)])
             out.append((name, pipe, grid))
 
     if evaluate_ind and len(steps_cfg) > 1:
@@ -468,7 +535,8 @@ def _resolve_plsda_estimator(estimator: Any) -> Any:
     while isinstance(current, CalibratedClassifierCV):
         current = current.estimator
     if isinstance(current, Pipeline):
-        clf = current.named_steps.get("clf")
+        step_name = _get_model_step_name(current)
+        clf = current.named_steps.get(step_name)
         if clf is None:
             return current
         return _resolve_plsda_estimator(clf)
@@ -802,7 +870,7 @@ def _save_plots(
     file_path: str,
     target: str,
     model: str,
-    classes: np.ndarray,
+    classes: Optional[np.ndarray],
     out_dir: Path,
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -811,6 +879,7 @@ def _save_plots(
     *,
     interactive: bool = False,
     palette: Palette = Palette.BLUES,
+    task_type: str = "classification",
 ) -> None:
     """Save confusion matrix and optional ROC/reliability plots.
 
@@ -827,30 +896,33 @@ def _save_plots(
         label = _normalize_preprocess_value(preprocess_label)
         if label:
             stem = f"{stem}__{label}"
-    cm = confusion_matrix(y_true, y_pred)
-    plot_confusion(
-        cm,
-        classes,
-        out_fig / f"{stem}__{target}__{model}__confusion",
-        interactive=interactive,
-        palette=palette,
-    )
-    if y_proba is not None:
-        plot_roc_ovr(
-            y_true,
-            y_proba,
+    if str(task_type).lower() != "regression":
+        if classes is None:
+            raise ValueError("classes must be provided for classification plots")
+        cm = confusion_matrix(y_true, y_pred)
+        plot_confusion(
+            cm,
             classes,
-            out_fig / f"{stem}__{target}__{model}__roc",
+            out_fig / f"{stem}__{target}__{model}__confusion",
             interactive=interactive,
             palette=palette,
         )
-        plot_reliability(
-            y_true,
-            y_proba,
-            out_fig / f"{stem}__{target}__{model}__reliability",
-            interactive=interactive,
-            palette=palette,
-        )
+        if y_proba is not None:
+            plot_roc_ovr(
+                y_true,
+                y_proba,
+                classes,
+                out_fig / f"{stem}__{target}__{model}__roc",
+                interactive=interactive,
+                palette=palette,
+            )
+            plot_reliability(
+                y_true,
+                y_proba,
+                out_fig / f"{stem}__{target}__{model}__reliability",
+                interactive=interactive,
+                palette=palette,
+            )
 
 
 def _append_table(df: pd.DataFrame, path: Path) -> None:
@@ -916,7 +988,8 @@ def _save_pls_diagnostics(
     best_params: Optional[Mapping[str, Any]],
     X: pd.DataFrame,
     y: np.ndarray,
-    classes: np.ndarray,
+    classes: Optional[np.ndarray],
+    task_type: str = "classification",
     file_path: str,
     target: str,
     model: str,
@@ -927,11 +1000,10 @@ def _save_pls_diagnostics(
 ) -> Dict[str, str]:
     """Export PLS loadings, Y loadings, weights and VIP tables when available."""
 
-    clf_step = (
-        template_pipe.named_steps.get("clf")
-        if hasattr(template_pipe, "named_steps")
-        else None
-    )
+    if not hasattr(template_pipe, "named_steps"):
+        return {}
+    final_step = _get_model_step_name(template_pipe)
+    clf_step = template_pipe.named_steps.get(final_step)
     if clf_step is None or not hasattr(clf_step, "pls"):
         return {}
 
@@ -950,7 +1022,7 @@ def _save_pls_diagnostics(
         logger.debug("Could not fit pipeline for PLS diagnostics", exc_info=True)
         return {}
 
-    clf = pipe.named_steps.get("clf")
+    clf = pipe.named_steps.get(_get_model_step_name(pipe))
     pls = getattr(clf, "pls", None)
     if pls is None:
         return {}
@@ -968,7 +1040,20 @@ def _save_pls_diagnostics(
     except Exception:  # pragma: no cover - preprocessing transform failed
         Xt = X.values
 
-    Y = np.eye(len(classes))[y]
+    task_type_normalized = str(task_type or "classification").lower()
+    y_array = np.asarray(y)
+    if task_type_normalized == "regression":
+        Y = np.asarray(y_array, dtype=float)
+        if Y.ndim == 1:
+            Y = Y.reshape(-1, 1)
+        class_labels = None
+    else:
+        if classes is None:
+            return {}
+        classes = np.asarray(classes)
+        y_indices = y_array.astype(int, copy=False)
+        Y = np.eye(len(classes))[y_indices]
+        class_labels = classes
     try:
         vip_scores = compute_vip(pls, Xt, Y)
     except Exception:  # pragma: no cover - VIP computation failed
@@ -986,7 +1071,7 @@ def _save_pls_diagnostics(
     weights_base = figures_dir / f"{base}__pls_weights"
     vip_base = figures_dir / f"{base}__vip"
     y_loadings_base: Optional[Path] = None
-    if y_loadings is not None:
+    if task_type_normalized == "classification" and y_loadings is not None:
         y_loadings_base = figures_dir / f"{base}__pls_y_loadings"
 
     loadings_df = plot_pls_loadings(
@@ -1011,10 +1096,10 @@ def _save_pls_diagnostics(
         palette=palette,
     )
     y_loadings_df: Optional[pd.DataFrame] = None
-    if y_loadings_base is not None:
+    if y_loadings_base is not None and task_type_normalized == "classification":
         y_loadings_df = plot_pls_y_loadings(
             y_loadings,
-            classes,
+            class_labels if class_labels is not None else np.array([]),
             y_loadings_base,
             interactive=interactive,
             palette=palette,
@@ -1023,11 +1108,13 @@ def _save_pls_diagnostics(
     preprocess_value = preprocess_steps if preprocess_steps else "None"
 
     y_arr = np.asarray(y)
-    y_int = y_arr.astype(int, copy=False)
-    classes_arr = np.asarray(classes)
-    try:
-        y_labels = classes_arr[y_int]
-    except Exception:
+    if task_type_normalized == "classification" and class_labels is not None:
+        y_int = y_arr.astype(int, copy=False)
+        try:
+            y_labels = class_labels[y_int]
+        except Exception:
+            y_labels = y_arr
+    else:
         y_labels = y_arr
     index = X.index if isinstance(X, pd.DataFrame) else pd.RangeIndex(len(y_arr))
     x_scores_df = _build_pls_scores_df(x_scores, index, y_labels)
@@ -1154,7 +1241,7 @@ def _get_n_components(best_params: Dict[str, Any]) -> Optional[int]:
     return None
 
 
-def _run_cv(
+def _run_cv_classification(
     cfg: Dict[str, Any],
     out_dir: Path,
     outer: Any,
@@ -1166,7 +1253,7 @@ def _run_cv(
     log_memory: bool = False,
     step_label: Optional[str] = None,
 ) -> None:
-    """Run cross-validation for configured datasets and models.
+    """Run cross-validation for configured datasets and models (classification).
 
     Parameters
     ----------
@@ -1254,7 +1341,7 @@ def _run_cv(
             m_cfg = model_cfgs[idx % len(model_cfgs)]
             progress.update(model_task, description=f"Model: {name}")
             steps_desc = _format_preprocess_steps(
-                [v for k, v in pipe.named_steps.items() if k != "clf"]
+                _get_preprocess_steps_from_pipeline(pipe)
             )
             logger.info("Running %s with steps: %s", name, steps_desc)
             mem_start = None
@@ -1299,7 +1386,7 @@ def _run_cv(
                 best = pipe.set_params(**best_params)
                 if best_steps_repr is None:
                     best_steps_repr = _format_preprocess_steps(
-                        [v for k, v in best.named_steps.items() if k != "clf"]
+                        _get_preprocess_steps_from_pipeline(best)
                     )
                 calib_cfg = m_cfg.get("calibration")
                 if calib_cfg:
@@ -1408,6 +1495,7 @@ def _run_cv(
                     X=X,
                     y=y_enc,
                     classes=classes,
+                    task_type="classification",
                     file_path=ds["file"],
                     target=ds["target"],
                     model=model_label,
@@ -1445,6 +1533,7 @@ def _run_cv(
                     preprocess_label=row.get("preprocess_steps"),
                     interactive=interactive,
                     palette=Palette(cfg.get("palette", Palette.BLUES)),
+                    task_type="classification",
                 )
                 progress.advance(model_task)
                 del (
@@ -1506,7 +1595,7 @@ def _run_cv(
                 best = gs.best_estimator_
                 if best_steps_repr is None:
                     best_steps_repr = _format_preprocess_steps(
-                        [v for k, v in best.named_steps.items() if k != "clf"]
+                        _get_preprocess_steps_from_pipeline(best)
                     )
                 calib_cfg = m_cfg.get("calibration")
                 if calib_cfg:
@@ -1680,6 +1769,7 @@ def _run_cv(
                 preprocess_label=row.get("preprocess_steps"),
                 interactive=interactive,
                 palette=Palette(cfg.get("palette", Palette.BLUES)),
+                task_type="classification",
             )
             progress.advance(model_task)
             del (
@@ -1705,7 +1795,219 @@ def _run_cv(
     logger.info("Cross-validation finished")
 
 
-def _run_holdout(
+def _run_cv_regression(
+    cfg: Dict[str, Any],
+    out_dir: Path,
+    outer: Any,
+    progress: Progress,
+    *,
+    random_state: int,
+    interactive: bool = False,
+    n_jobs: int = 1,
+    log_memory: bool = False,
+    step_label: Optional[str] = None,
+) -> None:
+    """Run cross-validation for regression tasks."""
+
+    n_jobs = max(1, n_jobs)
+    logger.info("Starting cross-validation (regression)")
+    try:
+        data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+        _maybe_run_qc(cfg, data, out_dir)
+    except DataError as e:
+        logger.error("Data preparation failed: %s", e)
+        raise DataError(
+            "Arquivo de dados não encontrado. Verifique o caminho informado."
+        ) from e
+
+    rows: List[Dict[str, Any]] = []
+    tgt_task = progress.add_task("Target", total=len(data))
+    for ds in data:
+        progress.update(tgt_task, description=f"Target: {ds['target']}")
+        X: pd.DataFrame = ds["X"]
+        y_series: pd.Series = ds["Y"]
+        y = pd.to_numeric(y_series, errors="coerce").to_numpy(dtype=float)
+        if np.isnan(y).any():
+            raise DataError("Valores alvo inválidos ou não numéricos detectados")
+        groups = ds.get("groups")
+        cv_cfg = cfg.get("cv", {})
+        inner_folds_cfg = cv_cfg.get("inner_folds", 3)
+        if inner_folds_cfg in (None, False):
+            inner_folds_cfg = 3
+        inner_folds = int(inner_folds_cfg)
+        inner_folds = max(inner_folds, 2)
+        cv_method = cv_cfg.get("cv_method", "kfold").lower()
+        model_cfgs = cfg.get("models", [])
+        pipelines = build_pipeline_from_config(cfg)
+        model_task = progress.add_task("Model", total=len(pipelines))
+        mem_start = None
+        if log_memory:
+            mem_start = psutil.Process().memory_info().rss / 1e6
+            logger.debug("memory start %.3f MB", mem_start)
+
+        for idx, (name, pipe, grid) in enumerate(pipelines):
+            if not model_cfgs:
+                continue
+            _ = model_cfgs[idx % len(model_cfgs)]
+            logger.info("Running %s", name)
+            scores_val: Dict[str, List[float]] = {"RMSE": [], "MAE": [], "R2": []}
+            scores_train: Dict[str, List[float]] = {"RMSE": [], "MAE": [], "R2": []}
+            best_steps_repr: Optional[str] = None
+            best_params_example: Optional[Dict[str, Any]] = None
+            n_comp_list: List[int] = []
+
+            if groups is not None:
+                outer_splits = list(outer.split(X, y, groups))
+            else:
+                outer_splits = list(outer.split(X, y))
+            fold_task = progress.add_task("Fold", total=len(outer_splits))
+            for tr, te in outer_splits:
+                Xtr, Xte = X.iloc[tr].values, X.iloc[te].values
+                ytr, yte = y[tr], y[te]
+                fit_kwargs: Dict[str, Any] = {}
+                if cv_method == "group" and groups is not None:
+                    n_splits = max(2, min(inner_folds, len(np.unique(groups.iloc[tr]))))
+                    inner = GroupKFold(n_splits=n_splits)
+                    fit_kwargs["groups"] = groups.iloc[tr]
+                elif cv_method == "spxy":
+                    inner = spxy_split(Xtr, ytr, inner_folds)
+                else:
+                    n_splits = max(2, min(inner_folds, len(Xtr)))
+                    inner = KFold(
+                        n_splits=n_splits,
+                        shuffle=True,
+                        random_state=random_state,
+                    )
+                gs = GridSearchCV(
+                    pipe,
+                    grid,
+                    scoring="neg_root_mean_squared_error",
+                    cv=inner,
+                    n_jobs=n_jobs,
+                )
+                gs.fit(Xtr, ytr, **fit_kwargs)
+                if best_params_example is None:
+                    best_params_example = dict(gs.best_params_)
+                n_comp = _get_n_components(gs.best_params_)
+                if n_comp is not None:
+                    n_comp_list.append(n_comp)
+                best = gs.best_estimator_
+                if best_steps_repr is None:
+                    best_steps_repr = _format_preprocess_steps(
+                        _get_preprocess_steps_from_pipeline(best)
+                    )
+
+                yhat = best.predict(Xte)
+                yhat_tr = best.predict(Xtr)
+                scores_val["RMSE"].append(_rmse(yte, yhat))
+                scores_val["MAE"].append(float(mean_absolute_error(yte, yhat)))
+                scores_val["R2"].append(float(r2_score(yte, yhat)))
+                scores_train["RMSE"].append(_rmse(ytr, yhat_tr))
+                scores_train["MAE"].append(float(mean_absolute_error(ytr, yhat_tr)))
+                scores_train["R2"].append(float(r2_score(ytr, yhat_tr)))
+                progress.advance(fold_task)
+            progress.remove_task(fold_task)
+
+            model_label, _ = _format_model_and_method_labels(name, pipe, best_params_example)
+            row: Dict[str, Any] = {
+                "file": ds["file"],
+                "target": ds["target"],
+                "model": model_label,
+                "calibrated": False,
+            }
+            for metric in ["RMSE", "MAE", "R2"]:
+                values = scores_val[metric]
+                if values:
+                    row[f"{metric}_mean"] = float(np.mean(values))
+                    if len(values) > 1:
+                        row[f"{metric}_std"] = float(np.std(values, ddof=1))
+                train_values = scores_train[metric]
+                if train_values:
+                    row[f"train_{metric}_mean"] = float(np.mean(train_values))
+                    if len(train_values) > 1:
+                        row[f"train_{metric}_std"] = float(
+                            np.std(train_values, ddof=1)
+                        )
+            if n_comp_list:
+                row["n_components"] = int(np.median(n_comp_list))
+            row["preprocess_steps"] = best_steps_repr or "None"
+            if step_label and row["preprocess_steps"] == "None":
+                row["preprocess_steps"] = step_label
+            _update_row_with_best_params(row, best_params_example)
+            pls_artifacts = _save_pls_diagnostics(
+                template_pipe=pipe,
+                best_params=best_params_example,
+                X=X,
+                y=y,
+                classes=None,
+                task_type="regression",
+                file_path=ds["file"],
+                target=ds["target"],
+                model=model_label,
+                preprocess_steps=row.get("preprocess_steps"),
+                out_dir=out_dir,
+                interactive=interactive,
+                palette=Palette(cfg.get("palette", Palette.BLUES)),
+            )
+            if pls_artifacts:
+                row.update(pls_artifacts)
+            if log_memory:
+                mem_end = psutil.Process().memory_info().rss / 1e6
+                logger.debug("memory end %.3f MB", mem_end)
+                if mem_start is not None:
+                    row["memory_mb_start"] = float(mem_start)
+                row["memory_mb_end"] = float(mem_end)
+            rows.append(row)
+            _save_metrics([row], out_dir, append=True)
+            progress.advance(model_task)
+        progress.remove_task(model_task)
+        progress.advance(tgt_task)
+    _save_metrics(rows, out_dir)
+    logger.info("Cross-validation finished (regression)")
+
+
+def _run_cv(
+    cfg: Dict[str, Any],
+    out_dir: Path,
+    outer: Any,
+    progress: Progress,
+    *,
+    random_state: int,
+    interactive: bool = False,
+    n_jobs: int = 1,
+    log_memory: bool = False,
+    step_label: Optional[str] = None,
+) -> None:
+    """Dispatch cross-validation to the appropriate routine."""
+
+    task_type = _infer_task_type(cfg)
+    if task_type == "regression":
+        _run_cv_regression(
+            cfg,
+            out_dir,
+            outer,
+            progress,
+            random_state=random_state,
+            interactive=interactive,
+            n_jobs=n_jobs,
+            log_memory=log_memory,
+            step_label=step_label,
+        )
+    else:
+        _run_cv_classification(
+            cfg,
+            out_dir,
+            outer,
+            progress,
+            random_state=random_state,
+            interactive=interactive,
+            n_jobs=n_jobs,
+            log_memory=log_memory,
+            step_label=step_label,
+        )
+
+
+def _run_holdout_classification(
     cfg: Dict[str, Any],
     out_dir: Path,
     test_size: float,
@@ -1714,7 +2016,7 @@ def _run_holdout(
     interactive: bool = False,
     n_jobs: int = 1,
 ) -> None:
-    """Evaluate models using a single train/test split.
+    """Evaluate classification models using a single train/test split.
 
     Parameters
     ----------
@@ -1771,7 +2073,7 @@ def _run_holdout(
                     "Adjusted number of CV folds from %d to %d", outer_folds, n_splits
                 )
             steps_desc = _format_preprocess_steps(
-                [v for k, v in pipe.named_steps.items() if k != "clf"]
+                _get_preprocess_steps_from_pipeline(pipe)
             )
             logger.info("Running %s with steps: %s", name, steps_desc)
             yscramble_iter = int(m_cfg.get("y_scramble_n_iter", 20))
@@ -1788,7 +2090,7 @@ def _run_holdout(
             n_comp = _get_n_components(gs.best_params_)
             best = gs.best_estimator_
             preprocess_steps = _format_preprocess_steps(
-                [v for k, v in best.named_steps.items() if k != "clf"]
+                _get_preprocess_steps_from_pipeline(best)
             )
             calib_cfg = m_cfg.get("calibration")
             if calib_cfg:
@@ -1881,6 +2183,7 @@ def _run_holdout(
                 X=X,
                 y=y_enc,
                 classes=classes,
+                task_type="classification",
                 file_path=ds["file"],
                 target=ds["target"],
                 model=model_label,
@@ -1909,6 +2212,7 @@ def _run_holdout(
                 preprocess_label=row.get("preprocess_steps"),
                 interactive=interactive,
                 palette=Palette(cfg.get("palette", Palette.BLUES)),
+                task_type="classification",
             )
             del best, proba, proba_tr, yhat, yhat_tr
             gc.collect()
@@ -1917,6 +2221,148 @@ def _run_holdout(
         flags = check_astm_classification(summary, {"external_validation": True})
         with open(out_dir / "astm_classification.json", "w") as f:
             json.dump(flags, f, indent=2)
+
+
+def _run_holdout_regression(
+    cfg: Dict[str, Any],
+    out_dir: Path,
+    test_size: float,
+    random_state: int,
+    *,
+    interactive: bool = False,
+    n_jobs: int = 1,
+) -> None:
+    """Evaluate regression models using a single train/test split."""
+
+    n_jobs = max(1, n_jobs)
+    try:
+        data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+        _maybe_run_qc(cfg, data, out_dir)
+    except DataError as e:
+        raise DataError(
+            "Arquivo de dados não encontrado. Verifique o caminho informado."
+        ) from e
+    rows: List[Dict[str, Any]] = []
+    for ds in data:
+        X, y_series = ds["X"], ds["Y"]
+        y = pd.to_numeric(y_series, errors="coerce").to_numpy(dtype=float)
+        if np.isnan(y).any():
+            raise DataError("Valores alvo inválidos ou não numéricos detectados")
+        cv_cfg = cfg.get("cv", {})
+        cv_method = cv_cfg.get("cv_method", "kfold").lower()
+        if cv_method == "group":
+            raise ModelError("cv_method 'group' não suportado com estratégia holdout")
+        model_cfgs = cfg.get("models", [])
+        pipelines = build_pipeline_from_config(cfg)
+        Xtr, Xte, ytr, yte = train_test_split(
+            X.values,
+            y,
+            test_size=test_size,
+            random_state=random_state,
+            shuffle=True,
+        )
+        rows_ds: List[Dict[str, Any]] = []
+        for idx, (name, pipe, grid) in enumerate(pipelines):
+            if not model_cfgs:
+                continue
+            logger.info("Running %s", name)
+            n_splits = max(2, int(cv_cfg.get("inner_folds", 3) or 3))
+            if cv_method == "spxy":
+                inner = spxy_split(Xtr, ytr, n_splits)
+            else:
+                inner = KFold(n_splits=min(n_splits, len(Xtr)), shuffle=True, random_state=random_state)
+            gs = GridSearchCV(
+                pipe,
+                grid,
+                scoring="neg_root_mean_squared_error",
+                cv=inner,
+                n_jobs=n_jobs,
+            )
+            gs.fit(Xtr, ytr)
+            best = gs.best_estimator_
+            yhat = best.predict(Xte)
+            yhat_tr = best.predict(Xtr)
+            rmse = _rmse(yte, yhat)
+            mae = mean_absolute_error(yte, yhat)
+            r2 = r2_score(yte, yhat)
+            rmse_tr = _rmse(ytr, yhat_tr)
+            mae_tr = mean_absolute_error(ytr, yhat_tr)
+            r2_tr = r2_score(ytr, yhat_tr)
+            model_label, _ = _format_model_and_method_labels(name, pipe, gs.best_params_)
+            row = {
+                "file": ds["file"],
+                "target": ds["target"],
+                "model": model_label,
+                "calibrated": False,
+                "RMSE_mean": float(rmse),
+                "MAE_mean": float(mae),
+                "R2_mean": float(r2),
+                "train_RMSE_mean": float(rmse_tr),
+                "train_MAE_mean": float(mae_tr),
+                "train_R2_mean": float(r2_tr),
+            }
+            n_comp = _get_n_components(gs.best_params_)
+            if n_comp is not None:
+                row["n_components"] = int(n_comp)
+            preprocess_steps = _format_preprocess_steps(
+                _get_preprocess_steps_from_pipeline(best)
+            )
+            row["preprocess_steps"] = preprocess_steps
+            _update_row_with_best_params(row, gs.best_params_)
+            pls_artifacts = _save_pls_diagnostics(
+                template_pipe=pipe,
+                best_params=gs.best_params_,
+                X=X,
+                y=y,
+                classes=None,
+                task_type="regression",
+                file_path=ds["file"],
+                target=ds["target"],
+                model=model_label,
+                preprocess_steps=preprocess_steps,
+                out_dir=out_dir,
+                interactive=interactive,
+                palette=Palette(cfg.get("palette", Palette.BLUES)),
+            )
+            if pls_artifacts:
+                row.update(pls_artifacts)
+            rows.append(row)
+            rows_ds.append(row)
+            _save_metrics([row], out_dir, append=True)
+        del rows_ds
+    _save_metrics(rows, out_dir)
+
+
+def _run_holdout(
+    cfg: Dict[str, Any],
+    out_dir: Path,
+    test_size: float,
+    random_state: int,
+    *,
+    interactive: bool = False,
+    n_jobs: int = 1,
+) -> None:
+    """Dispatch holdout evaluation based on task type."""
+
+    task_type = _infer_task_type(cfg)
+    if task_type == "regression":
+        _run_holdout_regression(
+            cfg,
+            out_dir,
+            test_size,
+            random_state,
+            interactive=interactive,
+            n_jobs=n_jobs,
+        )
+    else:
+        _run_holdout_classification(
+            cfg,
+            out_dir,
+            test_size,
+            random_state,
+            interactive=interactive,
+            n_jobs=n_jobs,
+        )
 
 
 def run_multiple_eval(
@@ -1950,6 +2396,7 @@ def run_multiple_eval(
 
     n_jobs = max(1, n_jobs)
     _validate_cfg(cfg, need_data=True, need_cv=True, need_models=True)
+    task_type = _infer_task_type(cfg)
     pre_cfg = cfg.get("preprocess", {})
     steps_cfg = pre_cfg.get("steps", [])
     evaluate_flag = pre_cfg.get("evaluate_individual")
@@ -1974,6 +2421,8 @@ def run_multiple_eval(
     strategies = cfg.get("cv", {}).get("strategies", [])
     random_state = cfg.get("cv", {}).get("random_state", random_state)
     cv_method = cfg.get("cv", {}).get("cv_method", "stratified").lower()
+    if task_type == "regression" and cv_method == "stratified":
+        cv_method = "kfold"
     mlflow_enabled = bool(mlflow_uri)
     mlflow_cm = nullcontext()
     if mlflow_enabled:
@@ -2071,18 +2520,32 @@ def run_multiple_eval(
                                     )
                                 outer = GroupKFold(n_splits=int(k))
                             else:
-                                if n_repeats > 1:
-                                    outer = RepeatedStratifiedKFold(
-                                        n_splits=int(k),
-                                        n_repeats=int(n_repeats),
-                                        random_state=random_state,
-                                    )
+                                if task_type == "regression":
+                                    if n_repeats > 1:
+                                        outer = RepeatedKFold(
+                                            n_splits=int(k),
+                                            n_repeats=int(n_repeats),
+                                            random_state=random_state,
+                                        )
+                                    else:
+                                        outer = KFold(
+                                            n_splits=int(k),
+                                            shuffle=True,
+                                            random_state=random_state,
+                                        )
                                 else:
-                                    outer = StratifiedKFold(
-                                        n_splits=int(k),
-                                        shuffle=True,
-                                        random_state=random_state,
-                                    )
+                                    if n_repeats > 1:
+                                        outer = RepeatedStratifiedKFold(
+                                            n_splits=int(k),
+                                            n_repeats=int(n_repeats),
+                                            random_state=random_state,
+                                        )
+                                    else:
+                                        outer = StratifiedKFold(
+                                            n_splits=int(k),
+                                            shuffle=True,
+                                            random_state=random_state,
+                                        )
                             if safe_step:
                                 sub = out_dir / f"kfold_{k}__{safe_step}"
                             else:
@@ -2101,9 +2564,10 @@ def run_multiple_eval(
                             )
                             metrics = sub / "metrics.json"
                             figs = sub / "figures"
-                            with open(metrics) as f:
-                                metrics_data = json.load(f)
-                            generate_scientific_report(metrics_data, cfg_variant, sub)
+                            if task_type == "classification":
+                                with open(metrics) as f:
+                                    metrics_data = json.load(f)
+                                generate_scientific_report(metrics_data, cfg_variant, sub)
                             pair = (metrics, figs)
                             if pair not in seen_outputs:
                                 outputs.append(pair)
@@ -2157,9 +2621,10 @@ def run_multiple_eval(
                         )
                         metrics = sub / "metrics.json"
                         figs = sub / "figures"
-                        with open(metrics) as f:
-                            metrics_data = json.load(f)
-                        generate_scientific_report(metrics_data, cfg_variant, sub)
+                        if task_type == "classification":
+                            with open(metrics) as f:
+                                metrics_data = json.load(f)
+                            generate_scientific_report(metrics_data, cfg_variant, sub)
                         pair = (metrics, figs)
                         if pair not in seen_outputs:
                             outputs.append(pair)
@@ -2209,9 +2674,10 @@ def run_multiple_eval(
                         )
                         metrics = sub / "metrics.json"
                         figs = sub / "figures"
-                        with open(metrics) as f:
-                            metrics_data = json.load(f)
-                        generate_scientific_report(metrics_data, cfg_variant, sub)
+                        if task_type == "classification":
+                            with open(metrics) as f:
+                                metrics_data = json.load(f)
+                            generate_scientific_report(metrics_data, cfg_variant, sub)
                         pair = (metrics, figs)
                         if pair not in seen_outputs:
                             outputs.append(pair)
@@ -2257,7 +2723,7 @@ def run_multiple_eval(
     return outputs
 
 
-def train_and_save(
+def _train_and_save_classification(
     cfg: Dict[str, Any],
     out_dir: Path,
     *,
@@ -2269,7 +2735,7 @@ def train_and_save(
     show_progress: bool = True,
     log_memory: bool = False,
 ) -> Tuple[Path, Path]:
-    """Train final model and persist artefacts."""
+    """Train final model and persist artefacts for classification."""
 
     n_jobs = max(1, n_jobs)
     logger.info("Starting training pipeline")
@@ -2362,7 +2828,7 @@ def train_and_save(
             n_comp = _get_n_components(gs.best_params_)
             best = gs.best_estimator_
             preprocess_steps = _format_preprocess_steps(
-                [v for k, v in best.named_steps.items() if k != "clf"]
+                _get_preprocess_steps_from_pipeline(best)
             )
             if preprocess_steps == "None":
                 preprocess_steps = "RAW"
@@ -2423,6 +2889,7 @@ def train_and_save(
                 X=X,
                 y=y_enc,
                 classes=le.classes_,
+                task_type="classification",
                 file_path=ds["file"],
                 target=ds["target"],
                 model=model_label,
@@ -2458,6 +2925,7 @@ def train_and_save(
                 preprocess_label=row.get("preprocess_steps"),
                 interactive=interactive,
                 palette=Palette(cfg.get("palette", Palette.BLUES)),
+                task_type="classification",
             )
             del best, proba, yhat
             gc.collect()
@@ -2501,6 +2969,264 @@ def train_and_save(
         )
 
     return out_dir / "metrics.json", out_dir / "figures"
+
+
+def _train_and_save_regression(
+    cfg: Dict[str, Any],
+    out_dir: Path,
+    *,
+    random_state: int = 42,
+    interactive: bool = False,
+    n_jobs: int = 1,
+    mlflow_uri: Optional[str] = None,
+    gs_verbose: int = 0,
+    show_progress: bool = True,
+    log_memory: bool = False,
+) -> Tuple[Path, Path]:
+    """Train final model and persist artefacts for regression."""
+
+    n_jobs = max(1, n_jobs)
+    logger.info("Starting training pipeline (regression)")
+    email = cfg.get("notification_email")
+    try:
+        mlflow_cm = nullcontext()
+        if mlflow_uri:
+            import mlflow
+
+            mlflow.set_tracking_uri(mlflow_uri)
+            mlflow_cm = mlflow.start_run(run_name="train")
+        with mlflow_cm:
+            with Progress(
+                console=Console(stderr=True), disable=not show_progress
+            ) as progress:
+                load_task = progress.add_task("Carregando dados", total=None)
+                _validate_cfg(cfg, need_data=True, need_models=True)
+                ds_list = prepare_inputs(
+                    cfg["data"], use_cache=cfg.get("use_cache", True)
+                )
+                _maybe_run_qc(cfg, ds_list, out_dir)
+                ds = ds_list[0]
+            X, y_series = ds["X"], ds["Y"]
+            y = pd.to_numeric(y_series, errors="coerce").to_numpy(dtype=float)
+            if np.isnan(y).any():
+                raise DataError("Valores alvo inválidos ou não numéricos detectados")
+            groups = ds.get("groups")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            save_run_metadata(cfg, out_dir)
+
+            input_hashes = {}
+            if Path(ds["file"]).exists():
+                input_hashes[ds["file"]] = file_hash(ds["file"])
+            metadata = {
+                "sys_version": sys.version,
+                "versions": {
+                    "numpy": np.__version__,
+                    "pandas": pd.__version__,
+                    "sklearn": sklearn.__version__,
+                },
+                "seed": random_state,
+                "input_hashes": input_hashes,
+            }
+            with open(out_dir / "metadata.json", "w") as f:
+                json.dump(metadata, f, indent=2)
+
+            name, pipe, grid = build_pipeline_from_config(cfg)[0]
+            steps_cfg = cfg.get("preprocess", {}).get("steps", [])
+            logger.info("Running %s with steps: %s", name, steps_cfg)
+            mem_start = None
+            if log_memory:
+                mem_start = psutil.Process().memory_info().rss / 1e6
+                logger.debug("memory start %.3f MB", mem_start)
+            cv_cfg = cfg.get("cv", {})
+            cv_method_raw = cv_cfg.get("cv_method", "kfold").lower()
+            cv_method = "kfold" if cv_method_raw == "stratified" else cv_method_raw
+            max_splits = int(cv_cfg.get("train_n_splits", 5) or 5)
+            base_splits = max(2, min(max_splits, len(X)))
+            train_task = progress.add_task("Treinando", total=None)
+            fit_kwargs: Dict[str, Any] = {}
+            if cv_method == "spxy":
+                cv = spxy_split(X.values, y, base_splits)
+            elif cv_method == "group":
+                if groups is None:
+                    raise DataError(
+                        "group_col deve ser informado para cv_method 'group'"
+                    )
+                unique_groups = len(pd.Series(groups).dropna().unique())
+                n_splits = max(2, min(base_splits, unique_groups))
+                if n_splits < 2:
+                    raise DataError("Pelo menos dois grupos distintos são necessários")
+                cv = GroupKFold(n_splits=n_splits)
+                fit_kwargs["groups"] = groups
+            else:
+                cv = KFold(
+                    n_splits=base_splits,
+                    shuffle=True,
+                    random_state=random_state,
+                )
+            gs = LoggingGridSearchCV(
+                pipe,
+                grid,
+                scoring="neg_root_mean_squared_error",
+                cv=cv,
+                n_jobs=n_jobs,
+                verbose=gs_verbose,
+            )
+            start_ts = datetime.now().isoformat()
+            logger.info("Grid search start: %s", start_ts)
+            gs.fit(X.values, y, **fit_kwargs)
+            logger.info("Grid search end: %s", datetime.now().isoformat())
+            progress.update(train_task, completed=1)
+
+            n_comp = _get_n_components(gs.best_params_)
+            best = gs.best_estimator_
+            preprocess_steps = _format_preprocess_steps(
+                _get_preprocess_steps_from_pipeline(best)
+            )
+            if preprocess_steps == "None":
+                preprocess_steps = "RAW"
+            model_label, _ = _format_model_and_method_labels(
+                name, pipe, gs.best_params_
+            )
+
+            save_task = progress.add_task("Salvando", total=None)
+            dump(best, out_dir / "model.joblib")
+            export_xy_xlsx(out_dir / "prepared_XY.xlsx", X, y_series)
+            (out_dir / "model_card.md").write_text(
+                "\n".join(
+                    [
+                        "# Model Card",
+                        f"Best model: {model_label}",
+                        f"Best params: {gs.best_params_}",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            yhat = best.predict(X.values)
+            row = {
+                "file": ds["file"],
+                "target": ds["target"],
+                "model": model_label,
+                "calibrated": False,
+                "RMSE_mean": _rmse(y, yhat),
+                "MAE_mean": float(mean_absolute_error(y, yhat)),
+                "R2_mean": float(r2_score(y, yhat)),
+                "preprocess_steps": preprocess_steps,
+                "train_RMSE_mean": _rmse(y, yhat),
+                "train_MAE_mean": float(mean_absolute_error(y, yhat)),
+                "train_R2_mean": float(r2_score(y, yhat)),
+            }
+            if n_comp is not None:
+                row["n_components"] = int(n_comp)
+            _update_row_with_best_params(row, gs.best_params_)
+            pls_artifacts = _save_pls_diagnostics(
+                template_pipe=pipe,
+                best_params=gs.best_params_,
+                X=X,
+                y=y,
+                classes=None,
+                task_type="regression",
+                file_path=ds["file"],
+                target=ds["target"],
+                model=model_label,
+                preprocess_steps=preprocess_steps,
+                out_dir=out_dir,
+                interactive=interactive,
+                palette=Palette(cfg.get("palette", Palette.BLUES)),
+            )
+            if pls_artifacts:
+                row.update(pls_artifacts)
+            if log_memory:
+                mem_end = psutil.Process().memory_info().rss / 1e6
+                logger.debug("memory end %.3f MB", mem_end)
+                if mem_start is not None:
+                    row["memory_mb_start"] = float(mem_start)
+                row["memory_mb_end"] = float(mem_end)
+            _save_metrics([row], out_dir)
+            _save_plots(
+                ds["file"],
+                ds["target"],
+                model_label,
+                None,
+                out_dir,
+                y,
+                yhat,
+                None,
+                preprocess_label=preprocess_steps,
+                interactive=interactive,
+                palette=Palette(cfg.get("palette", Palette.BLUES)),
+                task_type="regression",
+            )
+            if mlflow_uri:
+                mlflow.log_params(
+                    {
+                        "model": model_label,
+                        "preprocess_steps": _format_preprocess_steps(list(steps_cfg)),
+                        "cv_method": cv_method,
+                    }
+                )
+                mlflow.log_params(
+                    {
+                        f"best_{k}": _coerce_param_value(v)
+                        for k, v in gs.best_params_.items()
+                    }
+                )
+                mlflow.log_metrics(row)
+                mlflow.log_artifact(out_dir / "model.joblib")
+                mlflow.log_artifact(out_dir / "metrics.json")
+                mlflow.log_artifacts(out_dir / "figures", artifact_path="figures")
+            progress.update(save_task, completed=1)
+    except Exception:
+        logger.error("Training failed", exc_info=True)
+        raise
+    if email:
+        enviar_email(
+            subject="Treinamento concluído",
+            body="Treinamento concluído. Iniciando validação...",
+            to_addr=email,
+        )
+
+    return out_dir / "metrics.json", out_dir / "figures"
+
+
+def train_and_save(
+    cfg: Dict[str, Any],
+    out_dir: Path,
+    *,
+    random_state: int = 42,
+    interactive: bool = False,
+    n_jobs: int = 1,
+    mlflow_uri: Optional[str] = None,
+    gs_verbose: int = 0,
+    show_progress: bool = True,
+    log_memory: bool = False,
+) -> Tuple[Path, Path]:
+    """Dispatch training to classification or regression pipeline."""
+
+    task_type = _infer_task_type(cfg)
+    if task_type == "regression":
+        return _train_and_save_regression(
+            cfg,
+            out_dir,
+            random_state=random_state,
+            interactive=interactive,
+            n_jobs=n_jobs,
+            mlflow_uri=mlflow_uri,
+            gs_verbose=gs_verbose,
+            show_progress=show_progress,
+            log_memory=log_memory,
+        )
+    return _train_and_save_classification(
+        cfg,
+        out_dir,
+        random_state=random_state,
+        interactive=interactive,
+        n_jobs=n_jobs,
+        mlflow_uri=mlflow_uri,
+        gs_verbose=gs_verbose,
+        show_progress=show_progress,
+        log_memory=log_memory,
+    )
 
 
 def run_experiment(

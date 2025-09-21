@@ -110,6 +110,21 @@ def test_pipeline_fit_predict_with_cv_and_windows(method):
     gs.fit(X, y)
 
 
+def test_build_pipeline_regression_step_name():
+    cfg = {
+        "data": {
+            "input_path": "dummy.csv",
+            "target_cols": ["target"],
+            "target_type": "regression",
+        },
+        "models": [{"name": "PLSRegression", "grid": {"n_components": [2]}}],
+    }
+    name, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert name == "PLSRegression"
+    assert any(step[0] == "reg" for step in pipe.steps)
+    assert all(not key.startswith("clf__") for key in grid)
+
+
 @pytest.mark.parametrize("method", METHODS)
 def test_end_to_end_cv_and_export(tmp_path, method):
     rng = np.random.RandomState(1)
@@ -222,6 +237,58 @@ def test_end_to_end_cv_and_export(tmp_path, method):
     assert (train_tables / "vip.csv").exists()
     assert (train_tables / "pls_x_scores.csv").exists()
     assert (train_tables / "pls_y_scores.csv").exists()
+
+
+def test_end_to_end_regression(tmp_path):
+    rng = np.random.RandomState(2)
+    X = rng.rand(18, 4)
+    y = rng.rand(18)
+    df = pd.DataFrame(X, columns=[str(i) for i in range(4)])
+    df["target"] = y
+    data_file = tmp_path / "reg.csv"
+    df.to_csv(data_file, index=False)
+
+    cfg = {
+        "data": {
+            "input_path": str(data_file),
+            "target_cols": ["target"],
+            "target_type": "regression",
+        },
+        "preprocess": {"steps": ["SNV"]},
+        "models": [{"name": "PLSRegression", "grid": {"n_components": [2]}}],
+        "cv": {
+            "random_state": 0,
+            "strategies": [{"type": "kfold", "n_splits": [3]}],
+        },
+    }
+
+    cv_dir = tmp_path / "cv_reg"
+    outputs = run_multiple_eval(cfg, cv_dir, n_jobs=1)
+    assert outputs
+    metrics_file, figs_dir = outputs[0]
+    with open(metrics_file) as f:
+        rows = json.load(f)
+    assert rows
+    assert all("RMSE_mean" in row for row in rows)
+    assert all("MAE_mean" in row for row in rows)
+    assert all("R2_mean" in row for row in rows)
+    assert all("Accuracy_mean" not in row for row in rows)
+    assert not any("confusion" in p.name for p in figs_dir.rglob("*"))
+    assert not (metrics_file.parent / "astm_classification.json").exists()
+
+    train_dir = tmp_path / "train_reg"
+    metrics_path, figures_path = train_and_save(cfg, train_dir, n_jobs=1)
+    assert metrics_path.exists()
+    assert figures_path.exists()
+    with open(metrics_path) as f:
+        metrics_rows = json.load(f)
+    assert metrics_rows
+    train_row = metrics_rows[0]
+    assert "RMSE_mean" in train_row and "MAE_mean" in train_row and "R2_mean" in train_row
+    assert "Accuracy_mean" not in train_row
+    assert not (train_dir / "classes.json").exists()
+    assert not (train_dir / "astm_classification.json").exists()
+    assert not any("confusion" in p.name for p in figures_path.rglob("*"))
 
 
 def test_metrics_reflect_applied_preprocess_steps(tmp_path):

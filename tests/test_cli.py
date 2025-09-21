@@ -81,6 +81,68 @@ def test_train_cli_with_config_creates_artifacts(tmp_path: pathlib.Path) -> None
     assert (metrics_files[0].parent / "astm_classification.json").exists()
 
 
+def test_train_cli_regression(tmp_path: pathlib.Path) -> None:
+    env = _base_env()
+    data = pd.DataFrame(
+        {
+            "0": [0.1, 0.2, 0.3, 0.4],
+            "1": [0.5, 0.6, 0.7, 0.8],
+            "target": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    (tmp_path / "reg.csv").write_text(data.to_csv(index=False))
+    cfg_dst = tmp_path / "reg.yaml"
+    cfg_dst.write_text(
+        textwrap.dedent(
+            """
+            data:
+              input_path: reg.csv
+              target_cols: [target]
+              target_type: regression
+              out_dir: results
+            preprocess:
+              steps: [SNV]
+            models:
+              - name: PLSRegression
+                grid: {n_components: [2]}
+            cv:
+              strategies:
+                - type: kfold
+                  n_splits: [2]
+            """
+        ).strip()
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nircls.cli",
+            "--no-progress",
+            "train",
+            "--config",
+            str(cfg_dst),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    metrics_files = list(tmp_path.glob("results/train_*/metrics.json"))
+    assert metrics_files
+    metrics_path = metrics_files[0]
+    with open(metrics_path) as f:
+        rows = json.load(f)
+    assert rows
+    assert "RMSE_mean" in rows[0]
+    assert "Accuracy_mean" not in rows[0]
+    train_dir = metrics_path.parent
+    assert not (train_dir / "classes.json").exists()
+    assert not (train_dir / "astm_classification.json").exists()
+
+
 def test_run_all_cli_displays_preprocess_descriptions(
     tmp_path: pathlib.Path,
 ) -> None:
