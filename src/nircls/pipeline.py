@@ -90,6 +90,7 @@ from .utils.plots import (
 )
 from .utils.plots import plot_confusion, plot_pca_scores, plot_reliability, plot_roc_ovr
 from .utils.qc import detect_identical_spectra, find_duplicates, pca_outliers
+from .utils.summarize import summarize_runs
 from .utils.split import spxy_split
 from .utils.y_scramble import y_scramble_scores
 
@@ -2487,7 +2488,7 @@ def run_multiple_eval(
     n_jobs: int = 1,
     mlflow_uri: Optional[str] = None,
     log_memory: bool = False,
-) -> List[Tuple[Path, Path]]:
+) -> Tuple[List[Tuple[Path, Path]], Path]:
     """Run evaluation for multiple cross-validation strategies.
 
     Parameters
@@ -2502,9 +2503,11 @@ def run_multiple_eval(
         Number of parallel jobs for ``GridSearchCV``.
     Returns
     -------
-    list of tuple(Path, Path)
-        Pairs with the paths to ``metrics.json`` and the ``figures`` directory
-        for each evaluated strategy.
+    tuple
+        A pair where the first element contains tuples with the paths to
+        ``metrics.json`` and the ``figures`` directory for each evaluated
+        strategy, and the second element is the directory containing the
+        aggregated summary files.
     """
 
     n_jobs = max(1, n_jobs)
@@ -2826,6 +2829,15 @@ def run_multiple_eval(
                         )
                     progress.advance(strat_task)
 
+        summary_dir = out_dir.parent / "summary"
+        summary_dir.mkdir(parents=True, exist_ok=True)
+        summary_df = summarize_runs(out_dir)
+        summary_csv = summary_dir / "metrics_summary.csv"
+        summary_xlsx = summary_dir / "metrics_summary.xlsx"
+        summary_df.to_csv(summary_csv, index=False)
+        with pd.ExcelWriter(summary_xlsx) as writer:
+            summary_df.to_excel(writer, index=False)
+
     email = cfg.get("notification_email")
     if email:
         enviar_email(
@@ -2833,7 +2845,7 @@ def run_multiple_eval(
             body="A validação foi concluída.",
             to_addr=email,
         )
-    return outputs
+    return outputs, summary_dir
 
 
 def _train_and_save_classification(
@@ -3368,7 +3380,7 @@ def run_experiment(
     random_state: int = 42,
     n_jobs: int = -1,
     log_memory: bool = False,
-) -> Tuple[Tuple[Path, Path], List[Tuple[Path, Path]]]:
+) -> Tuple[Tuple[Path, Path], Tuple[List[Tuple[Path, Path]], Path]]:
     """Execute um experimento completo usando a API de alto nível.
 
     A função prepara os dados de entrada, treina o melhor modelo em todo o

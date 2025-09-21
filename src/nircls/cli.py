@@ -720,7 +720,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(out_dir)
         cfg.astm = args.astm
         try:
-            outputs = run_multiple_eval(
+            outputs, summary_dir = run_multiple_eval(
                 cfg.dict(exclude_defaults=True, exclude_none=True),
                 out_dir,
                 interactive=args.interactive,
@@ -752,6 +752,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.astm:
                 _print_astm_report(metrics_path.parent / "astm_classification.json")
         print(t("results_in", path=out_dir))
+        print(f"Summary saved in {summary_dir}")
     elif args.cmd == "run-all":
         builders = get_model_builders()
         default_cfg: Dict[str, Any] = {
@@ -820,7 +821,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         model_path = train_dir / "model.joblib"
         report_path = train_dir / "report.md"
         try:
-            outputs = run_multiple_eval(
+            outputs, summary_dir = run_multiple_eval(
                 default_cfg,
                 cv_dir,
                 random_state=args.seed,
@@ -858,6 +859,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(t("full_report", path=report_path))
             if model_path.exists():
                 print(t("model_saved", path=model_path))
+        print(f"Summary saved in {summary_dir}")
         print(t("results_in", path=base_dir))
         return 0
     elif args.cmd == "demo":
@@ -919,7 +921,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cv_dir = base_dir / "cv"
         ensure_dirs(cv_dir)
         try:
-            outputs = run_multiple_eval(
+            outputs, summary_dir = run_multiple_eval(
                 cfg.dict(exclude_defaults=True, exclude_none=True),
                 cv_dir,
                 random_state=args.seed,
@@ -931,6 +933,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _print_metrics_table(metrics_path)
                 _print_confusion_paths(figs_dir)
             print(t("cv_results_in", path=cv_dir))
+            print(f"Summary saved in {summary_dir}")
         except DataError as e:
             print(t("invalid_data", err=e), file=sys.stderr)
         except ModelError as e:
@@ -1031,7 +1034,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(t("wizard_train_in", path=train_dir))
                 cv_dir = base_dir / "cv"
                 ensure_dirs(cv_dir)
-                outputs = run_multiple_eval(
+                outputs, summary_dir = run_multiple_eval(
                     cfg_obj.dict(),
                     cv_dir,
                     random_state=args.seed,
@@ -1043,6 +1046,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     _print_metrics_table(metrics_path)
                     _print_confusion_paths(figs_dir)
                 print(t("wizard_eval_in", path=cv_dir))
+                print(f"Summary saved in {summary_dir}")
             except DataError as e:
                 print(t("invalid_data", err=e), file=sys.stderr)
             except ModelError as e:

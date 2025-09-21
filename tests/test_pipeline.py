@@ -305,7 +305,7 @@ def test_end_to_end_cv_and_export(tmp_path, method):
     }
 
     out_dir = tmp_path / "cv_run"
-    outputs = run_multiple_eval(cfg, out_dir, n_jobs=1)
+    outputs, summary_dir = run_multiple_eval(cfg, out_dir, n_jobs=1)
     expected_steps = {"SNV", "SG(window=5,poly=2,deriv=1)"}
     sanitized_steps = {
         _sanitize_step_label(_format_preprocess_step(step) or str(step))
@@ -358,6 +358,7 @@ def test_end_to_end_cv_and_export(tmp_path, method):
         metrics_by_step = {}
         for row in metrics_json:
             metrics_by_step.setdefault(row["preprocess_steps"], []).append(row)
+
         assert len(metrics_by_step) == 1
         observed_label = next(iter(metrics_by_step))
         observed_labels.add(observed_label)
@@ -370,6 +371,19 @@ def test_end_to_end_cv_and_export(tmp_path, method):
             assert model_label.startswith("PLS-")
             assert model_label.startswith(expected_method_label)
             assert entry["method"] == expected_method_label
+
+    assert summary_dir == out_dir.parent / "summary"
+    summary_csv = summary_dir / "metrics_summary.csv"
+    summary_xlsx = summary_dir / "metrics_summary.xlsx"
+    assert summary_csv.exists()
+    assert summary_xlsx.exists()
+    summary_df = pd.read_csv(summary_csv)
+    assert {"run", "strategy", "preprocess"}.issubset(summary_df.columns)
+    assert set(summary_df["strategy"]) == {"kfold_2"}
+    assert set(summary_df["preprocess"].unique()) == {
+        "snv",
+        "sg",
+    }
     assert observed_labels == expected_steps
 
     train_dir = tmp_path / "train_run"
@@ -412,7 +426,7 @@ def test_end_to_end_regression(tmp_path):
     }
 
     cv_dir = tmp_path / "cv_reg"
-    outputs = run_multiple_eval(cfg, cv_dir, n_jobs=1)
+    outputs, summary_dir = run_multiple_eval(cfg, cv_dir, n_jobs=1)
     assert outputs
     metrics_file, figs_dir = outputs[0]
     with open(metrics_file) as f:
@@ -517,7 +531,7 @@ def test_metrics_reflect_applied_preprocess_steps(tmp_path):
     }
 
     out_dir = tmp_path / "cv_steps"
-    outputs = run_multiple_eval(cfg, out_dir, n_jobs=1)
+    outputs, _ = run_multiple_eval(cfg, out_dir, n_jobs=1)
     expected_steps = {"SNV", "SG(window=5,poly=2,deriv=1)"}
     sanitized_steps = {
         _sanitize_step_label(_format_preprocess_step(step) or str(step))
