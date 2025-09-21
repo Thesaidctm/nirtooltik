@@ -4,11 +4,19 @@ import ast
 from importlib.metadata import entry_points
 from typing import Any, Dict, List
 
+from sklearn.cross_decomposition import PLSRegression
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
-from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.ensemble import (
+    AdaBoostClassifier,
+    GradientBoostingClassifier,
+    RandomForestClassifier,
+    RandomForestRegressor,
+)
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 from sklearn.naive_bayes import BernoulliNB, GaussianNB, MultinomialNB
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.neural_network import MLPClassifier
+from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeClassifier
 
 from .base import BaseModelBuilder
@@ -96,6 +104,18 @@ MODEL_DESCRIPTIONS: Dict[str, str] = {
     "BERNOULLINB": "Bernoulli Naive Bayes",
 }
 
+REGRESSION_MODEL_DESCRIPTIONS: Dict[str, str] = {
+    "PLSREGRESSION": "Partial Least Squares Regression",
+    "PLSR": "Partial Least Squares Regression",
+    "RANDOMFORESTREGRESSOR": "Random Forest Regressor",
+    "RFR": "Random Forest Regressor",
+    "SVR": "Support Vector Regressor",
+    "RIDGE": "Ridge Regression",
+    "LINEARREGRESSION": "Linear Regression",
+    "KNNR": "k-Nearest Neighbors Regressor",
+    "KNEIGHBORSREGRESSOR": "k-Nearest Neighbors Regressor",
+}
+
 _ENTRYPOINT_GROUP = "nircls.model_builders"
 
 
@@ -122,6 +142,18 @@ MODEL_BUILDERS = {
     "NB": lambda grid: GaussianNB(),
     "MULTINB": lambda grid: MultinomialNB(),
     "BERNOULLINB": lambda grid: BernoulliNB(),
+}
+
+REGRESSION_MODEL_BUILDERS = {
+    "PLSREGRESSION": lambda grid: PLSRegression(),
+    "PLSR": lambda grid: PLSRegression(),
+    "RANDOMFORESTREGRESSOR": lambda grid: RandomForestRegressor(),
+    "RFR": lambda grid: RandomForestRegressor(),
+    "SVR": lambda grid: SVR(),
+    "RIDGE": lambda grid: Ridge(),
+    "LINEARREGRESSION": lambda grid: LinearRegression(),
+    "KNNR": lambda grid: KNeighborsRegressor(),
+    "KNEIGHBORSREGRESSOR": lambda grid: KNeighborsRegressor(),
 }
 
 
@@ -162,6 +194,18 @@ DEFAULT_GRIDS = {
     "NB": {"var_smoothing": [1e-09]},
     "MULTINB": {"alpha": [1.0]},
     "BERNOULLINB": {"alpha": [1.0]},
+}
+
+REGRESSION_DEFAULT_GRIDS = {
+    "PLSREGRESSION": {"n_components": [2]},
+    "PLSR": {"n_components": [2]},
+    "RANDOMFORESTREGRESSOR": {"n_estimators": [100]},
+    "RFR": {"n_estimators": [100]},
+    "SVR": {"kernel": ["rbf"], "C": [1.0]},
+    "RIDGE": {"alpha": [1.0]},
+    "LINEARREGRESSION": {},
+    "KNNR": {"n_neighbors": [5]},
+    "KNEIGHBORSREGRESSOR": {"n_neighbors": [5]},
 }
 
 
@@ -266,8 +310,16 @@ def _normalize_grid_values(grid: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
     return grid
 
 
-def make_models_from_config(models_cfg: List[Dict[str, Any]]):
-    builders = get_model_builders()
+def make_models_from_config(
+    models_cfg: List[Dict[str, Any]], *, task_type: str = "classification"
+):
+    normalized_type = str(task_type or "classification").lower()
+    if normalized_type == "regression":
+        builders: Dict[str, Any] = REGRESSION_MODEL_BUILDERS
+        defaults = REGRESSION_DEFAULT_GRIDS
+    else:
+        builders = get_model_builders()
+        defaults = DEFAULT_GRIDS
     out = []
     for m in models_cfg:
         m.setdefault("overfit_check", True)
@@ -279,8 +331,8 @@ def make_models_from_config(models_cfg: List[Dict[str, Any]]):
             raise ValueError(f"Modelo não suportado: {name}")
 
         grid = _normalize_grid_values(m.get("grid", {}) or {})
-        defaults = DEFAULT_GRIDS.get(upper, {})
-        for k, v in defaults.items():
+        default_grid = defaults.get(upper, {})
+        for k, v in default_grid.items():
             grid.setdefault(k, v)
 
         est = builder(grid)
