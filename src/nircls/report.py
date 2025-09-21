@@ -120,7 +120,7 @@ def generate_report(
     metric_notes = textwrap.dedent(
         """
         ### Metric definitions
-        - **RMSECV**: root mean squared error computed on cross-validation folds.
+        - **RMSECV**: root mean squared error computed directly from all cross-validation predictions.
         - **RMSEP**: root mean squared error on prediction/hold-out samples.
         - **RPD**: residual predictive deviation (standard deviation of the reference values divided by RMSEP).
         - **MAE_percent**: mean absolute error normalised by the mean absolute value of the reference target (×100).
@@ -328,7 +328,7 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
     metric_notes = textwrap.dedent(
         """
         ### Metric definitions
-        - **RMSECV**: root mean squared error computed on cross-validation folds.
+        - **RMSECV**: root mean squared error computed directly from all cross-validation predictions.
         - **RMSEP**: root mean squared error on prediction/hold-out samples.
         - **RPD**: residual predictive deviation (standard deviation of the reference values divided by RMSEP).
         - **MAE_percent**: mean absolute error normalised by the mean absolute value of the reference target (×100).

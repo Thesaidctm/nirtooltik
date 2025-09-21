@@ -1989,18 +1989,16 @@ def _run_cv_regression(
                             row[f"train_{metric}_std"] = float(
                                 np.std(train_values[valid_train], ddof=1)
                             )
-            if "RMSE_mean" in row:
-                row["RMSECV_mean"] = row["RMSE_mean"]
             if "RMSE_std" in row:
                 row["RMSECV_std"] = row["RMSE_std"]
-            if "train_RMSE_mean" in row:
-                row["train_RMSECV_mean"] = row["train_RMSE_mean"]
             if "train_RMSE_std" in row:
                 row["train_RMSECV_std"] = row["train_RMSE_std"]
 
             if y_true_val_all and y_pred_val_all:
                 y_true_val = np.concatenate(y_true_val_all)
                 y_pred_val = np.concatenate(y_pred_val_all)
+                rmsecv = compute_rmsecv(y_true_val, y_pred_val)
+                row["RMSECV_mean"] = float(rmsecv) if np.isfinite(rmsecv) else None
                 rmsep = compute_rmsep(y_true_val, y_pred_val)
                 if np.isfinite(rmsep):
                     row["RMSEP"] = float(rmsep)
@@ -2010,6 +2008,10 @@ def _run_cv_regression(
             if y_true_train_all and y_pred_train_all:
                 y_true_train = np.concatenate(y_true_train_all)
                 y_pred_train = np.concatenate(y_pred_train_all)
+                train_rmsecv = compute_rmsecv(y_true_train, y_pred_train)
+                row["train_RMSECV_mean"] = (
+                    float(train_rmsecv) if np.isfinite(train_rmsecv) else None
+                )
                 train_rmsep = compute_rmsep(y_true_train, y_pred_train)
                 if np.isfinite(train_rmsep):
                     row["train_RMSEP"] = float(train_rmsep)
