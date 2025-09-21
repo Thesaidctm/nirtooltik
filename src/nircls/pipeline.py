@@ -109,6 +109,22 @@ def _rmse(
     return float(compute_rmse(y_true, y_pred))
 
 
+def _validate_split_capacity(allowed: int, *, kind: str) -> None:
+    """Raise a :class:`DataError` when ``allowed`` splits are insufficient."""
+
+    if allowed >= 2:
+        return
+    if kind == "groups":
+        raise DataError(
+            "Número insuficiente de grupos distintos para validação cruzada. "
+            "Forneça pelo menos dois grupos no conjunto de treino."
+        )
+    raise DataError(
+        "Número insuficiente de amostras para validação cruzada. "
+        "Forneça pelo menos duas amostras no conjunto de treino."
+    )
+
+
 class LoggingGridSearchCV(GridSearchCV):
     """GridSearchCV with optional debug logging for progress."""
 
@@ -1837,6 +1853,8 @@ def _run_cv_regression(
         if np.isnan(y).any():
             raise DataError("Valores alvo inválidos ou não numéricos detectados")
         groups = ds.get("groups")
+        if groups is not None and not isinstance(groups, pd.Series):
+            groups = pd.Series(groups, index=X.index)
         cv_cfg = cfg.get("cv", {})
         inner_folds_cfg = cv_cfg.get("inner_folds", 3)
         if inner_folds_cfg in (None, False):
@@ -1887,13 +1905,21 @@ def _run_cv_regression(
                 ytr, yte = y[tr], y[te]
                 fit_kwargs: Dict[str, Any] = {}
                 if cv_method == "group" and groups is not None:
-                    n_splits = max(2, min(inner_folds, len(np.unique(groups.iloc[tr]))))
+                    train_groups = groups.iloc[tr]
+                    allowed = len(pd.Series(train_groups).dropna().unique())
+                    _validate_split_capacity(allowed, kind="groups")
+                    n_splits = min(inner_folds, allowed)
                     inner = GroupKFold(n_splits=n_splits)
-                    fit_kwargs["groups"] = groups.iloc[tr]
+                    fit_kwargs["groups"] = train_groups
                 elif cv_method == "spxy":
-                    inner = spxy_split(Xtr, ytr, inner_folds)
+                    allowed = len(Xtr)
+                    _validate_split_capacity(allowed, kind="samples")
+                    n_splits = min(inner_folds, allowed)
+                    inner = spxy_split(Xtr, ytr, n_splits)
                 else:
-                    n_splits = max(2, min(inner_folds, len(Xtr)))
+                    allowed = len(Xtr)
+                    _validate_split_capacity(allowed, kind="samples")
+                    n_splits = min(inner_folds, allowed)
                     inner = KFold(
                         n_splits=n_splits,
                         shuffle=True,
@@ -2328,11 +2354,19 @@ def _run_holdout_regression(
             if not model_cfgs:
                 continue
             logger.info("Running %s", name)
-            n_splits = max(2, int(cv_cfg.get("inner_folds", 3) or 3))
+            n_splits_req = int(cv_cfg.get("inner_folds", 3) or 3)
+            n_splits_req = max(2, n_splits_req)
+            allowed = len(Xtr)
+            _validate_split_capacity(allowed, kind="samples")
+            n_splits = min(n_splits_req, allowed)
             if cv_method == "spxy":
                 inner = spxy_split(Xtr, ytr, n_splits)
             else:
-                inner = KFold(n_splits=min(n_splits, len(Xtr)), shuffle=True, random_state=random_state)
+                inner = KFold(
+                    n_splits=n_splits,
+                    shuffle=True,
+                    random_state=random_state,
+                )
             gs = GridSearchCV(
                 pipe,
                 grid,
@@ -3118,25 +3152,31 @@ def _train_and_save_regression(
             cv_method_raw = cv_cfg.get("cv_method", "kfold").lower()
             cv_method = "kfold" if cv_method_raw == "stratified" else cv_method_raw
             max_splits = int(cv_cfg.get("train_n_splits", 5) or 5)
-            base_splits = max(2, min(max_splits, len(X)))
+            max_splits = max(2, max_splits)
             train_task = progress.add_task("Treinando", total=None)
             fit_kwargs: Dict[str, Any] = {}
             if cv_method == "spxy":
-                cv = spxy_split(X.values, y, base_splits)
+                allowed = len(X)
+                _validate_split_capacity(allowed, kind="samples")
+                n_splits = min(max_splits, allowed)
+                cv = spxy_split(X.values, y, n_splits)
             elif cv_method == "group":
                 if groups is None:
                     raise DataError(
                         "group_col deve ser informado para cv_method 'group'"
                     )
-                unique_groups = len(pd.Series(groups).dropna().unique())
-                n_splits = max(2, min(base_splits, unique_groups))
-                if n_splits < 2:
-                    raise DataError("Pelo menos dois grupos distintos são necessários")
+                group_series = pd.Series(groups)
+                allowed = len(group_series.dropna().unique())
+                _validate_split_capacity(allowed, kind="groups")
+                n_splits = min(max_splits, allowed)
                 cv = GroupKFold(n_splits=n_splits)
                 fit_kwargs["groups"] = groups
             else:
+                allowed = len(X)
+                _validate_split_capacity(allowed, kind="samples")
+                n_splits = min(max_splits, allowed)
                 cv = KFold(
-                    n_splits=base_splits,
+                    n_splits=n_splits,
                     shuffle=True,
                     random_state=random_state,
                 )
