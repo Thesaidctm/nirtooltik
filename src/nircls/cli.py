@@ -86,6 +86,7 @@ STRINGS = {
         "dashboard_results_help": "Folder with results",
         "summary_help": "Summarize saved metrics including preprocess/result columns",
         "models_help": "List available model builders",
+        "target_type_help": "Target task type (classification or regression)",
         "mlflow_not_installed": "'mlflow' is not installed. Install with `pip install mlflow`.",
         "model_dep_missing": "Skipping {name}: {err}",
         "config_not_found": "Configuration file not found. Check the provided path.",
@@ -142,6 +143,7 @@ STRINGS = {
             "Resumir métricas salvas incluindo colunas de pré-processamento/resultado"
         ),
         "models_help": "Listar modelos disponíveis",
+        "target_type_help": "Tipo de tarefa alvo (classificação ou regressão)",
         "mlflow_not_installed": "'mlflow' não está instalado. Instale com `pip install mlflow`.",
         "model_dep_missing": "Ignorando {name}: {err}",
         "config_not_found": "Arquivo de configuração não encontrado. Verifique o caminho informado.",
@@ -494,8 +496,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     sp = parser.add_subparsers(dest="cmd", required=True)
     p_prep = sp.add_parser("prepare-data")
     p_prep.add_argument("--config", required=True)
+    p_prep.add_argument(
+        "--target-type",
+        choices=["classification", "regression"],
+        help=t("target_type_help"),
+    )
     p_tr = sp.add_parser("train")
     p_tr.add_argument("--config", required=True)
+    p_tr.add_argument(
+        "--target-type",
+        choices=["classification", "regression"],
+        help=t("target_type_help"),
+    )
     p_tr.add_argument(
         "--interactive",
         action="store_true",
@@ -508,6 +520,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     p_cv = sp.add_parser("crossval")
     p_cv.add_argument("--config", required=True)
+    p_cv.add_argument(
+        "--target-type",
+        choices=["classification", "regression"],
+        help=t("target_type_help"),
+    )
     p_cv.add_argument(
         "--interactive",
         action="store_true",
@@ -522,6 +539,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     sp.add_parser("list-models", help=t("models_help"))
     p_all = sp.add_parser("run-all", help=t("run_all_help"))
     p_all.add_argument("--config", help=t("run_all_config_help"))
+    p_all.add_argument(
+        "--target-type",
+        choices=["classification", "regression"],
+        help=t("target_type_help"),
+    )
     p_all.add_argument(
         "--all-preprocess",
         action="store_true",
@@ -581,12 +603,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.cmd in {"prepare-data", "train", "crossval"}:
         try:
             with open(args.config) as f:
-                raw = yaml.safe_load(f)
+                loaded_cfg = yaml.safe_load(f)
         except FileNotFoundError:
             print(t("config_not_found"), file=sys.stderr)
             return 1
+        raw = cast(Dict[str, Any], loaded_cfg or {})
+        if not isinstance(raw, dict):
+            print(
+                t("invalid_config", err="estrutura inválida"),
+                file=sys.stderr,
+            )
+            return 1
         if args.notification_email:
             raw["notification_email"] = args.notification_email
+        if getattr(args, "target_type", None):
+            raw.setdefault("data", {})["target_type"] = args.target_type
         try:
             cfg = ConfigModel(**raw)
         except ValidationError as e:  # pragma: no cover - user feedback
@@ -729,6 +760,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(t("config_not_found"), file=sys.stderr)
                 return 1
             _deep_update(default_cfg, user_cfg)
+        if args.target_type:
+            default_cfg.setdefault("data", {})["target_type"] = args.target_type
         if args.all_preprocess:
             default_cfg["preprocess"] = {"steps": list(PREPROCESS_DESCRIPTIONS)}
         if args.all_models:

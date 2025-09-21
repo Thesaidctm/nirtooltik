@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+import pathlib
+import sys
 
 import pandas as pd
 import pytest
 
-from nircls.io import _extract_targets_and_groups
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))  # noqa: E402
+
+from nircls.io import _extract_targets_and_groups, prepare_inputs
 from nircls.utils.errors import DataError
 
 
@@ -57,3 +61,59 @@ def test_extract_targets_raises_for_missing_group_column():
         DataError, match="Coluna de grupos grupo não encontrada em group.csv"
     ):
         _extract_targets_and_groups(df, None, "grupo")
+
+
+def test_extract_targets_regression_requires_explicit_columns_when_ambiguous():
+    df = pd.DataFrame(
+        {"feat": [1.0, 2.0, 3.0], "target": [0.5, 0.7, 0.9], "group": ["g1", "g1", "g2"]}
+    )
+    df.attrs["_source_path"] = "dataset.csv"
+
+    with pytest.raises(
+        DataError,
+        match="Não foi possível inferir colunas alvo numéricas. Informe 'target_cols'.",
+    ):
+        _extract_targets_and_groups(df, None, "group", target_type="regression")
+
+
+def test_extract_targets_regression_rejects_categorical_values():
+    df = pd.DataFrame({"target": ["a", "b", "c"], "feat": [1.0, 2.0, 3.0]})
+    df.attrs["_source_path"] = "dataset.csv"
+
+    with pytest.raises(
+        DataError, match="Coluna alvo target deve conter valores numéricos para regressão"
+    ):
+        _extract_targets_and_groups(df, ["target"], None, target_type="regression")
+
+
+def test_prepare_inputs_regression_returns_float_targets(tmp_path):
+    df = pd.DataFrame({"100": [1.0, 2.0, 3.0], "target": [0.5, 0.7, 0.9]})
+    path = tmp_path / "data.csv"
+    df.to_csv(path, index=False)
+
+    cfg = {
+        "input_path": str(path),
+        "target_cols": ["target"],
+        "target_type": "regression",
+    }
+
+    ds_list = prepare_inputs(cfg)
+    assert len(ds_list) == 1
+    assert ds_list[0]["Y"].dtype.kind == "f"
+
+
+def test_prepare_inputs_regression_raises_for_non_numeric_targets(tmp_path):
+    df = pd.DataFrame({"100": [1.0, 2.0, 3.0], "target": ["a", "b", "c"]})
+    path = tmp_path / "data.csv"
+    df.to_csv(path, index=False)
+
+    cfg = {
+        "input_path": str(path),
+        "target_cols": ["target"],
+        "target_type": "regression",
+    }
+
+    with pytest.raises(
+        DataError, match="Coluna alvo target deve conter valores numéricos para regressão"
+    ):
+        prepare_inputs(cfg)
