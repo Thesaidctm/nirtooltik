@@ -618,6 +618,29 @@ Modelos implementados (modelos que dependem de pacotes extras são ignorados se 
 * `CNN 1D` e `LSTM 1D` – redes neurais para séries 1D; convoluções extraem padrões locais
   enquanto LSTMs modelam dependências de longo prazo (dependem de `torch`)
 
+Para listar as opções diretamente pela CLI utilize `nircls list-models` para classificação
+ou `nircls list-models --target-type regression` para regressão.
+
+Modelos regressivos disponíveis (defina `data.target_type: regression` ou o campo global
+`task_type: regression` no YAML e escolha os identificadores a seguir):
+
+* `PLSR` / `PLSRegression` – regressão por mínimos quadrados parciais para respostas contínuas,
+  útil quando há alta colinearidade entre variáveis espectrais.
+* `RF_REG` / `RFR` / `RandomForestRegressor` – florestas aleatórias sem balanceamento de classes,
+  com grade padrão avaliando `n_estimators` e `max_depth`.
+* `GB_REG` (`GradientBoostingRegressor`) – boosting de gradiente com valores iniciais em
+  `n_estimators`, `learning_rate` e `max_depth` adequados a conjuntos pequenos.
+* `ET_REG` (`ExtraTreesRegressor`) – versão regressiva do Extra Trees, com grid para
+  `n_estimators` e `max_depth`.
+* `ADABOOST_REG` (`AdaBoostRegressor`) – boosting adaptativo para alvos contínuos.
+* `SVR`, `SVR_REG`, `SVR_RBF_REG`, `SVR_LINEAR_REG` – regressão por SVM; os identificadores
+  controlam o kernel padrão (`rbf` ou `linear`) e expõem hiperparâmetros `C`, `kernel` e `gamma` via grid.
+* `RIDGE` – regressão linear com regularização L2 (`alpha`).
+* `LINEAR_REG` / `LinearRegression` – regressão linear comum sem hiperparâmetros extras.
+* `KNN_REG` / `KNeighborsRegressor` – k-vizinhos mais próximos para regressão (`n_neighbors`).
+* `MLP_REG` (`MLPRegressor`) – rede neural densa para regressão; ativa `early_stopping` e ajusta `max_iter` por padrão.
+* `DT_REG` (`DecisionTreeRegressor`) – árvore de decisão regressiva com `max_depth` exposto.
+
 ## Treinar modelo final e predições
 
 O subcomando `train` é um atalho para a função `train_and_save`, que ajusta o
