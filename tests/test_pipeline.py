@@ -433,6 +433,14 @@ def test_end_to_end_cv_and_export(tmp_path, method):
             assert model_label.startswith("PLS-")
             assert model_label.startswith(expected_method_label)
             assert entry["method"] == expected_method_label
+            assert "BalancedAcc_ci95_low" in entry
+            assert "BalancedAcc_ci95_high" in entry
+            assert "train_BalancedAcc_ci95_low" in entry
+            assert "train_BalancedAcc_ci95_high" in entry
+            assert entry["BalancedAcc_ci95_low"] is not None
+            assert entry["BalancedAcc_ci95_high"] is not None
+            assert entry["train_BalancedAcc_ci95_low"] is not None
+            assert entry["train_BalancedAcc_ci95_high"] is not None
 
     assert summary_dir == out_dir.parent / "summary"
     summary_csv = summary_dir / "metrics_summary.csv"
@@ -495,6 +503,10 @@ def test_end_to_end_regression(tmp_path):
         rows = json.load(f)
     assert rows
     assert all("RMSE_mean" in row for row in rows)
+    assert all("RMSE_ci95_low" in row for row in rows)
+    assert all("RMSE_ci95_high" in row for row in rows)
+    assert all(row["RMSE_ci95_low"] is not None for row in rows)
+    assert all(row["RMSE_ci95_high"] is not None for row in rows)
     assert all("RMSECV_mean" in row for row in rows)
     assert all("RMSEP" in row for row in rows)
     assert all("RPD" in row for row in rows)

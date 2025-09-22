@@ -82,19 +82,30 @@ def generate_report(
             base = col[:-5]
             mean_col = col
             std_col = f"{base}_std"
-            if std_col in df.columns:
-                table_df[base] = df.apply(
-                    lambda r: (
-                        f"{r[mean_col]:.3f} ± {r[std_col]:.3f}"
-                        if pd.notnull(r[mean_col]) and pd.notnull(r[std_col])
-                        else "N/A"
-                    ),
-                    axis=1,
-                )
-            else:
-                table_df[base] = df[mean_col].map(
-                    lambda v: f"{v:.3f}" if pd.notnull(v) else "N/A"
-                )
+            ci_low_col = f"{base}_ci95_low"
+            ci_high_col = f"{base}_ci95_high"
+
+            def _format_row(row: pd.Series) -> str:
+                mean_val = row.get(mean_col)
+                if pd.isnull(mean_val):
+                    return "N/A"
+                text = f"{mean_val:.3f}"
+                if std_col in df.columns:
+                    std_val = row.get(std_col)
+                    if pd.notnull(std_val):
+                        text += f" ± {std_val:.3f}"
+                if (
+                    ci_low_col in df.columns
+                    and ci_high_col in df.columns
+                    and pd.notnull(row.get(ci_low_col))
+                    and pd.notnull(row.get(ci_high_col))
+                ):
+                    text += (
+                        f" (95% CI: {row[ci_low_col]:.3f}–{row[ci_high_col]:.3f})"
+                    )
+                return text
+
+            table_df[base] = df.apply(_format_row, axis=1)
     # Build a markdown table without requiring external dependencies
     header = "| " + " | ".join(table_df.columns.tolist()) + " |"
     sep = "| " + " | ".join(["---"] * len(table_df.columns)) + " |"
@@ -296,19 +307,30 @@ def generate_scientific_report(metrics: dict, cfg: dict, out_dir: Path) -> Path:
             base = col[:-5]
             mean_col = col
             std_col = f"{base}_std"
-            if std_col in df.columns:
-                table_df[base] = df.apply(
-                    lambda r: (
-                        f"{r[mean_col]:.3f} ± {r[std_col]:.3f}"
-                        if pd.notnull(r[mean_col]) and pd.notnull(r[std_col])
-                        else "N/A"
-                    ),
-                    axis=1,
-                )
-            else:
-                table_df[base] = df[mean_col].map(
-                    lambda v: f"{v:.3f}" if pd.notnull(v) else "N/A"
-                )
+            ci_low_col = f"{base}_ci95_low"
+            ci_high_col = f"{base}_ci95_high"
+
+            def _format_row(row: pd.Series) -> str:
+                mean_val = row.get(mean_col)
+                if pd.isnull(mean_val):
+                    return "N/A"
+                text = f"{mean_val:.3f}"
+                if std_col in df.columns:
+                    std_val = row.get(std_col)
+                    if pd.notnull(std_val):
+                        text += f" ± {std_val:.3f}"
+                if (
+                    ci_low_col in df.columns
+                    and ci_high_col in df.columns
+                    and pd.notnull(row.get(ci_low_col))
+                    and pd.notnull(row.get(ci_high_col))
+                ):
+                    text += (
+                        f" (95% CI: {row[ci_low_col]:.3f}–{row[ci_high_col]:.3f})"
+                    )
+                return text
+
+            table_df[base] = df.apply(_format_row, axis=1)
     header = "| " + " | ".join(table_df.columns.tolist()) + " |"
     sep = "| " + " | ".join(["---"] * len(table_df.columns)) + " |"
     lines = [header, sep]
