@@ -1747,9 +1747,19 @@ def _run_cv_classification(
                 if scramble_scores.size:
                     row["Yscramble_mean"] = float(np.mean(scramble_scores))
                     row["Yscramble_p95"] = float(np.percentile(scramble_scores, 95))
+                    observed_score = row.get("BalancedAcc_mean")
+                    if observed_score is not None:
+                        observed = float(observed_score)
+                        extreme = np.count_nonzero(scramble_scores >= observed)
+                        row["Yscramble_pvalue"] = float(
+                            (extreme + 1) / (scramble_scores.size + 1)
+                        )
+                    else:
+                        row["Yscramble_pvalue"] = None
                 else:
                     row["Yscramble_mean"] = None
                     row["Yscramble_p95"] = None
+                    row["Yscramble_pvalue"] = None
             if n_comp_list:
                 row["n_components"] = int(np.median(n_comp_list))
             row["preprocess_steps"] = best_steps_repr or "None"
@@ -2269,9 +2279,19 @@ def _run_holdout_classification(
                 if scramble_scores.size:
                     row["Yscramble_mean"] = float(np.mean(scramble_scores))
                     row["Yscramble_p95"] = float(np.percentile(scramble_scores, 95))
+                    observed_score = row.get("BalancedAcc_mean")
+                    if observed_score is not None:
+                        observed = float(observed_score)
+                        extreme = np.count_nonzero(scramble_scores >= observed)
+                        row["Yscramble_pvalue"] = float(
+                            (extreme + 1) / (scramble_scores.size + 1)
+                        )
+                    else:
+                        row["Yscramble_pvalue"] = None
                 else:
                     row["Yscramble_mean"] = None
                     row["Yscramble_p95"] = None
+                    row["Yscramble_pvalue"] = None
             row["preprocess_steps"] = preprocess_steps
             if row.get("preprocess_steps") == "RAW":
                 row["result"] = "RAW"
