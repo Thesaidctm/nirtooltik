@@ -32,6 +32,12 @@ dos dados e demais opções do experimento. Exemplo:
 nircls run-all --config configs/eucalipto_spxy.yaml
 ```
 
+Para um ponto de partida em regressão, utilize o template de exemplo:
+
+```bash
+nircls run-all --config configs/regression_template.yaml
+```
+
 O comando exige um arquivo de configuração YAML que informe os caminhos dos
 dados e as opções do experimento.
 
