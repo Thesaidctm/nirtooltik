@@ -66,33 +66,56 @@ class PLSLocalRegressor(BaseEstimator, RegressorMixin):
 
     def get_params(self, deep: bool = True) -> dict[str, Any]:
         params = {"n_components": self.n_components, "method": self.method}
+        try:
+            reg_defaults = self._make_regressor().get_params(deep=deep)
+        except ValueError:
+            reg_defaults = {}
+        params.update(reg_defaults)
         params.update(self.reg_params)
         return params
 
     def set_params(self, **params: Any) -> "PLSLocalRegressor":
         updated_reg_params = dict(self.reg_params)
+        method_changed = False
+        if "method" in params:
+            new_method = params["method"]
+            if new_method != self.method:
+                method_changed = True
+            self.method = new_method
+        if "n_components" in params:
+            self.n_components = params["n_components"]
         for key, value in params.items():
-            if key in {"n_components", "method"}:
-                setattr(self, key, value)
-            else:
+            if key not in {"n_components", "method"}:
                 updated_reg_params[key] = value
+        if method_changed:
+            allowed_params = set(self._regressor_allowed_params().keys())
+            updated_reg_params = {
+                key: value for key, value in updated_reg_params.items() if key in allowed_params
+            }
         self.reg_params = updated_reg_params
         self.pls = PLSRegression(n_components=self.n_components)
         self.regressor = self._make_regressor()
         return self
 
     def _make_regressor(self) -> RegressorMixin:
-        try:
-            builder = _REGRESSOR_BUILDERS[self.method]
-        except KeyError as exc:  # pragma: no cover - defensive
-            raise ValueError(f"Unsupported local regression method: {self.method}") from exc
-        reg = builder()
+        reg = self._instantiate_regressor()
         if self.reg_params:
             allowed = reg.get_params()
             valid_params = {k: v for k, v in self.reg_params.items() if k in allowed}
             if valid_params:
                 reg.set_params(**valid_params)
         return reg
+
+    def _instantiate_regressor(self) -> RegressorMixin:
+        try:
+            builder = _REGRESSOR_BUILDERS[self.method]
+        except KeyError as exc:  # pragma: no cover - defensive
+            raise ValueError(f"Unsupported local regression method: {self.method}") from exc
+        return builder()
+
+    def _regressor_allowed_params(self) -> dict[str, Any]:
+        reg = self._instantiate_regressor()
+        return reg.get_params()
 
 
 __all__ = ["PLSLocalRegressor"]

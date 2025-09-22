@@ -198,6 +198,38 @@ def test_build_pipeline_regression_step_name():
     assert all(not key.startswith("clf__") for key in grid)
 
 
+def test_pls_local_regressor_grid_search_handles_knn_and_radius():
+    rng = np.random.RandomState(42)
+    X = rng.rand(24, 8) * 0.1
+    y = rng.rand(24)
+    cfg = {
+        "data": {
+            "input_path": "dummy.csv",
+            "target_cols": ["target"],
+            "target_type": "regression",
+        },
+        "models": [{"name": "PLSLocalRegressor"}],
+    }
+    _, pipe, grid = build_pipeline_from_config(cfg)[0]
+    assert isinstance(pipe.named_steps["reg"], PLSLocalRegressor)
+    assert grid["reg__method"] == ["knn"]
+    assert "reg__n_neighbors" in grid
+
+    base_grid = grid.copy()
+    radius_grid = grid.copy()
+    radius_grid["reg__method"] = ["radius"]
+    radius_grid["reg__radius"] = [5.0]
+
+    search = GridSearchCV(pipe, [base_grid, radius_grid], cv=3, n_jobs=1)
+    search.fit(X, y)
+
+    evaluated_methods = {
+        str(method)
+        for method in np.asarray(search.cv_results_["param_reg__method"], dtype=object)
+    }
+    assert evaluated_methods == {"knn", "radius"}
+
+
 @pytest.mark.parametrize(
     "identifier, expected_cls, grid_keys, extra_cfg, expected_attrs",
     [
