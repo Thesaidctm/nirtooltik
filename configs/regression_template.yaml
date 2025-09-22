@@ -1,0 +1,25 @@
+# Ajuste `n_components` de PLSR para ficar abaixo de ~80% de min(n_amostras - 1, n_variáveis)
+# a fim de reduzir risco de sobreajuste, principalmente em conjuntos pequenos.
+task_type: regression
+
+data:
+  input_path: data/demo_regression.csv
+  target_cols: [target]
+  out_dir: results
+
+models:
+  - name: PLSR
+    grid:
+      n_components: [1, 2]
+  - name: RF_REG
+    grid:
+      n_estimators: [100, 200]
+      max_depth: [null, 10]
+
+cv:
+  random_state: 0
+  inner_folds: 2
+  strategies:
+    - type: kfold
+      n_splits: [3]
+      n_repeats: 1
