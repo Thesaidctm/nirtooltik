@@ -49,6 +49,7 @@ from sklearn.model_selection import (
 )
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from scipy import stats
 
 from .config_schema import ConfigModel, ValidationError
 from .feature_selection.vip import compute_vip
@@ -108,6 +109,71 @@ def _rmse(
     """Compute root mean squared error compatible with older sklearn versions."""
 
     return float(compute_rmse(y_true, y_pred))
+
+
+def _compute_ci95(mean: float, std: float, n: int) -> Optional[Tuple[float, float]]:
+    """Return 95% confidence interval bounds for ``mean`` when ``n`` >= 2."""
+
+    if n < 2:
+        return None
+    if not np.isfinite(mean) or not np.isfinite(std):
+        return None
+    se = std / np.sqrt(n)
+    if not np.isfinite(se):
+        return None
+    try:
+        t_multiplier = stats.t.ppf(0.975, df=n - 1)
+    except Exception:  # pragma: no cover - defensive
+        return None
+    if not np.isfinite(t_multiplier):
+        return None
+    margin = t_multiplier * se
+    if not np.isfinite(margin):
+        return None
+    return mean - margin, mean + margin
+
+
+def _summarize_metric_values(values: Sequence[float]) -> Optional[Dict[str, float]]:
+    """Compute mean, std and 95% CI summary statistics for ``values``."""
+
+    arr = np.asarray(values, dtype=float)
+    if arr.size == 0:
+        return None
+    mask = np.isfinite(arr)
+    if not np.any(mask):
+        return None
+    arr = arr[mask]
+    mean_val = float(np.mean(arr))
+    summary: Dict[str, float] = {"mean": mean_val}
+    if arr.size > 1:
+        std_val = float(np.std(arr, ddof=1))
+        summary["std"] = std_val
+        ci_bounds = _compute_ci95(mean_val, std_val, arr.size)
+        if ci_bounds is not None:
+            low, high = ci_bounds
+            summary["ci95_low"] = float(low)
+            summary["ci95_high"] = float(high)
+    return summary
+
+
+def _summarize_scores(
+    scores: Mapping[str, Sequence[float]], *, prefix: str = ""
+) -> Dict[str, float]:
+    """Return flattened summary statistics for a metric mapping."""
+
+    summary: Dict[str, float] = {}
+    for metric, values in scores.items():
+        stats_dict = _summarize_metric_values(values)
+        if not stats_dict:
+            continue
+        base = f"{prefix}{metric}"
+        summary[f"{base}_mean"] = stats_dict["mean"]
+        if "std" in stats_dict:
+            summary[f"{base}_std"] = stats_dict["std"]
+        if "ci95_low" in stats_dict and "ci95_high" in stats_dict:
+            summary[f"{base}_ci95_low"] = stats_dict["ci95_low"]
+            summary[f"{base}_ci95_high"] = stats_dict["ci95_high"]
+    return summary
 
 
 def _validate_split_capacity(allowed: int, *, kind: str) -> None:
@@ -1483,35 +1549,17 @@ def _run_cv_classification(
                     "calibrated": bool(m_cfg.get("calibration")),
                     "method": method_label,
                 }
-                row.update(
-                    {f"{k}_mean": float(np.mean(v)) for k, v in scores_val.items() if v}
-                )
-                row.update(
-                    {
-                        f"{k}_std": float(np.std(v, ddof=1))
-                        for k, v in scores_val.items()
-                        if v and len(v) > 1
-                    }
-                )
-                row.update(
-                    {
-                        f"train_{k}_mean": float(np.mean(v))
-                        for k, v in scores_train.items()
-                        if v
-                    }
-                )
-                row.update(
-                    {
-                        f"train_{k}_std": float(np.std(v, ddof=1))
-                        for k, v in scores_train.items()
-                        if v and len(v) > 1
-                    }
-                )
+                row.update(_summarize_scores(scores_val))
+                row.update(_summarize_scores(scores_train, prefix="train_"))
                 for m in ["Brier", "ECE"]:
                     row.setdefault(f"{m}_mean", None)
                     row.setdefault(f"{m}_std", None)
+                    row.setdefault(f"{m}_ci95_low", None)
+                    row.setdefault(f"{m}_ci95_high", None)
                     row.setdefault(f"train_{m}_mean", None)
                     row.setdefault(f"train_{m}_std", None)
+                    row.setdefault(f"train_{m}_ci95_low", None)
+                    row.setdefault(f"train_{m}_ci95_high", None)
                 _update_row_with_best_params(row, best_params)
                 if n_comp_list:
                     row["n_components"] = int(np.median(n_comp_list))
@@ -1694,35 +1742,17 @@ def _run_cv_classification(
                 "calibrated": bool(m_cfg.get("calibration")),
                 "method": method_label,
             }
-            row.update(
-                {f"{k}_mean": float(np.mean(v)) for k, v in scores_val.items() if v}
-            )
-            row.update(
-                {
-                    f"{k}_std": float(np.std(v, ddof=1))
-                    for k, v in scores_val.items()
-                    if v and len(v) > 1
-                }
-            )
-            row.update(
-                {
-                    f"train_{k}_mean": float(np.mean(v))
-                    for k, v in scores_train.items()
-                    if v
-                }
-            )
-            row.update(
-                {
-                    f"train_{k}_std": float(np.std(v, ddof=1))
-                    for k, v in scores_train.items()
-                    if v and len(v) > 1
-                }
-            )
+            row.update(_summarize_scores(scores_val))
+            row.update(_summarize_scores(scores_train, prefix="train_"))
             for m in ["Brier", "ECE"]:
                 row.setdefault(f"{m}_mean", None)
                 row.setdefault(f"{m}_std", None)
+                row.setdefault(f"{m}_ci95_low", None)
+                row.setdefault(f"{m}_ci95_high", None)
                 row.setdefault(f"train_{m}_mean", None)
                 row.setdefault(f"train_{m}_std", None)
+                row.setdefault(f"train_{m}_ci95_low", None)
+                row.setdefault(f"train_{m}_ci95_high", None)
             _update_row_with_best_params(row, best_params_example)
             if m_cfg.get("overfit_check") and yscramble_iter > 0:
                 cv_scramble = outer
@@ -1988,27 +2018,8 @@ def _run_cv_regression(
                 "model": model_label,
                 "calibrated": False,
             }
-            for metric in ["RMSE", "MAE", "MAE_percent", "R2"]:
-                values = np.asarray(scores_val[metric], dtype=float)
-                if values.size:
-                    valid_mask = np.isfinite(values)
-                    if np.any(valid_mask):
-                        mean_val = float(np.mean(values[valid_mask]))
-                        row[f"{metric}_mean"] = mean_val
-                        if np.sum(valid_mask) > 1:
-                            row[f"{metric}_std"] = float(
-                                np.std(values[valid_mask], ddof=1)
-                            )
-                train_values = np.asarray(scores_train[metric], dtype=float)
-                if train_values.size:
-                    valid_train = np.isfinite(train_values)
-                    if np.any(valid_train):
-                        train_mean = float(np.mean(train_values[valid_train]))
-                        row[f"train_{metric}_mean"] = train_mean
-                        if np.sum(valid_train) > 1:
-                            row[f"train_{metric}_std"] = float(
-                                np.std(train_values[valid_train], ddof=1)
-                            )
+            row.update(_summarize_scores(scores_val))
+            row.update(_summarize_scores(scores_train, prefix="train_"))
             if "RMSE_std" in row:
                 row["RMSECV_std"] = row["RMSE_std"]
             if "train_RMSE_std" in row:
