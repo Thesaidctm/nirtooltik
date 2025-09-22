@@ -27,6 +27,7 @@ from .base import BaseModelBuilder
 # Helpers for model construction with optional class weighting
 from .builders import _build_etc, _build_logreg, _build_rf, _build_svm
 from .plsda import PLSDA
+from .plslocal import PLSLocalRegressor
 
 # Optional third-party estimators
 try:  # pragma: no cover - optional dependency
@@ -111,6 +112,9 @@ REGRESSION_MODEL_DESCRIPTIONS: Dict[str, str] = {
     "PLSREGRESSION": "Partial Least Squares Regression",
     "PLSR": "Partial Least Squares Regression",
     "PLS_REG": "Partial Least Squares Regression",
+    "PLSLOCALREGRESSOR": "Partial Least Squares with local regression",
+    "PLSLOCAL_REG": "Partial Least Squares with local regression",
+    "PLS_LOCAL_REG": "Partial Least Squares with local regression",
     "RANDOMFORESTREGRESSOR": "Random Forest Regressor",
     "RFR": "Random Forest Regressor",
     "RF_REG": "Random Forest Regressor",
@@ -171,6 +175,9 @@ REGRESSION_MODEL_BUILDERS = {
     "PLSREGRESSION": lambda grid: PLSRegression(),
     "PLSR": lambda grid: PLSRegression(),
     "PLS_REG": lambda grid: PLSRegression(),
+    "PLSLOCALREGRESSOR": lambda grid: PLSLocalRegressor(),
+    "PLSLOCAL_REG": lambda grid: PLSLocalRegressor(),
+    "PLS_LOCAL_REG": lambda grid: PLSLocalRegressor(),
     "RANDOMFORESTREGRESSOR": lambda grid: RandomForestRegressor(),
     "RFR": lambda grid: RandomForestRegressor(),
     "RF_REG": lambda grid: RandomForestRegressor(),
@@ -243,6 +250,21 @@ REGRESSION_DEFAULT_GRIDS = {
     "PLSREGRESSION": {"n_components": [2]},
     "PLSR": {"n_components": [2]},
     "PLS_REG": {"n_components": [2]},
+    "PLSLOCALREGRESSOR": {
+        "n_components": [2],
+        "method": ["knn"],
+        "n_neighbors": [5],
+    },
+    "PLSLOCAL_REG": {
+        "n_components": [2],
+        "method": ["knn"],
+        "n_neighbors": [5],
+    },
+    "PLS_LOCAL_REG": {
+        "n_components": [2],
+        "method": ["knn"],
+        "n_neighbors": [5],
+    },
     "RANDOMFORESTREGRESSOR": {"n_estimators": [100], "max_depth": [None]},
     "RFR": {"n_estimators": [100], "max_depth": [None]},
     "RF_REG": {"n_estimators": [100], "max_depth": [None]},

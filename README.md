@@ -626,6 +626,19 @@ Modelos regressivos disponíveis (defina `data.target_type: regression` ou o cam
 
 * `PLSR` / `PLSRegression` – regressão por mínimos quadrados parciais para respostas contínuas,
   útil quando há alta colinearidade entre variáveis espectrais.
+* `PLSLocalRegressor` / `PLS_LOCAL_REG` – combina PLS para redução de dimensionalidade com um
+  regressor local na sequência. O parâmetro `method` define o estimador de vizinhança (`"knn"`
+  por padrão, com opção `"radius"`) e aceita ajustes via grade assim como `n_components` e os
+  hiperparâmetros do vizinho (`n_neighbors`, `weights`, etc.). Exemplo de configuração:
+
+  ```yaml
+  models:
+    - name: PLSLocalRegressor
+      grid:
+        n_components: [2, 4]
+        method: [knn]
+        n_neighbors: [3, 5, 7]
+  ```
 * `RF_REG` / `RFR` / `RandomForestRegressor` – florestas aleatórias sem balanceamento de classes,
   com grade padrão avaliando `n_estimators` e `max_depth`.
 * `GB_REG` (`GradientBoostingRegressor`) – boosting de gradiente com valores iniciais em
