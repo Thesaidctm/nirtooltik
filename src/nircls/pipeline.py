@@ -2146,6 +2146,17 @@ def _run_cv_regression(
                 rpd = compute_rpd(y_true_val, y_pred_val)
                 if np.isfinite(rpd):
                     row["RPD"] = float(rpd)
+                existing_r2 = row.get("R2_mean")
+                needs_update = existing_r2 is None
+                if not needs_update:
+                    try:
+                        needs_update = not np.isfinite(float(existing_r2))
+                    except (TypeError, ValueError):
+                        needs_update = True
+                if needs_update:
+                    agg_r2 = r2_score(y_true_val, y_pred_val)
+                    if np.isfinite(agg_r2):
+                        row["R2_mean"] = float(agg_r2)
             if y_true_train_all and y_pred_train_all:
                 y_true_train = np.concatenate(y_true_train_all)
                 y_pred_train = np.concatenate(y_pred_train_all)
@@ -2159,6 +2170,17 @@ def _run_cv_regression(
                 train_rpd = compute_rpd(y_true_train, y_pred_train)
                 if np.isfinite(train_rpd):
                     row["train_RPD"] = float(train_rpd)
+                existing_train_r2 = row.get("train_R2_mean")
+                needs_train_update = existing_train_r2 is None
+                if not needs_train_update:
+                    try:
+                        needs_train_update = not np.isfinite(float(existing_train_r2))
+                    except (TypeError, ValueError):
+                        needs_train_update = True
+                if needs_train_update:
+                    agg_train_r2 = r2_score(y_true_train, y_pred_train)
+                    if np.isfinite(agg_train_r2):
+                        row["train_R2_mean"] = float(agg_train_r2)
             if n_comp_list:
                 row["n_components"] = int(np.median(n_comp_list))
             row["preprocess_steps"] = best_steps_repr or "None"
