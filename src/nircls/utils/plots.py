@@ -16,6 +16,28 @@ from sklearn.preprocessing import label_binarize
 from .logging import logger
 from .palettes import PALETTE_MAP, Palette
 
+
+def _cycle_visible_colors(palette: Palette) -> list[str]:
+    """Return palette colors rotated so the first entry is not almost white."""
+
+    colors = list(PALETTE_MAP[palette])
+    if not colors:
+        return colors
+
+    def is_almost_white(color: str) -> bool:
+        hex_value = color.strip().lower()
+        if not hex_value.startswith("#"):
+            return False
+        hex_value = hex_value[1:]
+        return hex_value in {"fff", "ffffff"}
+
+    for idx, color in enumerate(colors):
+        if not is_almost_white(color):
+            if idx == 0:
+                return colors
+            return colors[idx:] + colors[:idx]
+    return colors
+
 _PLACEHOLDER_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFgwJ/lEDNkwAAAABJRU5ErkJggg=="
 )
@@ -147,12 +169,13 @@ def _plot_pls_components(
         return pd.DataFrame(columns=["feature", "component", "component_index", "value"])
 
     features = _coerce_feature_names(feature_names, n_features)
+    colors = _cycle_visible_colors(palette)
     fig = go.Figure()
     fig.update_layout(
         title=title,
         xaxis_title="Feature",
         yaxis_title=yaxis,
-        colorway=PALETTE_MAP[palette],
+        colorway=colors,
     )
     component_labels = [f"Comp {i + 1}" for i in range(n_components)]
     for idx, label in enumerate(component_labels):
@@ -259,7 +282,7 @@ def plot_vip(
         return pd.DataFrame(columns=["feature", "vip"])
 
     features = _coerce_feature_names(feature_names, n_features)
-    colors = PALETTE_MAP[palette]
+    colors = _cycle_visible_colors(palette)
     color = colors[0] if colors else None
     fig = go.Figure()
     fig.add_trace(
