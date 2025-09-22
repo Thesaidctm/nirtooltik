@@ -1,19 +1,30 @@
-task_type: regression
-
 data:
   input_path: data/raw/*.xlsx
   x_sheet: X
   y_sheet: Y
-  target_cols: all   # ou uma lista explícita de colunas
+  target_cols: all            # informe uma lista explícita se quiser filtrar colunas
+  target_type: regression     # ativa todos os estimadores regressivos
   spectral_range: null
   drop_nans: true
   out_dir: results
 
+preprocess:
+  evaluate_individual: true
+  steps: [RAW, SNV, MSC, SG, EPO, SCALE]
+  sg:
+    window: [3, 7, 11, 15, 21, 25]
+    polyorder: 2
+    deriv: [1, 2]
+
 cv:
-  random_state: 0
+  random_state: 42
   strategies:
     - type: kfold
       n_splits: [5]
+      n_repeats: 2
+    - type: loo
+    - type: holdout
+      test_size: 0.3
 
 models:
   - name: PLSR
