@@ -40,6 +40,7 @@ from nircls.pipeline import (  # noqa: E402
 )
 from nircls.metrics.regression import compute_rmsecv  # noqa: E402
 from nircls.models.plsda import PLSDA  # noqa: E402
+from nircls.models.plslocal import PLSLocalRegressor  # noqa: E402
 from nircls.utils.errors import DataError, ModelError  # noqa: E402
 from nircls.utils.palettes import Palette  # noqa: E402
 
@@ -262,6 +263,13 @@ def test_build_pipeline_regression_step_name():
             {},
         ),
         ("DT_REG", DecisionTreeRegressor, {"reg__max_depth"}, None, {}),
+        (
+            "PLS_LOCAL_REG",
+            PLSLocalRegressor,
+            {"reg__n_components", "reg__method", "reg__n_neighbors"},
+            None,
+            {"method": "knn"},
+        ),
     ],
 )
 def test_regression_model_builders_are_trainable(
