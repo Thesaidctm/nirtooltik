@@ -9,7 +9,7 @@ data:
 
 preprocess:
   steps: [None]
-  evaluate_individual: false
+  evaluate_individual: true
 
 models:
   - name: PLSDA
