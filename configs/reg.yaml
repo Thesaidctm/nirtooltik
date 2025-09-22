@@ -1,0 +1,90 @@
+task_type: regression
+
+data:
+  input_path: data/raw/meus_dados.xlsx
+  target_cols: [alvo]
+  out_dir: results
+  drop_nans: true
+
+cv:
+  random_state: 0
+  strategies:
+    - type: kfold
+      n_splits: [5]
+
+models:
+  - name: PLSR
+    grid:
+      n_components: [2, 4, 6]
+
+  - name: PLS_LOCAL_REG
+    grid:
+      n_components: [2, 4]
+      method: [knn]
+      n_neighbors: [5, 7]
+      weights: [uniform, distance]
+
+  - name: RF_REG
+    grid:
+      n_estimators: [100, 200]
+      max_depth: [null, 10]
+
+  - name: GB_REG
+    grid:
+      n_estimators: [100, 200]
+      learning_rate: [0.05, 0.1]
+      max_depth: [3]
+
+  - name: ET_REG
+    grid:
+      n_estimators: [100, 200]
+      max_depth: [null]
+
+  - name: ADABOOST_REG
+    grid:
+      n_estimators: [50, 100]
+      learning_rate: [0.5, 1.0]
+
+  - name: SVR
+    grid:
+      kernel: [rbf]
+      C: [1.0, 10.0]
+      gamma: [scale, auto]
+
+  - name: SVR_LINEAR_REG
+    grid:
+      kernel: [linear]
+      C: [0.1, 1.0, 10.0]
+
+  - name: SVR_RBF_REG
+    grid:
+      kernel: [rbf]
+      C: [1.0, 10.0]
+      gamma: [scale, auto]
+
+  - name: RIDGE
+    grid:
+      alpha: [0.1, 1.0, 10.0]
+
+  - name: LINEAR_REG
+    grid: {}
+
+  - name: KNN_REG
+    grid:
+      n_neighbors: [3, 5, 7]
+      weights: [uniform, distance]
+
+  - name: MLP_REG
+    grid:
+      hidden_layer_sizes:
+        - [100]
+        - [100, 50]
+      activation: [relu, tanh]
+      solver: [adam]
+      max_iter: [500]
+      early_stopping: [true]
+
+  - name: DT_REG
+    grid:
+      max_depth: [null, 10, 20]
+      min_samples_split: [2, 5]
