@@ -173,6 +173,7 @@ def test_pipeline_fit_predict_with_cv_and_windows(method):
                 "name": "PLSDA",
                 "grid": {"n_components": [2], "method": [method]},
                 "overfit_check": True,
+                "y_scramble_n_iter": 3,
             }
         ],
     }
@@ -386,7 +387,12 @@ def test_end_to_end_cv_and_export(tmp_path, method):
         assert set(xls.sheet_names) == {"validation", "calibration"}
         val_df = xls.parse("validation")
         calib_df = xls.parse("calibration")
-        assert {"Yscramble_mean", "Yscramble_p95"}.issubset(val_df.columns)
+        assert {"Yscramble_mean", "Yscramble_p95", "Yscramble_pvalue"}.issubset(
+            val_df.columns
+        )
+        pvalues = val_df["Yscramble_pvalue"].dropna().to_numpy()
+        if pvalues.size:
+            assert np.all((0.0 <= pvalues) & (pvalues <= 1.0))
         assert len(set(val_df["preprocess_steps"])) == 1
         assert len(set(calib_df["preprocess_steps"])) == 1
         expected_method_label = f"PLS-{method.upper()}"
@@ -417,6 +423,7 @@ def test_end_to_end_cv_and_export(tmp_path, method):
             metrics_json = json.load(f)
         assert metrics_json, "metrics.json should contain at least one entry"
         assert all("Yscramble_mean" in row for row in metrics_json)
+        assert all("Yscramble_pvalue" in row for row in metrics_json)
         metrics_by_step = {}
         for row in metrics_json:
             metrics_by_step.setdefault(row["preprocess_steps"], []).append(row)
@@ -433,6 +440,9 @@ def test_end_to_end_cv_and_export(tmp_path, method):
             assert model_label.startswith("PLS-")
             assert model_label.startswith(expected_method_label)
             assert entry["method"] == expected_method_label
+            pvalue = entry.get("Yscramble_pvalue")
+            if pvalue is not None:
+                assert 0.0 <= pvalue <= 1.0
             assert "BalancedAcc_ci95_low" in entry
             assert "BalancedAcc_ci95_high" in entry
             assert "train_BalancedAcc_ci95_low" in entry
