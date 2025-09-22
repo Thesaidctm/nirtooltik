@@ -398,6 +398,18 @@ def test_end_to_end_cv_and_export(tmp_path, method):
         expected_method_label = f"PLS-{method.upper()}"
         observed_methods = {m for m in val_df.get("method", []) if isinstance(m, str)}
         assert expected_method_label in observed_methods
+        predictions_csv = strat_dir / "results" / "cv_predictions.csv"
+        assert predictions_csv.exists()
+        predictions_df = pd.read_csv(predictions_csv)
+        assert predictions_df.columns.tolist() == [
+            "sample",
+            "fold",
+            "y_true",
+            "y_pred",
+            "y_proba_A",
+            "y_proba_B",
+        ]
+        assert len(predictions_df) == len(df)
         assert any((strat_dir / "figures").glob("*.png"))
         assert (strat_dir / "report.md").exists()
         assert (strat_dir / "astm_classification.json").exists()
@@ -440,6 +452,7 @@ def test_end_to_end_cv_and_export(tmp_path, method):
             assert model_label.startswith("PLS-")
             assert model_label.startswith(expected_method_label)
             assert entry["method"] == expected_method_label
+            assert entry.get("cv_predictions_csv")
             pvalue = entry.get("Yscramble_pvalue")
             if pvalue is not None:
                 assert 0.0 <= pvalue <= 1.0
@@ -518,6 +531,19 @@ def test_end_to_end_regression(tmp_path):
     assert all(row["RMSE_ci95_low"] is not None for row in rows)
     assert all(row["RMSE_ci95_high"] is not None for row in rows)
     assert all("RMSECV_mean" in row for row in rows)
+    strat_dir = metrics_file.parent
+    residuals_csv = strat_dir / "results" / "cv_residuals.csv"
+    assert residuals_csv.exists()
+    residuals_df = pd.read_csv(residuals_csv)
+    assert residuals_df.columns.tolist() == [
+        "sample",
+        "fold",
+        "y_true",
+        "y_pred",
+        "residual",
+    ]
+    assert len(residuals_df) == len(df)
+    assert all(row.get("cv_residuals_csv") for row in rows)
     assert all("RMSEP" in row for row in rows)
     assert all("RPD" in row for row in rows)
     assert all("MAE_percent_mean" in row for row in rows)

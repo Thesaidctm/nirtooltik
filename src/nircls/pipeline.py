@@ -102,6 +102,15 @@ warnings.filterwarnings(
 )
 
 
+def _relative_to_out_dir(path: Path, out_dir: Path) -> str:
+    """Return a POSIX path relative to ``out_dir`` when possible."""
+
+    try:
+        return path.relative_to(out_dir).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def _rmse(
     y_true: Sequence[float] | np.ndarray,
     y_pred: Sequence[float] | np.ndarray,
@@ -1465,9 +1474,35 @@ def _run_cv_classification(
             y_true_all: List[np.ndarray] = []
             y_pred_all: List[np.ndarray] = []
             y_proba_all: List[np.ndarray] = []
+            fold_predictions: List[pd.DataFrame] = []
+            proba_available = False
             n_comp_list: List[int] = []
             best_steps_repr: Optional[str] = None
             best_params_example: Optional[Dict[str, Any]] = None
+            results_dir = out_dir / "results"
+            results_dir.mkdir(parents=True, exist_ok=True)
+
+            def _export_predictions_csv() -> Optional[Path]:
+                if not fold_predictions:
+                    return None
+                df_pred = pd.concat(fold_predictions, ignore_index=True)
+                base_cols = ["sample", "fold", "y_true", "y_pred"]
+                for col in base_cols:
+                    if col not in df_pred.columns:
+                        df_pred[col] = np.nan
+                proba_cols: List[str] = []
+                if proba_available:
+                    proba_cols = [
+                        f"y_proba_{str(cls)}" for cls in classes
+                    ]
+                    for col in proba_cols:
+                        if col not in df_pred.columns:
+                            df_pred[col] = np.nan
+                ordered_cols = base_cols + proba_cols
+                df_pred = df_pred[ordered_cols]
+                csv_path = results_dir / "cv_predictions.csv"
+                df_pred.to_csv(csv_path, index=False)
+                return csv_path
             if is_loo:
                 inner_splits = int(min(inner_folds, counts.min()))
                 inner_splits = max(inner_splits, 2)
@@ -1537,6 +1572,15 @@ def _run_cv_classification(
                 scores_train["ECE"].append(
                     expected_calibration_error(y_enc, proba_tr, n_bins=15)
                 )
+                proba_available = True
+                fold_df = pd.DataFrame({"sample": X.index})
+                fold_df["fold"] = np.arange(len(X.index))
+                fold_df["y_true"] = le.inverse_transform(y_enc)
+                fold_df["y_pred"] = le.inverse_transform(yhat)
+                for class_idx, class_label in enumerate(classes):
+                    col_name = f"y_proba_{str(class_label)}"
+                    fold_df[col_name] = proba[:, class_idx]
+                fold_predictions.append(fold_df)
                 y_true_all.append(y_enc)
                 y_pred_all.append(yhat)
                 model_label, method_label = _format_model_and_method_labels(
@@ -1549,6 +1593,11 @@ def _run_cv_classification(
                     "calibrated": bool(m_cfg.get("calibration")),
                     "method": method_label,
                 }
+                predictions_path = _export_predictions_csv()
+                if predictions_path is not None:
+                    row["cv_predictions_csv"] = _relative_to_out_dir(
+                        predictions_path, out_dir
+                    )
                 row.update(_summarize_scores(scores_val))
                 row.update(_summarize_scores(scores_train, prefix="train_"))
                 for m in ["Brier", "ECE"]:
@@ -1627,6 +1676,7 @@ def _run_cv_classification(
                     y_true_all,
                     y_pred_all,
                     y_proba_all,
+                    fold_predictions,
                 )
                 gc.collect()
                 continue
@@ -1645,7 +1695,7 @@ def _run_cv_classification(
             proba_tr = None
             yhat = None
             yhat_tr = None
-            for tr, te in outer_splits:
+            for fold_idx, (tr, te) in enumerate(outer_splits):
                 if log_memory:
                     mem_fold_start = psutil.Process().memory_info().rss / 1e6
                     logger.debug("fold start %.3f MB", mem_fold_start)
@@ -1693,6 +1743,7 @@ def _run_cv_classification(
                 scores_val["BalancedAcc"].append(balanced_accuracy_score(yte, yhat))
                 scores_val["Accuracy"].append(accuracy_score(yte, yhat))
                 proba_fn = getattr(best, "predict_proba", None)
+                proba = None
                 if proba_fn is not None:
                     proba = proba_fn(Xte)
                     y_proba_all.append(proba)
@@ -1728,6 +1779,16 @@ def _run_cv_classification(
                     )
                 y_true_all.append(yte)
                 y_pred_all.append(yhat)
+                fold_df = pd.DataFrame({"sample": X.index[te]})
+                fold_df["fold"] = fold_idx
+                fold_df["y_true"] = le.inverse_transform(yte)
+                fold_df["y_pred"] = le.inverse_transform(yhat)
+                if proba is not None:
+                    for class_idx, class_label in enumerate(classes):
+                        col_name = f"y_proba_{str(class_label)}"
+                        fold_df[col_name] = proba[:, class_idx]
+                    proba_available = True
+                fold_predictions.append(fold_df)
                 progress.advance(fold_task)
                 if log_memory:
                     mem_fold_end = psutil.Process().memory_info().rss / 1e6
@@ -1742,6 +1803,11 @@ def _run_cv_classification(
                 "calibrated": bool(m_cfg.get("calibration")),
                 "method": method_label,
             }
+            predictions_path = _export_predictions_csv()
+            if predictions_path is not None:
+                row["cv_predictions_csv"] = _relative_to_out_dir(
+                    predictions_path, out_dir
+                )
             row.update(_summarize_scores(scores_val))
             row.update(_summarize_scores(scores_train, prefix="train_"))
             for m in ["Brier", "ECE"]:
@@ -1855,6 +1921,7 @@ def _run_cv_classification(
                 y_true_all,
                 y_pred_all,
                 y_proba_all,
+                fold_predictions,
             )
             gc.collect()
         progress.advance(tgt_task)
@@ -1898,7 +1965,11 @@ def _run_cv_regression(
     for ds in data:
         progress.update(tgt_task, description=f"Target: {ds['target']}")
         X: pd.DataFrame = ds["X"]
-        y_series: pd.Series = ds["Y"]
+        y_series = ds["Y"]
+        if isinstance(y_series, pd.Series):
+            y_series = y_series.reindex(X.index)
+        else:
+            y_series = pd.Series(y_series, index=X.index)
         y = pd.to_numeric(y_series, errors="coerce").to_numpy(dtype=float)
         if np.isnan(y).any():
             raise DataError("Valores alvo inválidos ou não numéricos detectados")
@@ -1941,16 +2012,32 @@ def _run_cv_regression(
             y_pred_val_all: List[np.ndarray] = []
             y_true_train_all: List[np.ndarray] = []
             y_pred_train_all: List[np.ndarray] = []
+            fold_predictions: List[pd.DataFrame] = []
             best_steps_repr: Optional[str] = None
             best_params_example: Optional[Dict[str, Any]] = None
             n_comp_list: List[int] = []
+            results_dir = out_dir / "results"
+            results_dir.mkdir(parents=True, exist_ok=True)
+
+            def _export_residuals_csv() -> Optional[Path]:
+                if not fold_predictions:
+                    return None
+                df_pred = pd.concat(fold_predictions, ignore_index=True)
+                ordered_cols = ["sample", "fold", "y_true", "y_pred", "residual"]
+                for col in ordered_cols:
+                    if col not in df_pred.columns:
+                        df_pred[col] = np.nan
+                df_pred = df_pred[ordered_cols]
+                csv_path = results_dir / "cv_residuals.csv"
+                df_pred.to_csv(csv_path, index=False)
+                return csv_path
 
             if groups is not None:
                 outer_splits = list(outer.split(X, y, groups))
             else:
                 outer_splits = list(outer.split(X, y))
             fold_task = progress.add_task("Fold", total=len(outer_splits))
-            for tr, te in outer_splits:
+            for fold_idx, (tr, te) in enumerate(outer_splits):
                 Xtr, Xte = X.iloc[tr].values, X.iloc[te].values
                 ytr, yte = y[tr], y[te]
                 fit_kwargs: Dict[str, Any] = {}
@@ -2008,6 +2095,14 @@ def _run_cv_regression(
                 scores_train["MAE"].append(float(mean_absolute_error(ytr, yhat_tr)))
                 scores_train["MAE_percent"].append(compute_mae_percent(ytr, yhat_tr))
                 scores_train["R2"].append(float(r2_score(ytr, yhat_tr)))
+                y_true_fold = np.asarray(yte, dtype=float)
+                y_pred_fold = np.asarray(yhat, dtype=float)
+                fold_df = pd.DataFrame({"sample": X.index[te]})
+                fold_df["fold"] = fold_idx
+                fold_df["y_true"] = y_true_fold
+                fold_df["y_pred"] = y_pred_fold
+                fold_df["residual"] = y_true_fold - y_pred_fold
+                fold_predictions.append(fold_df)
                 progress.advance(fold_task)
             progress.remove_task(fold_task)
 
@@ -2018,6 +2113,11 @@ def _run_cv_regression(
                 "model": model_label,
                 "calibrated": False,
             }
+            residuals_path = _export_residuals_csv()
+            if residuals_path is not None:
+                row["cv_residuals_csv"] = _relative_to_out_dir(
+                    residuals_path, out_dir
+                )
             row.update(_summarize_scores(scores_val))
             row.update(_summarize_scores(scores_train, prefix="train_"))
             if "RMSE_std" in row:
