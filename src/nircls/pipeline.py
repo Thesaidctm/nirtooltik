@@ -201,6 +201,7 @@ def prepare_inputs(
     sp = (float(sp[0]), float(sp[1])) if sp else None
     out_dir = Path(cfg.get("out_dir", RESULTS_DIR))
     cache_dir = out_dir / "cache"
+    drop_nans = bool(cfg.get("drop_nans", True))
     target_type = str(cfg.get("target_type", "classification")).lower()
     if target_type not in {"classification", "regression"}:
         raise DataError(f"Tipo de alvo inválido: {cfg.get('target_type')}")
@@ -208,7 +209,11 @@ def prepare_inputs(
     cached_items: List[Tuple[Path, Dict[str, Any]]] = []
     for f in files:
         cpath = cache_dir / f"{f.stem}.joblib"
-        fingerprint = {"mtime": f.stat().st_mtime, "spectral_range": sp}
+        fingerprint = {
+            "mtime": f.stat().st_mtime,
+            "spectral_range": sp,
+            "drop_nans": drop_nans,
+        }
         if not cpath.exists():
             cached_items = []
             break

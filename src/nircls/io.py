@@ -229,6 +229,7 @@ def prepare_inputs(
     sp = (float(sp[0]), float(sp[1])) if sp else None
     out_dir = Path(data_cfg.get("out_dir", RESULTS_DIR))
     cache_dir = out_dir / "cache"
+    drop_nans = bool(data_cfg.get("drop_nans", True))
     tgt = data_cfg.get("target_cols")
     if tgt is None and "target_col" in data_cfg:
         tgt = data_cfg["target_col"]
@@ -265,7 +266,8 @@ def prepare_inputs(
             raise DataError("Intervalo espectral fora da faixa disponível")
         X = X.replace([np.inf, -np.inf], np.nan)
         n_nans = int(X.isna().any(axis=1).sum())
-        X = X.dropna(axis=0)
+        if drop_nans:
+            X = X.dropna(axis=0)
         keep_idx = X.index
         if groups is not None:
             groups = groups.loc[keep_idx]
@@ -274,7 +276,11 @@ def prepare_inputs(
 
         if use_cache:
             cache_dir.mkdir(parents=True, exist_ok=True)
-            fingerprint = {"mtime": f.stat().st_mtime, "spectral_range": sp}
+            fingerprint = {
+                "mtime": f.stat().st_mtime,
+                "spectral_range": sp,
+                "drop_nans": drop_nans,
+            }
             dump(
                 {
                     "fingerprint": fingerprint,

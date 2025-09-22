@@ -10,6 +10,7 @@ import pytest
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))  # noqa: E402
 
 from nircls.io import _extract_targets_and_groups, prepare_inputs
+from nircls.pipeline import prepare_inputs as pipeline_prepare_inputs
 from nircls.utils.errors import DataError
 
 
@@ -117,3 +118,66 @@ def test_prepare_inputs_regression_raises_for_non_numeric_targets(tmp_path):
         DataError, match="Coluna alvo target deve conter valores numéricos para regressão"
     ):
         prepare_inputs(cfg)
+
+
+def test_prepare_inputs_respects_drop_nans_flag(tmp_path):
+    df = pd.DataFrame(
+        {
+            "100": [1.0, 2.0, float("nan")],
+            "200": [0.1, float("nan"), 0.3],
+            "target": ["a", "b", "c"],
+        }
+    )
+    path = tmp_path / "data.csv"
+    df.to_csv(path, index=False)
+
+    cfg_drop = {
+        "input_path": str(path),
+        "target_cols": ["target"],
+        "drop_nans": True,
+    }
+    dropped = prepare_inputs(cfg_drop)
+    assert dropped[0]["n_nans"] == 2
+    assert dropped[0]["X"].shape[0] == 1
+    assert not dropped[0]["X"].isna().any().any()
+
+    cfg_keep = {
+        "input_path": str(path),
+        "target_cols": ["target"],
+        "drop_nans": False,
+    }
+    kept = prepare_inputs(cfg_keep)
+    assert kept[0]["n_nans"] == 2
+    assert kept[0]["X"].shape[0] == 3
+    assert kept[0]["X"].isna().any(axis=1).sum() == 2
+
+
+
+def test_cache_respects_drop_nans_switch(tmp_path):
+    df = pd.DataFrame(
+        {
+            "100": [1.0, float("nan"), 3.0],
+            "target": ["x", "y", "z"],
+        }
+    )
+    path = tmp_path / "data.csv"
+    df.to_csv(path, index=False)
+
+    out_dir = tmp_path / "out"
+    cfg_drop = {
+        "input_path": str(path),
+        "target_cols": ["target"],
+        "drop_nans": True,
+        "out_dir": str(out_dir),
+    }
+    dropped = pipeline_prepare_inputs(cfg_drop)
+    assert dropped[0]["X"].shape[0] == 2
+
+    cfg_keep = {
+        "input_path": str(path),
+        "target_cols": ["target"],
+        "drop_nans": False,
+        "out_dir": str(out_dir),
+    }
+    kept = pipeline_prepare_inputs(cfg_keep)
+    assert kept[0]["X"].shape[0] == 3
