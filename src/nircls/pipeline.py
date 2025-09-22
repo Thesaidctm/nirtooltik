@@ -597,7 +597,7 @@ def _coerce_param_value(value: Any) -> Any:
     if isinstance(value, np.ndarray):
         return value.tolist()
     if isinstance(value, (list, tuple)):
-        return [_coerce_param_value(v) for v in value]
+        return tuple(_coerce_param_value(v) for v in value)
     if isinstance(value, dict):
         return {k: _coerce_param_value(v) for k, v in value.items()}
     if isinstance(value, Path):
@@ -605,6 +605,12 @@ def _coerce_param_value(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return str(value)
+
+
+def _sanitize_metrics_row(row: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return ``row`` with parameter values coerced for metrics persistence."""
+
+    return {key: _coerce_param_value(value) for key, value in row.items()}
 
 
 def _update_row_with_best_params(
@@ -749,13 +755,17 @@ def _save_metrics(
         else:
             row.setdefault("result", None)
         row.setdefault("overfit_warning", False)
-    df_new = pd.DataFrame(rows)
+    sanitized_rows = [_sanitize_metrics_row(row) for row in rows]
+    df_new = pd.DataFrame(sanitized_rows)
     metrics_path = out_dir / "metrics.json"
     existing_df = pd.DataFrame()
     if metrics_path.exists():
         try:
             existing_data = json.loads(metrics_path.read_text())
-            existing_df = pd.DataFrame(existing_data)
+            sanitized_existing = [
+                _sanitize_metrics_row(row) for row in existing_data
+            ]
+            existing_df = pd.DataFrame(sanitized_existing)
         except json.JSONDecodeError:
             existing_df = pd.DataFrame()
 
