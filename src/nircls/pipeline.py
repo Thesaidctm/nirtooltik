@@ -769,7 +769,11 @@ def _maybe_run_qc(
 ) -> None:
     """Run optional quality control checks and persist a report."""
 
-    if not cfg.get("qc"):
+    data_cfg = cfg.get("data", {}) or {}
+    qc_enabled = data_cfg.get("qc")
+    if qc_enabled is None:
+        qc_enabled = cfg.get("qc")
+    if not qc_enabled:
         return
 
     pre_cfg = cfg.get("preprocess", {}) or {}

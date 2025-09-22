@@ -32,6 +32,7 @@ from nircls.pipeline import (  # noqa: E402
     run_multiple_eval,
     train_and_save,
     _format_preprocess_step,
+    _maybe_run_qc,
     _run_cv_regression,
     _run_holdout_regression,
     _save_pls_diagnostics,
@@ -82,6 +83,27 @@ class DummyOuterSplit:
 
 def _sanitize_step_label(label: str) -> str:
     return re.sub(r"[^\w.-]+", "_", label.lower()).strip("_")
+
+
+def test_maybe_run_qc_uses_data_flag(tmp_path):
+    index = pd.RangeIndex(5, name="sample")
+    columns = [f"f{i}" for i in range(3)]
+    X = pd.DataFrame(np.arange(15).reshape(5, 3), index=index, columns=columns)
+    y = pd.Series([0, 1, 0, 1, 0], index=index, name="target")
+    dataset = {"X": X, "Y": y, "target": "target", "file": "dummy.csv"}
+    cfg = {
+        "qc": False,
+        "data": {"qc": True},
+        "preprocess": {"steps": []},
+    }
+
+    _maybe_run_qc(cfg, [dataset], tmp_path)
+
+    report_path = tmp_path / "qc_report.json"
+    assert report_path.exists()
+    report = json.loads(report_path.read_text())
+    assert report and report[0]["file"] == dataset["file"]
+    assert report[0]["target"] == dataset["target"]
 
 
 def test_save_pls_diagnostics_includes_y_loadings(tmp_path, monkeypatch):
