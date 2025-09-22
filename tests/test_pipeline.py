@@ -199,6 +199,69 @@ def test_build_pipeline_regression_step_name():
     assert all(not key.startswith("clf__") for key in grid)
 
 
+def test_run_cv_regression_populates_r2_mean(tmp_path, monkeypatch):
+    X = pd.DataFrame(
+        {
+            "f1": [0.0, 1.0, 2.0],
+            "f2": [1.0, 2.0, 3.0],
+        }
+    )
+    y = pd.Series([1.0, 2.0, 2.5], name="target")
+
+    def fake_prepare_inputs(data_cfg: Dict[str, Any], *, use_cache: bool = True):
+        return [
+            {
+                "file": "synthetic.csv",
+                "target": "target",
+                "X": X.copy(),
+                "Y": y.copy(),
+                "n_nans": 0,
+                "target_type": "regression",
+                "task_type": "regression",
+            }
+        ]
+
+    monkeypatch.setattr("nircls.pipeline.prepare_inputs", fake_prepare_inputs)
+
+    cfg = {
+        "data": {
+            "input_path": "dummy.csv",
+            "target_cols": ["target"],
+            "target_type": "regression",
+        },
+        "models": [
+            {
+                "name": "LINEAR_REG",
+                "grid": {},
+            }
+        ],
+        "preprocess": {"steps": []},
+        "cv": {"inner_folds": 2},
+        "use_cache": False,
+    }
+
+    out_dir = tmp_path / "cv"
+    out_dir.mkdir()
+    progress = DummyProgress()
+    _run_cv_regression(
+        cfg,
+        out_dir,
+        LeaveOneOut(),
+        progress,
+        random_state=0,
+        interactive=False,
+        n_jobs=1,
+    )
+
+    metrics_path = out_dir / "metrics.json"
+    assert metrics_path.exists()
+    metrics = json.loads(metrics_path.read_text())
+    assert metrics
+    r2_value = metrics[0].get("R2_mean")
+    assert r2_value is not None
+    assert np.isfinite(r2_value)
+
+
 def test_pls_local_regressor_grid_search_handles_knn_and_radius():
     rng = np.random.RandomState(42)
     X = rng.rand(24, 8) * 0.1
