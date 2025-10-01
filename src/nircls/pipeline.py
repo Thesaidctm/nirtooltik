@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gc
 import json
+import os
 import re
 import subprocess
 import sys
@@ -100,6 +101,46 @@ warnings.filterwarnings(
     message="This Pipeline instance is not fitted yet",
     category=FutureWarning,
 )
+
+
+_WINDOWS_WAIT_HANDLE_LIMIT = 63
+_WINDOWS_MAX_LOKY_WORKERS = max(1, (_WINDOWS_WAIT_HANDLE_LIMIT - 1) // 2)
+
+
+def _sanitize_n_jobs(n_jobs: Optional[int]) -> int:
+    """Return a safe ``n_jobs`` value for ``GridSearchCV`` workers.
+
+    The default ``loky`` backend used by scikit-learn relies on Windows
+    handles for inter-process communication. Windows can wait on at most 63
+    handles at a time, which effectively limits the number of parallel workers
+    that can be used. When this limit is exceeded, ``loky`` raises the error::
+
+        ValueError: need at most 63 handles
+
+    This helper bounds ``n_jobs`` so that we never request more workers than
+    the platform can support, preventing the cross-validation routine from
+    crashing on large multi-core Windows machines.
+    """
+
+    if not n_jobs:
+        return 1
+
+    if n_jobs < 0:
+        cpu_count = os.cpu_count() or 1
+        # Replicate joblib semantics: -1 uses all CPUs, -2 uses all but one, etc.
+        n_jobs = max(1, cpu_count + n_jobs + 1)
+
+    n_jobs = max(1, n_jobs)
+
+    if sys.platform.startswith("win") and n_jobs > _WINDOWS_MAX_LOKY_WORKERS:
+        logger.warning(
+            "Reducing n_jobs from %d to %d to avoid Windows handle limits",
+            n_jobs,
+            _WINDOWS_MAX_LOKY_WORKERS,
+        )
+        return _WINDOWS_MAX_LOKY_WORKERS
+
+    return n_jobs
 
 
 def _relative_to_out_dir(path: Path, out_dir: Path) -> str:
@@ -1391,7 +1432,7 @@ def _run_cv_classification(
         Optional label to use when no preprocessing steps are selected.
     """
 
-    n_jobs = max(1, n_jobs)
+    n_jobs = _sanitize_n_jobs(n_jobs)
     logger.info("Starting cross-validation")
     try:
         data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
@@ -1959,7 +2000,7 @@ def _run_cv_regression(
 ) -> None:
     """Run cross-validation for regression tasks."""
 
-    n_jobs = max(1, n_jobs)
+    n_jobs = _sanitize_n_jobs(n_jobs)
     logger.info("Starting cross-validation (regression)")
     try:
         data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
@@ -2287,7 +2328,7 @@ def _run_holdout_classification(
         Number of parallel jobs for ``GridSearchCV``.
     """
 
-    n_jobs = max(1, n_jobs)
+    n_jobs = _sanitize_n_jobs(n_jobs)
     try:
         data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
         _maybe_run_qc(cfg, data, out_dir)
@@ -2497,7 +2538,7 @@ def _run_holdout_regression(
 ) -> None:
     """Evaluate regression models using a single train/test split."""
 
-    n_jobs = max(1, n_jobs)
+    n_jobs = _sanitize_n_jobs(n_jobs)
     try:
         data = prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
         _maybe_run_qc(cfg, data, out_dir)
@@ -2682,7 +2723,7 @@ def run_multiple_eval(
         aggregated summary files.
     """
 
-    n_jobs = max(1, n_jobs)
+    n_jobs = _sanitize_n_jobs(n_jobs)
     _validate_cfg(cfg, need_data=True, need_cv=True, need_models=True)
     task_type = _infer_task_type(cfg)
     pre_cfg = cfg.get("preprocess", {})
@@ -3034,7 +3075,7 @@ def _train_and_save_classification(
 ) -> Tuple[Path, Path]:
     """Train final model and persist artefacts for classification."""
 
-    n_jobs = max(1, n_jobs)
+    n_jobs = _sanitize_n_jobs(n_jobs)
     logger.info("Starting training pipeline")
     email = cfg.get("notification_email")
     try:
@@ -3282,7 +3323,7 @@ def _train_and_save_regression(
 ) -> Tuple[Path, Path]:
     """Train final model and persist artefacts for regression."""
 
-    n_jobs = max(1, n_jobs)
+    n_jobs = _sanitize_n_jobs(n_jobs)
     logger.info("Starting training pipeline (regression)")
     email = cfg.get("notification_email")
     try:

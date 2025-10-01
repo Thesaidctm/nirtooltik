@@ -24,6 +24,7 @@ from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))  # noqa: E402
+import nircls.pipeline as pipeline  # noqa: E402
 from nircls.feature_selection.vip import compute_vip  # noqa: E402
 from nircls.io import prepare_inputs, summarize_dataset  # noqa: E402
 from nircls.pipeline import (  # noqa: E402
@@ -37,6 +38,7 @@ from nircls.pipeline import (  # noqa: E402
     _run_holdout_regression,
     _save_pls_diagnostics,
     _train_and_save_regression,
+    _sanitize_n_jobs,
 )
 from nircls.metrics.regression import compute_rmsecv  # noqa: E402
 from nircls.models.plsda import PLSDA  # noqa: E402
@@ -84,6 +86,26 @@ class DummyOuterSplit:
 
 def _sanitize_step_label(label: str) -> str:
     return re.sub(r"[^\w.-]+", "_", label.lower()).strip("_")
+
+
+def test_sanitize_n_jobs_default_behavior(monkeypatch):
+    monkeypatch.setattr(pipeline.os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(pipeline.sys, "platform", "linux")
+
+    assert _sanitize_n_jobs(None) == 1
+    assert _sanitize_n_jobs(0) == 1
+    assert _sanitize_n_jobs(3) == 3
+    assert _sanitize_n_jobs(-1) == 8
+    assert _sanitize_n_jobs(-2) == 7
+
+
+def test_sanitize_n_jobs_windows_cap(monkeypatch):
+    monkeypatch.setattr(pipeline.os, "cpu_count", lambda: 128)
+    monkeypatch.setattr(pipeline.sys, "platform", "win32")
+
+    limit = pipeline._WINDOWS_MAX_LOKY_WORKERS
+    assert _sanitize_n_jobs(200) == limit
+    assert _sanitize_n_jobs(limit - 1) == limit - 1
 
 
 def test_maybe_run_qc_uses_data_flag(tmp_path):
