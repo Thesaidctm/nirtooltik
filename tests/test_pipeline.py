@@ -2,7 +2,7 @@ import json
 import pathlib
 import re
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -35,6 +35,7 @@ from nircls.pipeline import (  # noqa: E402
     _format_preprocess_step,
     _maybe_run_qc,
     _run_cv_regression,
+    _run_holdout_classification,
     _run_holdout_regression,
     _save_pls_diagnostics,
     _train_and_save_regression,
@@ -1287,6 +1288,55 @@ def test_run_holdout_regression_spxy_raises_on_single_train_sample(
             random_state=0,
             n_jobs=1,
         )
+
+
+def test_run_holdout_classification_reuses_single_split(monkeypatch, tmp_path):
+    rng = np.random.RandomState(0)
+    X = pd.DataFrame(rng.rand(20, 4), columns=list(range(4)))
+    y = pd.Series(["A"] * 10 + ["B"] * 10, name="target")
+    dataset = {"X": X, "Y": y, "file": "dummy.csv", "target": "target"}
+
+    monkeypatch.setattr(
+        "nircls.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
+    )
+    monkeypatch.setattr("nircls.pipeline._maybe_run_qc", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "nircls.pipeline._save_plots", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        "nircls.pipeline._save_pls_diagnostics", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        "nircls.pipeline.generate_scientific_report", lambda *args, **kwargs: None
+    )
+
+    cfg = {
+        "data": {"input_path": "dummy.csv", "target_cols": ["target"]},
+        "models": [
+            {"name": "PLSDA", "grid": {"n_components": [2], "method": ["logreg"]}},
+            {"name": "PLSDA", "grid": {"n_components": [2], "method": ["lda"]}},
+        ],
+        "cv": {"random_state": 0},
+    }
+
+    calls: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
+    original_split = pipeline.train_test_split
+
+    def fake_train_test_split(*args: Any, **kwargs: Any):
+        calls.append((args, kwargs))
+        return original_split(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "train_test_split", fake_train_test_split)
+
+    _run_holdout_classification(
+        cfg,
+        tmp_path,
+        test_size=0.2,
+        random_state=0,
+        n_jobs=1,
+    )
+
+    assert len(calls) == 1
 
 
 def test_train_and_save_regression_raises_on_single_sample(monkeypatch, tmp_path):
