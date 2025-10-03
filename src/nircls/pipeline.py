@@ -2348,24 +2348,29 @@ def _run_holdout_classification(
         outer_folds = int(cv_cfg.get("outer_folds", cv_cfg.get("inner_folds", 3)))
         model_cfgs = cfg.get("models", [])
         pipelines = build_pipeline_from_config(cfg)
+        Xtr, Xte, ytr, yte = train_test_split(
+            X.values,
+            y_enc,
+            test_size=test_size,
+            random_state=random_state,
+            stratify=y_enc,
+        )
+        class_counts = np.bincount(ytr)
+        nonzero_counts = class_counts[class_counts > 0]
+        if nonzero_counts.size == 0:
+            raise DataError(
+                "Número insuficiente de amostras para validação cruzada"
+            )
+        n_splits = int(min(outer_folds, nonzero_counts.min()))
+        n_splits = max(n_splits, 2)
+        if n_splits != outer_folds:
+            logger.warning(
+                "Adjusted number of CV folds from %d to %d", outer_folds, n_splits
+            )
         for idx, (name, pipe, grid) in enumerate(pipelines):
             if not model_cfgs:
                 continue
             m_cfg = model_cfgs[idx % len(model_cfgs)]
-            Xtr, Xte, ytr, yte = train_test_split(
-                X.values,
-                y_enc,
-                test_size=test_size,
-                random_state=random_state,
-                stratify=y_enc,
-            )
-            counts = np.bincount(ytr)
-            n_splits = int(min(outer_folds, counts.min()))
-            n_splits = max(n_splits, 2)
-            if n_splits != outer_folds:
-                logger.warning(
-                    "Adjusted number of CV folds from %d to %d", outer_folds, n_splits
-                )
             steps_desc = _format_preprocess_steps(
                 _get_preprocess_steps_from_pipeline(pipe)
             )
