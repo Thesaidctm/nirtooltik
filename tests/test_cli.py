@@ -248,6 +248,113 @@ def test_run_all_cli_displays_preprocess_descriptions(
     assert "Correção Multiplicativa de Espalhamento" in proc.stdout
 
 
+def test_run_all_cli_can_rename_results_directory(tmp_path: pathlib.Path) -> None:
+    env = _base_env()
+    data_src = pathlib.Path(__file__).resolve().parents[1] / "data" / "demo.csv"
+    shutil.copy(data_src, tmp_path / "demo.csv")
+    cfg_dst = tmp_path / "config.yaml"
+    cfg_dst.write_text(
+        textwrap.dedent(
+            """
+            data:
+              input_path: demo.csv
+              target_cols: [target]
+              out_dir: results
+            preprocess:
+              steps: [SNV]
+            models:
+              - name: PLSDA
+                grid: {n_components: [2], method: [logreg]}
+                y_scramble_n_iter: 0
+            cv:
+              strategies:
+                - type: holdout
+                  test_size: 0.5
+            """
+        ).strip()
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nircls.cli",
+            "--no-progress",
+            "run-all",
+            "--config",
+            str(cfg_dst),
+            "--output-name",
+            "experimento final",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    renamed_dir = tmp_path / "results" / "experimento_final"
+    assert renamed_dir.is_dir()
+    train_metrics = renamed_dir / "train" / "metrics.json"
+    assert train_metrics.exists()
+    state_path = renamed_dir / "run_state.json"
+    assert state_path.exists()
+    state = json.loads(state_path.read_text())
+    assert state["run_id"] == "experimento_final"
+    assert state["status"] == "completed"
+    summary_dir = renamed_dir / "summary"
+    assert summary_dir.exists()
+
+
+def test_run_all_cli_persists_state_on_failure(tmp_path: pathlib.Path) -> None:
+    env = _base_env()
+    data_src = pathlib.Path(__file__).resolve().parents[1] / "data" / "demo.csv"
+    shutil.copy(data_src, tmp_path / "demo.csv")
+    cfg_dst = tmp_path / "config.yaml"
+    cfg_dst.write_text(
+        textwrap.dedent(
+            """
+            data:
+              input_path: demo.csv
+              target_cols: [target]
+              out_dir: results
+            models:
+              - name: UnknownModel
+            cv:
+              strategies:
+                - type: holdout
+                  test_size: 0.5
+            """
+        ).strip()
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nircls.cli",
+            "--no-progress",
+            "run-all",
+            "--config",
+            str(cfg_dst),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    results_dirs = list((tmp_path / "results").iterdir())
+    assert results_dirs, proc.stderr
+    state_path = results_dirs[0] / "run_state.json"
+    assert state_path.exists()
+    state = json.loads(state_path.read_text())
+    assert state["status"] == "train_failed"
+    assert "UnknownModel" in state.get("last_error", "")
+    assert "--resume" in proc.stderr
+
+
 def test_summary_cli_aggregates_results(tmp_path: pathlib.Path) -> None:
     env = _base_env()
     run1 = tmp_path / "run1"

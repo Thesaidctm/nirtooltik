@@ -10,6 +10,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, cast
@@ -83,11 +85,22 @@ STRINGS = {
         "run_all_config_help": "Configuration file to override defaults",
         "run_all_models_help": "Use all available models (requires optional dependencies)",
         "run_all_preprocess_help": "Apply all preprocessing steps (SNV, MSC, DETREND, SG, EMSC, EPO, SCALE)",
+        "run_all_output_name_help": "Rename final results directory after completion",
         "resume_help": "Resume previously started runs when outputs exist",
         "run_id_help": "Existing run identifier to reuse (requires --resume)",
         "resume_requires_run_id": "--run-id must be provided when using --resume.",
         "resume_from": "Resuming from existing directory: {path}",
         "resume_dir_missing": "Cannot resume: directory not found: {path}",
+        "run_all_invalid_output_name": (
+            "Output name must contain letters, numbers, '.', '_' or '-' and cannot be empty."
+        ),
+        "run_all_output_exists": "Cannot rename results: destination already exists: {path}",
+        "run_all_train_failed": "Training failed: {err}",
+        "run_all_cv_failed": "Evaluation failed: {err}",
+        "run_all_resume_hint": (
+            "Fix the issue and resume with: nircls run-all --resume --run-id {run_id}"
+        ),
+        "run_all_results_renamed": "Results directory renamed to: {path}",
         "dashboard_results_help": "Folder with results",
         "summary_help": "Summarize saved metrics including preprocess/result columns",
         "models_help": "List available model builders",
@@ -143,11 +156,22 @@ STRINGS = {
             "Aplicar todos os pré-processamentos disponíveis (SNV, MSC, DETREND, SG, "
             "EMSC, EPO, SCALE)"
         ),
+        "run_all_output_name_help": "Renomear a pasta final de resultados após a conclusão",
         "resume_help": "Retomar execuções já iniciadas quando os resultados existem",
         "run_id_help": "Identificador de execução existente (requer --resume)",
         "resume_requires_run_id": "--run-id deve ser informado ao usar --resume.",
         "resume_from": "Retomando a partir do diretório existente: {path}",
         "resume_dir_missing": "Não é possível retomar: diretório não encontrado: {path}",
+        "run_all_invalid_output_name": (
+            "O nome deve conter letras, números, '.', '_' ou '-' e não pode ser vazio."
+        ),
+        "run_all_output_exists": "Não é possível renomear: destino já existe: {path}",
+        "run_all_train_failed": "Treinamento falhou: {err}",
+        "run_all_cv_failed": "Validação falhou: {err}",
+        "run_all_resume_hint": (
+            "Corrija o problema e retome com: nircls run-all --resume --run-id {run_id}"
+        ),
+        "run_all_results_renamed": "Pasta de resultados renomeada para: {path}",
         "dashboard_results_help": "Pasta com resultados",
         "summary_help": (
             "Resumir métricas salvas incluindo colunas de pré-processamento/resultado"
@@ -445,6 +469,42 @@ def _deep_update(base: dict, updates: dict) -> dict:
     return base
 
 
+def _sanitize_output_name(name: str) -> str:
+    """Return a filesystem-friendly name based on ``name``."""
+
+    cleaned = re.sub(r"[^\w.-]+", "_", name.strip())
+    return cleaned.strip("._")
+
+
+def _write_run_state(base_dir: Path, state: Dict[str, Any]) -> None:
+    """Persist run state metadata under ``base_dir``."""
+
+    try:
+        base_dir.mkdir(parents=True, exist_ok=True)
+        with open(base_dir / "run_state.json", "w") as f:
+            json.dump(state, f, indent=2)
+    except Exception:
+        logging.getLogger(__name__).warning("Could not persist run_state.json", exc_info=True)
+
+
+def _load_run_state(base_dir: Path) -> Optional[Dict[str, Any]]:
+    """Load previously persisted run state if available."""
+
+    state_file = base_dir / "run_state.json"
+    if not state_file.exists():
+        return None
+    try:
+        with open(state_file) as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            return cast(Dict[str, Any], loaded)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "Could not read run_state.json from %s", state_file, exc_info=True
+        )
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the ``nircls`` command-line interface.
 
@@ -582,6 +642,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help=t("run_all_models_help"),
     )
+    p_all.add_argument("--output-name", help=t("run_all_output_name_help"))
     p_all.add_argument(
         "--resume",
         action="store_true",
@@ -836,19 +897,44 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_id = args.run_id or now_ts()
         _setup_run_logging(run_id)
         data_cfg = cast(Dict[str, Any], default_cfg["data"])
-        base_dir = Path(data_cfg.get("out_dir", RESULTS_DIR)) / run_id
+        base_out_dir = Path(data_cfg.get("out_dir", RESULTS_DIR))
+        base_dir = base_out_dir / run_id
+        rename_target: Optional[Path] = None
+        desired_name = None
+        if args.output_name:
+            desired_name = _sanitize_output_name(args.output_name)
+            if not desired_name:
+                print(t("run_all_invalid_output_name"), file=sys.stderr)
+                return 1
+            rename_target = base_out_dir / desired_name
+            if rename_target.exists() and rename_target != base_dir:
+                print(t("run_all_output_exists", path=rename_target), file=sys.stderr)
+                return 1
         if args.resume and not base_dir.exists():
             print(t("resume_dir_missing", path=base_dir), file=sys.stderr)
             return 1
         if args.resume:
             print(t("resume_from", path=base_dir))
         ensure_dirs(base_dir)
+        state = _load_run_state(base_dir) or {
+            "run_id": run_id,
+            "train_completed": False,
+            "cv_completed": False,
+            "status": "initialized",
+        }
+        state["run_id"] = run_id
+        state["status"] = "preparing_data"
+        state.pop("last_error", None)
+        _write_run_state(base_dir, state)
         data_cfg["out_dir"] = str(base_dir)
         try:
             ds_list = prepare_inputs(
                 data_cfg, use_cache=bool(default_cfg.get("use_cache", True))
             )
         except DataError as e:
+            state["status"] = "data_failed"
+            state["last_error"] = str(e)
+            _write_run_state(base_dir, state)
             print(t("invalid_data", err=e), file=sys.stderr)
             return 1
         summary = summarize_dataset(ds_list)
@@ -858,6 +944,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         train_dir = base_dir / "train"
         cv_dir = base_dir / "cv"
         ensure_dirs(train_dir, cv_dir)
+        state["status"] = "training"
+        _write_run_state(base_dir, state)
         try:
             train_metrics, train_figs = train_and_save(
                 default_cfg,
@@ -870,11 +958,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 log_memory=args.log_memory,
                 resume=args.resume,
             )
-        except (DataError, ModelError) as e:
-            print(str(e), file=sys.stderr)
+        except (DataError, ModelError, ValueError) as e:
+            state["status"] = "train_failed"
+            state["last_error"] = str(e)
+            _write_run_state(base_dir, state)
+            print(t("run_all_train_failed", err=e), file=sys.stderr)
+            print(t("run_all_resume_hint", run_id=run_id), file=sys.stderr)
             return 1
+        state["train_completed"] = True
+        state["status"] = "train_completed"
+        state.pop("last_error", None)
+        _write_run_state(base_dir, state)
         model_path = train_dir / "model.joblib"
         report_path = train_dir / "report.md"
+        state["status"] = "running_cv"
+        _write_run_state(base_dir, state)
         try:
             outputs, summary_dir = run_multiple_eval(
                 default_cfg,
@@ -885,9 +983,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 log_memory=args.log_memory,
                 resume=args.resume,
             )
-        except (DataError, ModelError) as e:
-            print(str(e), file=sys.stderr)
+        except (DataError, ModelError, ValueError) as e:
+            state["status"] = "cv_failed"
+            state["last_error"] = str(e)
+            _write_run_state(base_dir, state)
+            print(t("run_all_cv_failed", err=e), file=sys.stderr)
+            print(t("run_all_resume_hint", run_id=run_id), file=sys.stderr)
             return 1
+        state["cv_completed"] = True
+        state["status"] = "completed"
+        state.pop("last_error", None)
+        _write_run_state(base_dir, state)
         for cv_metrics, cv_figs in outputs:
             step_descs = _describe_preprocess_steps(
                 _load_preprocess_steps(cv_metrics)
@@ -915,7 +1021,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(t("full_report", path=report_path))
             if model_path.exists():
                 print(t("model_saved", path=model_path))
-        print(f"Summary saved in {summary_dir}")
+        if desired_name and rename_target and rename_target != base_dir:
+            shutil.move(str(base_dir), str(rename_target))
+            base_dir = rename_target
+            run_id = desired_name
+            state["run_id"] = run_id
+            _write_run_state(base_dir, state)
+            print(t("run_all_results_renamed", path=base_dir))
+        summary_dir_path = base_dir / "summary"
+        print(f"Summary saved in {summary_dir_path}")
         print(t("results_in", path=base_dir))
         return 0
     elif args.cmd == "demo":
