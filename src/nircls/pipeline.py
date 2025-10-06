@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+import inspect
 import json
 import os
 import re
@@ -79,7 +80,7 @@ from .utils.compliance import check_astm_classification
 from .utils.email import enviar_email
 from .utils.errors import DataError, ModelError
 from .utils.logging import log_versions, logger
-from .utils.misc import RESULTS_DIR, file_hash
+from .utils.misc import RESULTS_DIR, file_hash, get_git_commit
 from .utils.palettes import Palette
 from .utils.plots import (
     plot_confusion,
@@ -496,6 +497,8 @@ def _get_preprocess_steps_from_pipeline(pipe: Pipeline) -> List[Any]:
 
 def build_pipeline_from_config(
     cfg: Dict[str, Any],
+    *,
+    random_state: int | None = None,
 ) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
     _validate_cfg(cfg, need_models=True)
     task_type = _infer_task_type(cfg)
@@ -512,10 +515,19 @@ def build_pipeline_from_config(
     def _build_models(
         pre_steps: List[Tuple[str, Any]], pre_grid: Dict[str, Any], suffix: str = ""
     ) -> None:
+        params: Dict[str, Any] = {}
         try:
-            models = make_models_from_config(cfg["models"], task_type=task_type)
-        except TypeError:
+            signature = inspect.signature(make_models_from_config)
+        except (TypeError, ValueError):  # pragma: no cover - fallback for C extensions
+            signature = None
+        if signature is None:
             models = make_models_from_config(cfg["models"])
+        else:
+            if "task_type" in signature.parameters:
+                params["task_type"] = task_type
+            if "random_state" in signature.parameters:
+                params["random_state"] = random_state
+            models = make_models_from_config(cfg["models"], **params)
         for m in models:
             est = m["estimator"]
             grid = pre_grid.copy()
@@ -546,6 +558,21 @@ def build_pipeline_from_config(
         _build_models(pre_steps, pre_grid)
 
     return out
+
+
+def _call_build_pipeline(
+    cfg: Dict[str, Any], random_state: int | None = None
+) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
+    """Invoke ``build_pipeline_from_config`` respecting its signature."""
+
+    try:
+        signature = inspect.signature(build_pipeline_from_config)
+    except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+        return build_pipeline_from_config(cfg)
+    kwargs: Dict[str, Any] = {}
+    if "random_state" in signature.parameters:
+        kwargs["random_state"] = random_state
+    return build_pipeline_from_config(cfg, **kwargs)
 
 
 def _format_preprocess_step(step: Any) -> str:
@@ -1491,7 +1518,7 @@ def _run_cv_classification(
             raise ModelError("'inner_folds' must be an integer >= 2") from exc
         if inner_folds < 2:
             raise ModelError("'inner_folds' must be at least 2")
-        models = build_pipeline_from_config(cfg)
+        models = _call_build_pipeline(cfg, random_state=random_state)
         model_cfgs = cfg.get("models", [])
         model_task = progress.add_task("Model", total=len(models))
         for idx, (name, pipe, grid) in enumerate(models):
@@ -2035,7 +2062,7 @@ def _run_cv_regression(
         inner_folds = max(inner_folds, 2)
         cv_method = cv_cfg.get("cv_method", "kfold").lower()
         model_cfgs = cfg.get("models", [])
-        pipelines = build_pipeline_from_config(cfg)
+        pipelines = _call_build_pipeline(cfg, random_state=random_state)
         model_task = progress.add_task("Model", total=len(pipelines))
         mem_start = None
         if log_memory:
@@ -2347,7 +2374,7 @@ def _run_holdout_classification(
         cv_method = cv_cfg.get("cv_method", "stratified").lower()
         outer_folds = int(cv_cfg.get("outer_folds", cv_cfg.get("inner_folds", 3)))
         model_cfgs = cfg.get("models", [])
-        pipelines = build_pipeline_from_config(cfg)
+        pipelines = _call_build_pipeline(cfg, random_state=random_state)
         Xtr, Xte, ytr, yte = train_test_split(
             X.values,
             y_enc,
@@ -2562,7 +2589,7 @@ def _run_holdout_regression(
         if cv_method == "group":
             raise ModelError("cv_method 'group' não suportado com estratégia holdout")
         model_cfgs = cfg.get("models", [])
-        pipelines = build_pipeline_from_config(cfg)
+        pipelines = _call_build_pipeline(cfg, random_state=random_state)
         Xtr, Xte, ytr, yte = train_test_split(
             X.values,
             y,
@@ -2802,6 +2829,7 @@ def run_multiple_eval(
                 "sklearn": sklearn.__version__,
             },
             "seed": random_state,
+            "git_commit": get_git_commit(),
             "input_hashes": input_hashes,
         }
         with open(out_dir / "metadata.json", "w") as f:
@@ -3194,12 +3222,15 @@ def _train_and_save_classification(
                     "sklearn": sklearn.__version__,
                 },
                 "seed": random_state,
+                "git_commit": get_git_commit(),
                 "input_hashes": input_hashes,
             }
             with open(out_dir / "metadata.json", "w") as f:
                 json.dump(metadata, f, indent=2)
 
-            name, pipe, grid = build_pipeline_from_config(cfg)[0]
+            name, pipe, grid = _call_build_pipeline(
+                cfg, random_state=random_state
+            )[0]
             model_cfg = cfg.get("models", [])[0] if cfg.get("models") else {}
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
@@ -3449,12 +3480,15 @@ def _train_and_save_regression(
                     "sklearn": sklearn.__version__,
                 },
                 "seed": random_state,
+                "git_commit": get_git_commit(),
                 "input_hashes": input_hashes,
             }
             with open(out_dir / "metadata.json", "w") as f:
                 json.dump(metadata, f, indent=2)
 
-            name, pipe, grid = build_pipeline_from_config(cfg)[0]
+            name, pipe, grid = _call_build_pipeline(
+                cfg, random_state=random_state
+            )[0]
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
             mem_start = None
