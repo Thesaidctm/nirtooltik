@@ -34,6 +34,7 @@ dependencies = [
   "fastapi",
   "itsdangerous",
   "bcrypt",
+  "httpx",
 ]
 
 [project.optional-dependencies]
