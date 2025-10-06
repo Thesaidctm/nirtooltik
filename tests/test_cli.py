@@ -81,6 +81,56 @@ def test_train_cli_with_config_creates_artifacts(tmp_path: pathlib.Path) -> None
     assert (metrics_files[0].parent / "astm_classification.json").exists()
 
 
+def test_train_cli_resume_skips_existing(tmp_path: pathlib.Path) -> None:
+    env = _base_env()
+    config_src = pathlib.Path(__file__).resolve().parents[1] / "configs" / "demo.yaml"
+    data_src = pathlib.Path(__file__).resolve().parents[1] / "data" / "demo.csv"
+    cfg_dst = tmp_path / "demo.yaml"
+    shutil.copy(config_src, cfg_dst)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    shutil.copy(data_src, data_dir / "demo.csv")
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nircls.cli",
+            "train",
+            "--config",
+            str(cfg_dst),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    metrics_path = next(tmp_path.glob("results/train_*/metrics.json"))
+    run_id = metrics_path.parent.name
+    before_mtime = metrics_path.stat().st_mtime
+
+    proc_resume = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nircls.cli",
+            "train",
+            "--config",
+            str(cfg_dst),
+            "--resume",
+            "--run-id",
+            run_id,
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert proc_resume.returncode == 0, proc_resume.stderr
+    assert metrics_path.stat().st_mtime == before_mtime
+
+
 def test_train_cli_regression(tmp_path: pathlib.Path) -> None:
     env = _base_env()
     data = pd.DataFrame(
