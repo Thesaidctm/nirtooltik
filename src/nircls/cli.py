@@ -83,6 +83,11 @@ STRINGS = {
         "run_all_config_help": "Configuration file to override defaults",
         "run_all_models_help": "Use all available models (requires optional dependencies)",
         "run_all_preprocess_help": "Apply all preprocessing steps (SNV, MSC, DETREND, SG, EMSC, EPO, SCALE)",
+        "resume_help": "Resume previously started runs when outputs exist",
+        "run_id_help": "Existing run identifier to reuse (requires --resume)",
+        "resume_requires_run_id": "--run-id must be provided when using --resume.",
+        "resume_from": "Resuming from existing directory: {path}",
+        "resume_dir_missing": "Cannot resume: directory not found: {path}",
         "dashboard_results_help": "Folder with results",
         "summary_help": "Summarize saved metrics including preprocess/result columns",
         "models_help": "List available model builders",
@@ -138,6 +143,11 @@ STRINGS = {
             "Aplicar todos os pré-processamentos disponíveis (SNV, MSC, DETREND, SG, "
             "EMSC, EPO, SCALE)"
         ),
+        "resume_help": "Retomar execuções já iniciadas quando os resultados existem",
+        "run_id_help": "Identificador de execução existente (requer --resume)",
+        "resume_requires_run_id": "--run-id deve ser informado ao usar --resume.",
+        "resume_from": "Retomando a partir do diretório existente: {path}",
+        "resume_dir_missing": "Não é possível retomar: diretório não encontrado: {path}",
         "dashboard_results_help": "Pasta com resultados",
         "summary_help": (
             "Resumir métricas salvas incluindo colunas de pré-processamento/resultado"
@@ -518,6 +528,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help=t("astm_help"),
     )
+    p_tr.add_argument(
+        "--resume",
+        action="store_true",
+        help=t("resume_help"),
+    )
+    p_tr.add_argument("--run-id", help=t("run_id_help"))
     p_cv = sp.add_parser("crossval")
     p_cv.add_argument("--config", required=True)
     p_cv.add_argument(
@@ -535,6 +551,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help=t("astm_help"),
     )
+    p_cv.add_argument(
+        "--resume",
+        action="store_true",
+        help=t("resume_help"),
+    )
+    p_cv.add_argument("--run-id", help=t("run_id_help"))
     sp.add_parser("demo")
     p_list = sp.add_parser("list-models", help=t("models_help"))
     p_list.add_argument(
@@ -560,6 +582,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help=t("run_all_models_help"),
     )
+    p_all.add_argument(
+        "--resume",
+        action="store_true",
+        help=t("resume_help"),
+    )
+    p_all.add_argument("--run-id", help=t("run_id_help"))
     sp.add_parser("wizard")
     p_ev = sp.add_parser("evaluate")
     p_ev.add_argument("--model", required=True)
@@ -662,9 +690,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(t("config_invalid_data_models_sections"), file=sys.stderr)
             return 1
         cfg.astm = args.astm
-        run_id = make_run_id("train")
+        if args.resume and not args.run_id:
+            print(t("resume_requires_run_id"), file=sys.stderr)
+            return 1
+        run_id = args.run_id or make_run_id("train")
         _setup_run_logging(run_id)
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
+        if args.resume and not out_dir.exists():
+            print(t("resume_dir_missing", path=out_dir), file=sys.stderr)
+            return 1
+        if args.resume:
+            print(t("resume_from", path=out_dir))
         ensure_dirs(out_dir)
         try:
             ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
@@ -684,6 +720,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 gs_verbose=cv_verbose,
                 show_progress=not args.no_progress,
                 log_memory=args.log_memory,
+                resume=args.resume,
             )
         except DataError as e:
             print(t("invalid_data", err=e), file=sys.stderr)
@@ -714,9 +751,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_dataset_summary(summary)
         if args.run == "one" and ds_list:
             cfg.data.target_cols = ds_list[0]["target"]
-        run_id = make_run_id("cv")
+        if args.resume and not args.run_id:
+            print(t("resume_requires_run_id"), file=sys.stderr)
+            return 1
+        run_id = args.run_id or make_run_id("cv")
         _setup_run_logging(run_id)
         out_dir = Path(cfg.data.out_dir or RESULTS_DIR) / run_id
+        if args.resume and not out_dir.exists():
+            print(t("resume_dir_missing", path=out_dir), file=sys.stderr)
+            return 1
+        if args.resume:
+            print(t("resume_from", path=out_dir))
         ensure_dirs(out_dir)
         cfg.astm = args.astm
         try:
@@ -728,6 +773,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 n_jobs=n_jobs,
                 mlflow_uri=mlflow_uri,
                 log_memory=args.log_memory,
+                resume=args.resume,
             )
         except DataError as e:
             print(t("invalid_data", err=e), file=sys.stderr)
@@ -784,10 +830,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             default_cfg["models"] = models_cfg
         if args.notification_email:
             default_cfg["notification_email"] = args.notification_email
-        run_id = now_ts()
+        if args.resume and not args.run_id:
+            print(t("resume_requires_run_id"), file=sys.stderr)
+            return 1
+        run_id = args.run_id or now_ts()
         _setup_run_logging(run_id)
         data_cfg = cast(Dict[str, Any], default_cfg["data"])
         base_dir = Path(data_cfg.get("out_dir", RESULTS_DIR)) / run_id
+        if args.resume and not base_dir.exists():
+            print(t("resume_dir_missing", path=base_dir), file=sys.stderr)
+            return 1
+        if args.resume:
+            print(t("resume_from", path=base_dir))
         ensure_dirs(base_dir)
         data_cfg["out_dir"] = str(base_dir)
         try:
@@ -814,6 +868,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 gs_verbose=cv_verbose,
                 show_progress=not args.no_progress,
                 log_memory=args.log_memory,
+                resume=args.resume,
             )
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)
@@ -828,6 +883,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 n_jobs=n_jobs,
                 mlflow_uri=mlflow_uri,
                 log_memory=args.log_memory,
+                resume=args.resume,
             )
         except (DataError, ModelError) as e:
             print(str(e), file=sys.stderr)

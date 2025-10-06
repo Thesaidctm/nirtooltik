@@ -2706,6 +2706,7 @@ def run_multiple_eval(
     n_jobs: int = 1,
     mlflow_uri: Optional[str] = None,
     log_memory: bool = False,
+    resume: bool = False,
 ) -> Tuple[List[Tuple[Path, Path]], Path]:
     """Run evaluation for multiple cross-validation strategies.
 
@@ -2719,6 +2720,9 @@ def run_multiple_eval(
         If ``True``, also generate interactive Plotly HTML figures.
     n_jobs:
         Number of parallel jobs for ``GridSearchCV``.
+    resume:
+        When ``True``, reuse existing ``metrics.json`` files and skip already
+        completed evaluations.
     Returns
     -------
     tuple
@@ -2767,6 +2771,8 @@ def run_multiple_eval(
     model_names = [m.get("name", "") for m in cfg.get("models", [])]
     steps_cfg = cfg.get("preprocess", {}).get("steps", [])
     out_dir.mkdir(parents=True, exist_ok=True)
+    if resume:
+        logger.info("Resuming evaluation outputs from %s", out_dir)
 
     email = cfg.get("notification_email")
     if email:
@@ -2884,6 +2890,23 @@ def run_multiple_eval(
                                 sub = out_dir / f"kfold_{k}__{safe_step}"
                             else:
                                 sub = out_dir / f"kfold_{k}"
+                            metrics = sub / "metrics.json"
+                            figs = sub / "figures"
+                            if (
+                                resume
+                                and metrics.exists()
+                                and figs.exists()
+                                and figs.is_dir()
+                            ):
+                                logger.info(
+                                    "Skipping %s (results already present)", sub
+                                )
+                                pair = (metrics, figs)
+                                if pair not in seen_outputs:
+                                    outputs.append(pair)
+                                    seen_outputs.add(pair)
+                                progress.advance(strat_task)
+                                continue
                             sub.mkdir(parents=True, exist_ok=True)
                             _run_cv(
                                 cfg_variant,
@@ -2941,6 +2964,23 @@ def run_multiple_eval(
                             sub = out_dir / f"loo__{safe_step}"
                         else:
                             sub = out_dir / "loo"
+                        metrics = sub / "metrics.json"
+                        figs = sub / "figures"
+                        if (
+                            resume
+                            and metrics.exists()
+                            and figs.exists()
+                            and figs.is_dir()
+                        ):
+                            logger.info(
+                                "Skipping %s (results already present)", sub
+                            )
+                            pair = (metrics, figs)
+                            if pair not in seen_outputs:
+                                outputs.append(pair)
+                                seen_outputs.add(pair)
+                            progress.advance(strat_task)
+                            continue
                         sub.mkdir(parents=True, exist_ok=True)
                         _run_cv(
                             cfg_variant,
@@ -2996,6 +3036,23 @@ def run_multiple_eval(
                             sub = out_dir / f"holdout__{safe_step}"
                         else:
                             sub = out_dir / "holdout"
+                        metrics = sub / "metrics.json"
+                        figs = sub / "figures"
+                        if (
+                            resume
+                            and metrics.exists()
+                            and figs.exists()
+                            and figs.is_dir()
+                        ):
+                            logger.info(
+                                "Skipping %s (results already present)", sub
+                            )
+                            pair = (metrics, figs)
+                            if pair not in seen_outputs:
+                                outputs.append(pair)
+                                seen_outputs.add(pair)
+                            progress.advance(strat_task)
+                            continue
                         sub.mkdir(parents=True, exist_ok=True)
                         test_size = float(strat.get("test_size", 0.3))
                         _run_holdout(
@@ -3077,8 +3134,20 @@ def _train_and_save_classification(
     gs_verbose: int = 0,
     show_progress: bool = True,
     log_memory: bool = False,
+    resume: bool = False,
 ) -> Tuple[Path, Path]:
     """Train final model and persist artefacts for classification."""
+
+    metrics_path = out_dir / "metrics.json"
+    figs_dir = out_dir / "figures"
+    if (
+        resume
+        and metrics_path.exists()
+        and figs_dir.exists()
+        and figs_dir.is_dir()
+    ):
+        logger.info("Skipping training (classification) because artefacts already exist")
+        return metrics_path, figs_dir
 
     n_jobs = _sanitize_n_jobs(n_jobs)
     logger.info("Starting training pipeline")
@@ -3325,8 +3394,20 @@ def _train_and_save_regression(
     gs_verbose: int = 0,
     show_progress: bool = True,
     log_memory: bool = False,
+    resume: bool = False,
 ) -> Tuple[Path, Path]:
     """Train final model and persist artefacts for regression."""
+
+    metrics_path = out_dir / "metrics.json"
+    figs_dir = out_dir / "figures"
+    if (
+        resume
+        and metrics_path.exists()
+        and figs_dir.exists()
+        and figs_dir.is_dir()
+    ):
+        logger.info("Skipping training (regression) because artefacts already exist")
+        return metrics_path, figs_dir
 
     n_jobs = _sanitize_n_jobs(n_jobs)
     logger.info("Starting training pipeline (regression)")
@@ -3561,6 +3642,7 @@ def train_and_save(
     gs_verbose: int = 0,
     show_progress: bool = True,
     log_memory: bool = False,
+    resume: bool = False,
 ) -> Tuple[Path, Path]:
     """Dispatch training to classification or regression pipeline."""
 
@@ -3576,6 +3658,7 @@ def train_and_save(
             gs_verbose=gs_verbose,
             show_progress=show_progress,
             log_memory=log_memory,
+            resume=resume,
         )
     return _train_and_save_classification(
         cfg,
@@ -3587,6 +3670,7 @@ def train_and_save(
         gs_verbose=gs_verbose,
         show_progress=show_progress,
         log_memory=log_memory,
+        resume=resume,
     )
 
 
