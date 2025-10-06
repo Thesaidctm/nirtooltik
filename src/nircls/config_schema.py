@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, ValidationError, root_validator
+from pydantic import BaseModel, Field, Required, ValidationError, root_validator
 
 from .utils.misc import RESULTS_DIR
 from .utils.palettes import Palette
@@ -13,7 +13,10 @@ from .utils.palettes import Palette
 class DataConfig(BaseModel):
     """Dataset related configuration."""
 
-    input_path: str = Field(..., description="Glob or file path for input data")
+    input_path: str = Field(
+        default=Required,
+        description="Glob or file path for input data",
+    )
     x_sheet: Optional[str] = Field("X", description="Worksheet name for features")
     y_sheet: Optional[str] = Field("Y", description="Worksheet name for targets")
     target_cols: Optional[Union[List[str], str]] = Field(
