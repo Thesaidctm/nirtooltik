@@ -1,2 +1,8 @@
 openaienv
 docs/_build/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/

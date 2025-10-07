@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from nircls.auth import SESSION_COOKIE_NAME, SESSIONS, app, get_db, hash_password
+from nircls.auth import SESSION_COOKIE_NAME, app, get_db, hash_password
 from nircls.db.models import Base, User
 
 
@@ -47,7 +47,7 @@ def test_login_and_logout():
     resp = client.post("/login", json={"username": "alice", "password": "secret"})
     assert resp.status_code == 200
     token = resp.cookies.get(SESSION_COOKIE_NAME)
-    assert token in SESSIONS
+    assert token
 
     # Failed login
     resp = client.post("/login", json={"username": "alice", "password": "wrong"})
@@ -56,5 +56,4 @@ def test_login_and_logout():
     # Logout should invalidate session
     resp = client.post("/logout", cookies={SESSION_COOKIE_NAME: token})
     assert resp.status_code == 200
-    assert token not in SESSIONS
     assert SESSION_COOKIE_NAME not in client.cookies

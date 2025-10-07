@@ -62,6 +62,37 @@ def compute_rmsep(
     return compute_rmse(y_true, y_pred)
 
 
+def rmse_with_ci(
+    y_true: Sequence[float] | np.ndarray | Iterable[float],
+    y_pred: Sequence[float] | np.ndarray | Iterable[float],
+    *,
+    n_bootstrap: int = 1000,
+    alpha: float = 0.05,
+    random_state: int | None = None,
+) -> tuple[float, float, float]:
+    """Return RMSE with non-parametric bootstrap confidence interval."""
+
+    yt = _to_1d_array(y_true)
+    yp = _to_1d_array(y_pred)
+    if yt.shape != yp.shape:
+        raise ValueError("y_true and y_pred must have the same shape")
+    if yt.size == 0:
+        return float("nan"), float("nan"), float("nan")
+
+    rmse = compute_rmse(yt, yp)
+    if not np.isfinite(rmse):
+        return rmse, float("nan"), float("nan")
+    if yt.size == 1 or n_bootstrap <= 0:
+        return rmse, rmse, rmse
+
+    rng = np.random.default_rng(random_state)
+    indices = rng.integers(0, yt.size, size=(n_bootstrap, yt.size))
+    residuals = yt[indices] - yp[indices]
+    rmse_samples = np.sqrt(np.mean(residuals**2, axis=1))
+    lower, upper = np.quantile(rmse_samples, [alpha / 2, 1 - alpha / 2])
+    return rmse, float(lower), float(upper)
+
+
 def compute_mae_percent(
     y_true: Sequence[float] | np.ndarray | Iterable[float],
     y_pred: Sequence[float] | np.ndarray | Iterable[float],
