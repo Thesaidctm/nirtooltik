@@ -1,0 +1,2 @@
+[console_scripts]
+nircls = nircls.cli:main
