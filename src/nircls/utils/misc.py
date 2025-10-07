@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import random
 import hashlib
+import subprocess
 
 import numpy as np
 
@@ -59,3 +60,19 @@ def file_hash(path: Path | str) -> str:
         for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def get_git_commit() -> str | None:
+    """Return the current Git commit hash if available."""
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except Exception:
+        return None
+    commit = result.stdout.strip()
+    return commit or None

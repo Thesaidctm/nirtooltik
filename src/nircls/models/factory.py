@@ -24,6 +24,50 @@ from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 from .base import BaseModelBuilder
 
+
+def _apply_random_state(estimator: Any, random_state: int | None) -> Any:
+    if random_state is None:
+        return estimator
+    if not hasattr(estimator, "get_params"):
+        return estimator
+    try:
+        params = estimator.get_params(deep=False)
+    except Exception:
+        return estimator
+    if "random_state" in params:
+        try:
+            estimator.set_params(random_state=random_state)
+        except ValueError:
+            pass
+    return estimator
+
+
+def _apply_n_jobs(estimator: Any, n_jobs: int | None) -> Any:
+    """Set ``n_jobs``-style parameters on ``estimator`` when supported."""
+
+    if n_jobs is None:
+        return estimator
+    if not hasattr(estimator, "get_params"):
+        return estimator
+    try:
+        params = estimator.get_params(deep=False)
+    except Exception:
+        return estimator
+    updated: Dict[str, Any] = {}
+    if "n_jobs" in params:
+        updated["n_jobs"] = n_jobs
+    if "nthread" in params:
+        updated["nthread"] = n_jobs
+    if "thread_count" in params:
+        updated["thread_count"] = n_jobs
+    if not updated:
+        return estimator
+    try:
+        estimator.set_params(**updated)
+    except ValueError:
+        return estimator
+    return estimator
+
 # Helpers for model construction with optional class weighting
 from .builders import _build_etc, _build_logreg, _build_rf, _build_svm
 from .plsda import PLSDA
@@ -425,7 +469,11 @@ def _normalize_grid_values(grid: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
 
 
 def make_models_from_config(
-    models_cfg: List[Dict[str, Any]], *, task_type: str = "classification"
+    models_cfg: List[Dict[str, Any]],
+    *,
+    task_type: str = "classification",
+    random_state: int | None = None,
+    n_jobs: int | None = None,
 ):
     normalized_type = _normalize_task_type(task_type)
     builders = get_model_builders(normalized_type)
@@ -476,6 +524,8 @@ def make_models_from_config(
             grid.setdefault(k, v)
 
         est = builder(grid)
+        est = _apply_random_state(est, random_state)
+        est = _apply_n_jobs(est, n_jobs)
 
         params = m.get("params", {})
         if params:

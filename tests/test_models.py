@@ -35,6 +35,13 @@ def test_rf_defaults_to_balanced_class_weight():
     assert pipe.named_steps["clf"].class_weight == "balanced"
 
 
+def test_parallelism_flag_propagates_to_estimators():
+    cfg = {"models": [{"name": "RF"}]}
+    name, pipe, _ = build_pipeline_from_config(cfg, n_jobs=3)[0]
+    assert name == "RF"
+    assert pipe.named_steps["clf"].n_jobs == 3
+
+
 def test_extratrees_defaults_to_balanced_class_weight():
     cfg = {"models": [{"name": "ET"}]}
     name, pipe, grid = build_pipeline_from_config(cfg)[0]

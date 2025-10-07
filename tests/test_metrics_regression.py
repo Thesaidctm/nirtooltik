@@ -7,6 +7,7 @@ from nircls.metrics.regression import (
     compute_rpd,
     compute_rmsecv,
     compute_rmsep,
+    rmse_with_ci,
 )
 
 
@@ -41,3 +42,16 @@ def test_mae_percent_handles_zero_reference():
     y_true = np.zeros(3)
     y_pred = np.array([0.0, 0.0, 1.0])
     assert math.isnan(compute_mae_percent(y_true, y_pred))
+
+
+def test_rmse_with_ci_is_reproducible():
+    y_true = np.linspace(0.0, 1.0, 20)
+    y_pred = y_true + np.random.default_rng(0).normal(0, 0.1, size=20)
+    value, low, high = rmse_with_ci(y_true, y_pred, n_bootstrap=200, random_state=123)
+    value2, low2, high2 = rmse_with_ci(
+        y_true, y_pred, n_bootstrap=200, random_state=123
+    )
+    assert math.isclose(value, value2)
+    assert math.isclose(low, low2)
+    assert math.isclose(high, high2)
+    assert low <= value <= high

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+import inspect
 import json
 import os
 import re
@@ -64,6 +65,7 @@ from .metrics.regression import (
     compute_rmsecv,
     compute_rmsep,
     compute_rmse,
+    rmse_with_ci,
 )
 from .models.factory import make_models_from_config
 from .preprocessors.spectro import (
@@ -79,7 +81,7 @@ from .utils.compliance import check_astm_classification
 from .utils.email import enviar_email
 from .utils.errors import DataError, ModelError
 from .utils.logging import log_versions, logger
-from .utils.misc import RESULTS_DIR, file_hash
+from .utils.misc import RESULTS_DIR, file_hash, get_git_commit
 from .utils.palettes import Palette
 from .utils.plots import (
     plot_confusion,
@@ -496,6 +498,9 @@ def _get_preprocess_steps_from_pipeline(pipe: Pipeline) -> List[Any]:
 
 def build_pipeline_from_config(
     cfg: Dict[str, Any],
+    *,
+    random_state: int | None = None,
+    n_jobs: int | None = None,
 ) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
     _validate_cfg(cfg, need_models=True)
     task_type = _infer_task_type(cfg)
@@ -512,10 +517,21 @@ def build_pipeline_from_config(
     def _build_models(
         pre_steps: List[Tuple[str, Any]], pre_grid: Dict[str, Any], suffix: str = ""
     ) -> None:
+        params: Dict[str, Any] = {}
         try:
-            models = make_models_from_config(cfg["models"], task_type=task_type)
-        except TypeError:
+            signature = inspect.signature(make_models_from_config)
+        except (TypeError, ValueError):  # pragma: no cover - fallback for C extensions
+            signature = None
+        if signature is None:
             models = make_models_from_config(cfg["models"])
+        else:
+            if "task_type" in signature.parameters:
+                params["task_type"] = task_type
+            if "random_state" in signature.parameters:
+                params["random_state"] = random_state
+            if "n_jobs" in signature.parameters and n_jobs is not None:
+                params["n_jobs"] = n_jobs
+            models = make_models_from_config(cfg["models"], **params)
         for m in models:
             est = m["estimator"]
             grid = pre_grid.copy()
@@ -524,7 +540,10 @@ def build_pipeline_from_config(
                 calib_cfg = m.get("calibration") or {}
                 method = calib_cfg.get("method", "sigmoid")
                 cv = calib_cfg.get("cv", 5)
-                est = CalibratedClassifierCV(estimator=est, method=method, cv=cv)
+                calib_params = {"estimator": est, "method": method, "cv": cv}
+                if n_jobs is not None:
+                    calib_params["n_jobs"] = n_jobs
+                est = CalibratedClassifierCV(**calib_params)
                 grid.update(
                     {
                         f"{final_step_name}__estimator__{k}": v
@@ -546,6 +565,26 @@ def build_pipeline_from_config(
         _build_models(pre_steps, pre_grid)
 
     return out
+
+
+def _call_build_pipeline(
+    cfg: Dict[str, Any],
+    *,
+    random_state: int | None = None,
+    n_jobs: int | None = None,
+) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
+    """Invoke ``build_pipeline_from_config`` respecting its signature."""
+
+    try:
+        signature = inspect.signature(build_pipeline_from_config)
+    except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+        return build_pipeline_from_config(cfg)
+    kwargs: Dict[str, Any] = {}
+    if "random_state" in signature.parameters:
+        kwargs["random_state"] = random_state
+    if "n_jobs" in signature.parameters and n_jobs is not None:
+        kwargs["n_jobs"] = n_jobs
+    return build_pipeline_from_config(cfg, **kwargs)
 
 
 def _format_preprocess_step(step: Any) -> str:
@@ -1491,7 +1530,9 @@ def _run_cv_classification(
             raise ModelError("'inner_folds' must be an integer >= 2") from exc
         if inner_folds < 2:
             raise ModelError("'inner_folds' must be at least 2")
-        models = build_pipeline_from_config(cfg)
+        models = _call_build_pipeline(
+            cfg, random_state=random_state, n_jobs=n_jobs
+        )
         model_cfgs = cfg.get("models", [])
         model_task = progress.add_task("Model", total=len(models))
         for idx, (name, pipe, grid) in enumerate(models):
@@ -1575,11 +1616,14 @@ def _run_cv_classification(
                     )
                 calib_cfg = m_cfg.get("calibration")
                 if calib_cfg:
-                    best = CalibratedClassifierCV(
-                        estimator=best,
-                        method=calib_cfg.get("method", "sigmoid"),
-                        cv=calib_cfg.get("cv", 5),
-                    )
+                    calib_params = {
+                        "estimator": best,
+                        "method": calib_cfg.get("method", "sigmoid"),
+                        "cv": calib_cfg.get("cv", 5),
+                    }
+                    if n_jobs is not None:
+                        calib_params["n_jobs"] = n_jobs
+                    best = CalibratedClassifierCV(**calib_params)
                 proba = cross_val_predict(
                     best,
                     X.values,
@@ -1732,7 +1776,12 @@ def _run_cv_classification(
                 gc.collect()
                 continue
             if cv_method == "spxy":
-                outer_splits = spxy_split(X.values, y_enc, outer.get_n_splits(X, y_enc))
+                outer_splits = spxy_split(
+                    X.values,
+                    y_enc,
+                    outer.get_n_splits(X, y_enc),
+                    random_state=random_state,
+                )
             elif cv_method == "group":
                 if groups is None:
                     raise DataError(
@@ -1754,7 +1803,7 @@ def _run_cv_classification(
                 ytr, yte = y_enc[tr], y_enc[te]
                 fit_kwargs = {}
                 if cv_method == "spxy":
-                    inner = spxy_split(Xtr, ytr, inner_folds)
+                    inner = spxy_split(Xtr, ytr, inner_folds, random_state=random_state)
                 elif cv_method == "group":
                     inner = GroupKFold(n_splits=inner_folds)
                     assert groups is not None
@@ -1781,11 +1830,14 @@ def _run_cv_classification(
                     )
                 calib_cfg = m_cfg.get("calibration")
                 if calib_cfg:
-                    best = CalibratedClassifierCV(
-                        estimator=best,
-                        method=calib_cfg.get("method", "sigmoid"),
-                        cv=calib_cfg.get("cv", 5),
-                    )
+                    calib_params = {
+                        "estimator": best,
+                        "method": calib_cfg.get("method", "sigmoid"),
+                        "cv": calib_cfg.get("cv", 5),
+                    }
+                    if n_jobs is not None:
+                        calib_params["n_jobs"] = n_jobs
+                    best = CalibratedClassifierCV(**calib_params)
                     best.fit(Xtr, ytr)
 
                 # validation metrics
@@ -2035,7 +2087,9 @@ def _run_cv_regression(
         inner_folds = max(inner_folds, 2)
         cv_method = cv_cfg.get("cv_method", "kfold").lower()
         model_cfgs = cfg.get("models", [])
-        pipelines = build_pipeline_from_config(cfg)
+        pipelines = _call_build_pipeline(
+            cfg, random_state=random_state, n_jobs=n_jobs
+        )
         model_task = progress.add_task("Model", total=len(pipelines))
         mem_start = None
         if log_memory:
@@ -2103,7 +2157,12 @@ def _run_cv_regression(
                     allowed = len(Xtr)
                     _validate_split_capacity(allowed, kind="samples")
                     n_splits = min(inner_folds, allowed)
-                    inner = spxy_split(Xtr, ytr, n_splits)
+                    inner = spxy_split(
+                        Xtr,
+                        ytr,
+                        n_splits,
+                        random_state=random_state,
+                    )
                 else:
                     allowed = len(Xtr)
                     _validate_split_capacity(allowed, kind="samples")
@@ -2181,9 +2240,23 @@ def _run_cv_regression(
                 y_pred_val = np.concatenate(y_pred_val_all)
                 rmsecv = compute_rmsecv(y_true_val, y_pred_val)
                 row["RMSECV_mean"] = float(rmsecv) if np.isfinite(rmsecv) else None
+                _, rmsecv_low, rmsecv_high = rmse_with_ci(
+                    y_true_val, y_pred_val, random_state=random_state
+                )
+                if np.isfinite(rmsecv_low):
+                    row["RMSECV_ci95_low"] = float(rmsecv_low)
+                if np.isfinite(rmsecv_high):
+                    row["RMSECV_ci95_high"] = float(rmsecv_high)
                 rmsep = compute_rmsep(y_true_val, y_pred_val)
                 if np.isfinite(rmsep):
                     row["RMSEP"] = float(rmsep)
+                _, rmsep_low, rmsep_high = rmse_with_ci(
+                    y_true_val, y_pred_val, random_state=random_state
+                )
+                if np.isfinite(rmsep_low):
+                    row["RMSEP_ci95_low"] = float(rmsep_low)
+                if np.isfinite(rmsep_high):
+                    row["RMSEP_ci95_high"] = float(rmsep_high)
                 rpd = compute_rpd(y_true_val, y_pred_val)
                 if np.isfinite(rpd):
                     row["RPD"] = float(rpd)
@@ -2205,9 +2278,23 @@ def _run_cv_regression(
                 row["train_RMSECV_mean"] = (
                     float(train_rmsecv) if np.isfinite(train_rmsecv) else None
                 )
+                _, train_low, train_high = rmse_with_ci(
+                    y_true_train, y_pred_train, random_state=random_state
+                )
+                if np.isfinite(train_low):
+                    row["train_RMSECV_ci95_low"] = float(train_low)
+                if np.isfinite(train_high):
+                    row["train_RMSECV_ci95_high"] = float(train_high)
                 train_rmsep = compute_rmsep(y_true_train, y_pred_train)
                 if np.isfinite(train_rmsep):
                     row["train_RMSEP"] = float(train_rmsep)
+                _, train_rmsep_low, train_rmsep_high = rmse_with_ci(
+                    y_true_train, y_pred_train, random_state=random_state
+                )
+                if np.isfinite(train_rmsep_low):
+                    row["train_RMSEP_ci95_low"] = float(train_rmsep_low)
+                if np.isfinite(train_rmsep_high):
+                    row["train_RMSEP_ci95_high"] = float(train_rmsep_high)
                 train_rpd = compute_rpd(y_true_train, y_pred_train)
                 if np.isfinite(train_rpd):
                     row["train_RPD"] = float(train_rpd)
@@ -2347,7 +2434,9 @@ def _run_holdout_classification(
         cv_method = cv_cfg.get("cv_method", "stratified").lower()
         outer_folds = int(cv_cfg.get("outer_folds", cv_cfg.get("inner_folds", 3)))
         model_cfgs = cfg.get("models", [])
-        pipelines = build_pipeline_from_config(cfg)
+        pipelines = _call_build_pipeline(
+            cfg, random_state=random_state, n_jobs=n_jobs
+        )
         Xtr, Xte, ytr, yte = train_test_split(
             X.values,
             y_enc,
@@ -2377,7 +2466,12 @@ def _run_holdout_classification(
             logger.info("Running %s with steps: %s", name, steps_desc)
             yscramble_iter = int(m_cfg.get("y_scramble_n_iter", 20))
             if cv_method == "spxy":
-                inner = spxy_split(Xtr, ytr, n_splits)
+                inner = spxy_split(
+                    Xtr,
+                    ytr,
+                    n_splits,
+                    random_state=random_state,
+                )
             else:
                 inner = StratifiedKFold(
                     n_splits=n_splits,
@@ -2393,11 +2487,14 @@ def _run_holdout_classification(
             )
             calib_cfg = m_cfg.get("calibration")
             if calib_cfg:
-                best = CalibratedClassifierCV(
-                    estimator=best,
-                    method=calib_cfg.get("method", "sigmoid"),
-                    cv=calib_cfg.get("cv", 5),
-                )
+                calib_params = {
+                    "estimator": best,
+                    "method": calib_cfg.get("method", "sigmoid"),
+                    "cv": calib_cfg.get("cv", 5),
+                }
+                if n_jobs is not None:
+                    calib_params["n_jobs"] = n_jobs
+                best = CalibratedClassifierCV(**calib_params)
                 best.fit(Xtr, ytr)
             yhat = best.predict(Xte)
             yhat_tr = best.predict(Xtr)
@@ -2562,7 +2659,9 @@ def _run_holdout_regression(
         if cv_method == "group":
             raise ModelError("cv_method 'group' não suportado com estratégia holdout")
         model_cfgs = cfg.get("models", [])
-        pipelines = build_pipeline_from_config(cfg)
+        pipelines = _call_build_pipeline(
+            cfg, random_state=random_state, n_jobs=n_jobs
+        )
         Xtr, Xte, ytr, yte = train_test_split(
             X.values,
             y,
@@ -2581,7 +2680,12 @@ def _run_holdout_regression(
             _validate_split_capacity(allowed, kind="samples")
             n_splits = min(n_splits_req, allowed)
             if cv_method == "spxy":
-                inner = spxy_split(Xtr, ytr, n_splits)
+                inner = spxy_split(
+                    Xtr,
+                    ytr,
+                    n_splits,
+                    random_state=random_state,
+                )
             else:
                 inner = KFold(
                     n_splits=n_splits,
@@ -2603,13 +2707,22 @@ def _run_holdout_regression(
             mae = mean_absolute_error(yte, yhat)
             r2 = r2_score(yte, yhat)
             mae_pct = compute_mae_percent(yte, yhat)
+            _, rmse_low, rmse_high = rmse_with_ci(
+                yte, yhat, random_state=random_state
+            )
             rmsep = compute_rmsep(yte, yhat)
+            _, rmsep_low, rmsep_high = rmse_with_ci(
+                yte, yhat, random_state=random_state
+            )
             rpd = compute_rpd(yte, yhat)
             rmse_tr = _rmse(ytr, yhat_tr)
             mae_tr = mean_absolute_error(ytr, yhat_tr)
             r2_tr = r2_score(ytr, yhat_tr)
             mae_tr_pct = compute_mae_percent(ytr, yhat_tr)
             rmsep_tr = compute_rmsep(ytr, yhat_tr)
+            _, rmsep_tr_low, rmsep_tr_high = rmse_with_ci(
+                ytr, yhat_tr, random_state=random_state
+            )
             rpd_tr = compute_rpd(ytr, yhat_tr)
             model_label, _ = _format_model_and_method_labels(name, pipe, gs.best_params_)
             row = {
@@ -2633,6 +2746,18 @@ def _run_holdout_regression(
                 "train_RMSEP": float(rmsep_tr) if np.isfinite(rmsep_tr) else None,
                 "train_RPD": float(rpd_tr) if np.isfinite(rpd_tr) else None,
             }
+            if np.isfinite(rmse_low):
+                row["RMSE_ci95_low"] = float(rmse_low)
+            if np.isfinite(rmse_high):
+                row["RMSE_ci95_high"] = float(rmse_high)
+            if np.isfinite(rmsep_low):
+                row["RMSEP_ci95_low"] = float(rmsep_low)
+            if np.isfinite(rmsep_high):
+                row["RMSEP_ci95_high"] = float(rmsep_high)
+            if np.isfinite(rmsep_tr_low):
+                row["train_RMSEP_ci95_low"] = float(rmsep_tr_low)
+            if np.isfinite(rmsep_tr_high):
+                row["train_RMSEP_ci95_high"] = float(rmsep_tr_high)
             n_comp = _get_n_components(gs.best_params_)
             if n_comp is not None:
                 row["n_components"] = int(n_comp)
@@ -2802,6 +2927,7 @@ def run_multiple_eval(
                 "sklearn": sklearn.__version__,
             },
             "seed": random_state,
+            "git_commit": get_git_commit(),
             "input_hashes": input_hashes,
         }
         with open(out_dir / "metadata.json", "w") as f:
@@ -3194,12 +3320,15 @@ def _train_and_save_classification(
                     "sklearn": sklearn.__version__,
                 },
                 "seed": random_state,
+                "git_commit": get_git_commit(),
                 "input_hashes": input_hashes,
             }
             with open(out_dir / "metadata.json", "w") as f:
                 json.dump(metadata, f, indent=2)
 
-            name, pipe, grid = build_pipeline_from_config(cfg)[0]
+            name, pipe, grid = _call_build_pipeline(
+                cfg, random_state=random_state, n_jobs=n_jobs
+            )[0]
             model_cfg = cfg.get("models", [])[0] if cfg.get("models") else {}
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
@@ -3211,7 +3340,12 @@ def _train_and_save_classification(
             train_task = progress.add_task("Treinando", total=None)
             fit_kwargs = {}
             if cv_method == "spxy":
-                cv = spxy_split(X.values, y_enc, 5)
+                cv = spxy_split(
+                    X.values,
+                    y_enc,
+                    5,
+                    random_state=random_state,
+                )
             elif cv_method == "group":
                 if groups is None:
                     raise DataError(
@@ -3249,11 +3383,14 @@ def _train_and_save_classification(
             )
             calib_cfg = model_cfg.get("calibration") if model_cfg else None
             if calib_cfg:
-                best = CalibratedClassifierCV(
-                    estimator=best,
-                    method=calib_cfg.get("method", "sigmoid"),
-                    cv=calib_cfg.get("cv", 5),
-                )
+                calib_params = {
+                    "estimator": best,
+                    "method": calib_cfg.get("method", "sigmoid"),
+                    "cv": calib_cfg.get("cv", 5),
+                }
+                if n_jobs is not None:
+                    calib_params["n_jobs"] = n_jobs
+                best = CalibratedClassifierCV(**calib_params)
                 best.fit(X.values, y_enc)
 
             save_task = progress.add_task("Salvando", total=None)
@@ -3449,12 +3586,15 @@ def _train_and_save_regression(
                     "sklearn": sklearn.__version__,
                 },
                 "seed": random_state,
+                "git_commit": get_git_commit(),
                 "input_hashes": input_hashes,
             }
             with open(out_dir / "metadata.json", "w") as f:
                 json.dump(metadata, f, indent=2)
 
-            name, pipe, grid = build_pipeline_from_config(cfg)[0]
+            name, pipe, grid = _call_build_pipeline(
+                cfg, random_state=random_state, n_jobs=n_jobs
+            )[0]
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
             mem_start = None
@@ -3472,7 +3612,12 @@ def _train_and_save_regression(
                 allowed = len(X)
                 _validate_split_capacity(allowed, kind="samples")
                 n_splits = min(max_splits, allowed)
-                cv = spxy_split(X.values, y, n_splits)
+                cv = spxy_split(
+                    X.values,
+                    y,
+                    n_splits,
+                    random_state=random_state,
+                )
             elif cv_method == "group":
                 if groups is None:
                     raise DataError(
