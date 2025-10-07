@@ -20,8 +20,13 @@ ambiente virtual:
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Unix/macOS
-# No Windows use:
-.venv\Scripts\activate
+```
+
+```powershell
+# Windows (PowerShell ou Prompt de Comando)
+# Use `py` se o alias `python` não estiver configurado.
+py -m venv .venv
+.\.venv\Scripts\activate
 ```
 
 Com o ambiente virtual ativo, usuários iniciantes podem executar um pipeline
@@ -699,6 +704,10 @@ coluna `y_true`.
   ambiente virtual ativo (`pip install -e .`). Caso o executável ainda não
   esteja disponível no `PATH`, execute os pipelines com `python -m nircls ...`,
   que utiliza o mesmo ponto de entrada da CLI.
+* **`.venv\\Scripts\\activate` não é reconhecido (Windows/PowerShell)** –
+  crie o ambiente virtual antes de tentar ativá-lo (`py -m venv .venv`) e
+  execute a ativação a partir da pasta do projeto com `.\.venv\Scripts\activate`.
+  Se a pasta `.venv` não existir, repita o comando de criação do ambiente.
 
 ## Extensões e contribuições
 
