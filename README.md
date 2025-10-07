@@ -695,6 +695,10 @@ coluna `y_true`.
   arquivos ou padrões glob (ex.: `data/RAW/*.xlsx`). Passar um diretório simples
   gera `DataError: Caminho(s) inválido(s)`.
 * **Modelo incompatível** – utilize um nome de modelo suportado e revise os parâmetros.
+* **Comando `nircls` não encontrado** – confirme se o pacote foi instalado no
+  ambiente virtual ativo (`pip install -e .`). Caso o executável ainda não
+  esteja disponível no `PATH`, execute os pipelines com `python -m nircls ...`,
+  que utiliza o mesmo ponto de entrada da CLI.
 
 ## Extensões e contribuições
 
