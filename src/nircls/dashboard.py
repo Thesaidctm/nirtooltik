@@ -559,7 +559,7 @@ def _render_dashboard(results_dir: Path) -> None:
                         errors: dict[str, str] = {}
                         try:
                             steps = list(analises)
-                            total = len(steps)
+                            total = len(steps) + int(bool(email))
                             completed = 0
 
                             if "preparar" in steps:
@@ -601,13 +601,19 @@ def _render_dashboard(results_dir: Path) -> None:
                             status.update(
                                 label=tr("Execução concluída."), state="complete"
                             )
-                            st.success(tr("Execução concluída."))
                             if email:
-                                enviar_email(
-                                    tr("Execução concluída."),
-                                    tr("A execução foi concluída."),
-                                    email,
-                                )
+                                try:
+                                    enviar_email(
+                                        tr("Execução concluída."),
+                                        tr("A execução foi concluída."),
+                                        email,
+                                    )
+                                except Exception as exc:
+                                    errors["email"] = str(exc)
+                                    raise
+                                completed += 1
+                                _update_progress(completed, total)
+                            st.success(tr("Execução concluída."))
                             if total:
                                 progress_value = 100
                                 progress.progress(progress_value)
