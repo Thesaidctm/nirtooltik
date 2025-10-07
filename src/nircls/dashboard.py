@@ -542,6 +542,19 @@ def _render_dashboard(results_dir: Path) -> None:
                         cfg_dict = cfg_model.dict(exclude_none=True)
                         run_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
                         progress = st.progress(0)
+                        progress_value = 0
+
+                        def _update_progress(value: int, total_steps: int) -> None:
+                            """Atualiza a barra de progresso reservando espaço para a conclusão."""
+
+                            nonlocal progress_value
+                            if total_steps <= 0:
+                                return
+                            if value >= total_steps:
+                                progress_value = 99
+                            else:
+                                progress_value = min(int(value / total_steps * 100), 99)
+                            progress.progress(progress_value)
                         status = st.status(tr("Inicializando..."))
                         errors: dict[str, str] = {}
                         try:
@@ -559,7 +572,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                     errors["preparar"] = str(exc)
                                     raise
                                 completed += 1
-                                progress.progress(int(completed / total * 100))
+                                _update_progress(completed, total)
 
                             if "treinar" in steps:
                                 status.update(
@@ -571,7 +584,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                     errors["treinar"] = str(exc)
                                     raise
                                 completed += 1
-                                progress.progress(int(completed / total * 100))
+                                _update_progress(completed, total)
 
                             if "validar" in steps:
                                 status.update(
@@ -583,7 +596,7 @@ def _render_dashboard(results_dir: Path) -> None:
                                     errors["validar"] = str(exc)
                                     raise
                                 completed += 1
-                                progress.progress(int(completed / total * 100))
+                                _update_progress(completed, total)
 
                             status.update(
                                 label=tr("Execução concluída."), state="complete"
@@ -595,6 +608,9 @@ def _render_dashboard(results_dir: Path) -> None:
                                     tr("A execução foi concluída."),
                                     email,
                                 )
+                            if total:
+                                progress_value = 100
+                                progress.progress(progress_value)
                         except Exception:
                             status.update(label=tr("Execução falhou"), state="error")
                             for etapa, msg in errors.items():
