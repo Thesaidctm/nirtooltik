@@ -44,6 +44,23 @@ questionary = ["questionary"]
 dvc = ["dvc"]
 tracking = ["mlflow", "dvc"]
 shap = ["shap"]
+full = [
+  "matplotlib>=3.7",
+  "seaborn>=0.12",
+  "plotly>=5.15",
+  "kaleido>=0.2.1",
+  "openpyxl>=3.1",
+  "streamlit>=1.25",
+  "httpx>=0.24",
+  "questionary",
+  "xgboost",
+  "lightgbm",
+  "catboost",
+  "torch",
+  "mlflow",
+  "dvc",
+  "shap",
+]
 dev = ["mypy", "black", "ruff", "pre-commit"]
 
 [project.scripts]

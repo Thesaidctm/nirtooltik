@@ -21,7 +21,6 @@ import yaml  # type: ignore[import-untyped]
 
 from . import __version__
 from .config_schema import ConfigModel, ValidationError
-from .dashboard import run_dashboard
 from .io import export_xy_xlsx, summarize_dataset
 from .models.factory import get_model_builders, get_model_descriptions
 from .pipeline import (
@@ -139,6 +138,10 @@ STRINGS = {
         "wizard_train_in": "Training in: {path}",
         "wizard_eval_in": "Evaluation in: {path}",
         "questionary_not_installed": "'questionary' is not installed. Install with `pip install questionary`.",
+        "dashboard_dep_missing": (
+            "Missing optional dependency '{package}'. Install with `pip install "
+            "nircls[dashboard]` or `pip install \"nircls[full]\"`."
+        ),
     },
     "pt": {
         "prog_desc": "NIR Species Classification Toolkit",
@@ -212,6 +215,10 @@ STRINGS = {
         "wizard_train_in": "Treino em: {path}",
         "wizard_eval_in": "Avaliação em: {path}",
         "questionary_not_installed": "'questionary' não está instalado. Instale com `pip install questionary`.",
+        "dashboard_dep_missing": (
+            "Dependência opcional '{package}' ausente. Instale com `pip install "
+            "nircls[dashboard]` ou `pip install \"nircls[full]\"`."
+        ),
     },
 }
 
@@ -1253,7 +1260,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             ):
                 print(df.to_string(index=False))
     elif args.cmd == "dashboard":
-        run_dashboard(Path(args.results))
+        try:
+            from .dashboard import run_dashboard
+        except ModuleNotFoundError as exc:  # pragma: no cover - import-time dependency guard
+            missing = getattr(exc, "name", None) or "streamlit"
+            print(t("dashboard_dep_missing", package=missing), file=sys.stderr)
+            return 1
+        try:
+            run_dashboard(Path(args.results))
+        except ModuleNotFoundError as exc:  # pragma: no cover - runtime dependency guard
+            missing = getattr(exc, "name", None) or str(exc)
+            print(t("dashboard_dep_missing", package=missing), file=sys.stderr)
+            return 1
     return 0
 
 

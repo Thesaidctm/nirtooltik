@@ -5,16 +5,39 @@ from __future__ import annotations
 import base64
 import importlib.util
 from pathlib import Path
-from typing import Iterable, Sequence, Optional
+from typing import Iterable, Optional, Sequence, TYPE_CHECKING
+
 import numpy as np
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+
+try:  # pragma: no cover - import depends on optional dependency
+    import plotly.express as px
+    import plotly.graph_objects as go
+except ModuleNotFoundError:  # pragma: no cover - executed when Plotly missing
+    px = None
+    go = None
+
 from sklearn.metrics import roc_curve
 from sklearn.preprocessing import label_binarize
 
 from .logging import logger
 from .palettes import PALETTE_MAP, Palette
+
+if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
+    import plotly.graph_objects as go
+
+
+_PLOTLY_MISSING_MSG = (
+    "Plotly is required for visualisations. Install with `pip install "
+    "\"nircls[viz]\"` or `pip install \"nircls[full]\"`."
+)
+
+
+def _require_plotly() -> None:
+    if px is None or go is None:
+        err = ModuleNotFoundError(_PLOTLY_MISSING_MSG)
+        err.name = "plotly"  # type: ignore[attr-defined]
+        raise err
 
 
 def _cycle_visible_colors(palette: Palette) -> list[str]:
@@ -58,7 +81,7 @@ def _write_placeholder_image(out: Path) -> None:
         logger.debug("Could not write placeholder image", exc_info=True)
 
 
-def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
+def _export(fig: "go.Figure", out_base: Path, interactive: bool) -> None:
     """Save a Plotly figure to multiple static formats and optional HTML.
 
     Parameters
@@ -71,6 +94,7 @@ def _export(fig: go.Figure, out_base: Path, interactive: bool) -> None:
         If ``True`` an interactive HTML version is also exported.
     """
 
+    _require_plotly()
     out_base.parent.mkdir(parents=True, exist_ok=True)
     if importlib.util.find_spec("kaleido") is None:
         logger.warning(
@@ -161,6 +185,7 @@ def _plot_pls_components(
 ) -> pd.DataFrame:
     """Shared implementation for plotting PLS-related component matrices."""
 
+    _require_plotly()
     values = np.asarray(values, dtype=float)
     if values.ndim != 2:
         raise ValueError("values must be a 2-D array")
@@ -276,6 +301,7 @@ def plot_vip(
 ) -> pd.DataFrame:
     """Plot Variable Importance in Projection (VIP) scores."""
 
+    _require_plotly()
     vip_scores = np.asarray(vip_scores, dtype=float).ravel()
     n_features = vip_scores.size
     if n_features == 0:
@@ -328,6 +354,7 @@ def plot_confusion(
         Name of the color palette applied to the heatmap.
     """
 
+    _require_plotly()
     cm = np.asarray(cm)
     labels = cm.astype(str)
     colorscale = px.colors.make_colorscale(PALETTE_MAP[palette])
@@ -369,6 +396,7 @@ def plot_roc_ovr(
 ) -> None:
     """Plot one-vs-rest ROC curves for multi-class or binary problems."""
 
+    _require_plotly()
     fig = go.Figure()
     n_classes = len(classes)
     if y_proba.shape[1] == 2:
@@ -410,6 +438,7 @@ def plot_reliability(
 ) -> None:
     """Plot reliability diagram (confidence vs accuracy)."""
 
+    _require_plotly()
     conf = y_proba.max(axis=1)
     pred = y_proba.argmax(axis=1)
     acc = (pred == y_true).astype(float)
@@ -456,6 +485,7 @@ def plot_pca_scores(
 ) -> None:
     """Scatter plot of PCA scores coloured by treatment labels."""
 
+    _require_plotly()
     missing = {"PC1", "PC2"} - set(scores.columns)
     if missing:
         raise ValueError(f"Scores dataframe missing columns: {sorted(missing)}")

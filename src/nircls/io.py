@@ -11,6 +11,11 @@ from joblib import dump
 from .utils.errors import DataError
 from .utils.misc import RESULTS_DIR
 
+_MISSING_OPENPYXL_MSG = (
+    "Dependência opcional 'openpyxl' ausente. Instale com `pip install "
+    "\"nircls[excel]\"` ou `pip install \"nircls[full]\"`."
+)
+
 
 def _normalize_columns_to_float(df: pd.DataFrame) -> pd.DataFrame:
     """Return dataframe with numeric spectral columns converted to float.
@@ -150,6 +155,10 @@ def read_xlsx_xy(
         raise DataError(str(e)) from e
     except ValueError as e:
         raise DataError(str(e)) from e
+    except ImportError as e:
+        if "openpyxl" in str(e).lower():
+            raise DataError(_MISSING_OPENPYXL_MSG) from e
+        raise
     Ydf.attrs["_source_path"] = str(path)
     Ydf.attrs["_default_all_target_cols"] = True
     _, out, groups = _extract_targets_and_groups(
@@ -187,6 +196,10 @@ def read_tabular(
             df = pd.read_excel(path, **read_kwargs)
     except (FileNotFoundError, PermissionError) as e:
         raise DataError(str(e)) from e
+    except ImportError as e:
+        if "openpyxl" in str(e).lower():
+            raise DataError(_MISSING_OPENPYXL_MSG) from e
+        raise
     df.attrs["_source_path"] = str(path)
     target_cols_list, y_list, groups = _extract_targets_and_groups(
         df, target_cols, group_col, target_type=target_type
@@ -202,9 +215,16 @@ def export_xy_xlsx(
     path: Path, X: pd.DataFrame, y: pd.Series, x_sheet: str = "X", y_sheet: str = "Y"
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with pd.ExcelWriter(path, engine="openpyxl") as w:
-        X.to_excel(w, index=False, sheet_name=x_sheet)
-        y.to_frame(name=y.name or "target").to_excel(w, index=False, sheet_name=y_sheet)
+    try:
+        with pd.ExcelWriter(path, engine="openpyxl") as w:
+            X.to_excel(w, index=False, sheet_name=x_sheet)
+            y.to_frame(name=y.name or "target").to_excel(
+                w, index=False, sheet_name=y_sheet
+            )
+    except ImportError as e:  # pragma: no cover - requires missing optional dependency
+        if "openpyxl" in str(e).lower():
+            raise DataError(_MISSING_OPENPYXL_MSG) from e
+        raise
 
 
 def prepare_inputs(
