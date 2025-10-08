@@ -84,9 +84,20 @@ nircls run-all --config configs/eucalipto_spxy.yaml --all-models --all-preproces
 ## Requisitos
 
 Requer Python 3.9 ou superior. Principais dependências: `numpy`, `pandas`,
-`scikit-learn`, `scipy`, `matplotlib`, `seaborn`, `pyyaml`, `rich`, `joblib`,
-`openpyxl`, `tqdm`, `requests` e `streamlit`. Pacotes opcionais incluem `xgboost`, `lightgbm`,
-`catboost`, `torch`, `questionary`, `mlflow` e `dvc`.
+`scikit-learn`, `scipy`, `pyyaml`, `rich`, `joblib`, `tqdm` e `requests`. Entre as
+dependências opcionais estão `plotly`, `matplotlib`, `seaborn`, `kaleido`,
+`openpyxl`, `streamlit`, `httpx`, `questionary`, `xgboost`, `lightgbm`,
+`catboost`, `torch`, `mlflow`, `dvc` e `shap`.
+
+Para instalar de uma só vez os pacotes opcionais mais utilizados (visualizações,
+suporte a Excel, dashboard e modelos adicionais), utilize o extra `full`:
+
+```bash
+pip install -e ".[full]"
+```
+
+Ao instalar a partir de uma distribuição publicada (`pip install nircls`),
+os mesmos extras podem ser adicionados com `pip install "nircls[full]"`.
 
 Para exportar relatórios em PDF é necessário instalar dependências extras:
 
@@ -99,6 +110,13 @@ Para utilizar o toolkit em modo de desenvolvimento instale no ambiente atual:
 
 ```bash
 pip install -e .
+```
+
+Se desejar trabalhar com o dashboard Streamlit, exportação para Excel e
+gráficos interativos, prefira instalar com:
+
+```bash
+pip install -e ".[full]"
 ```
 
 Para habilitar os _hooks_ de formatação (`black` e `isort`) e lint (`flake8`) antes de cada commit,
