@@ -12,6 +12,13 @@ e figuras embutidas, além de metadados de citação. Consulte o notebook
 [examples/quickstart.ipynb](examples/quickstart.ipynb) para um exemplo rápido
 de uso da API.
 
+> **Novidade patenteável:** esta versão introduz o pré-processador
+> ``AQS`` (Adaptive Quantile Segment Normalization), que segmenta
+> automaticamente o espectro por atividade derivativa, corrige cada faixa por
+> quantis robustos e aplica uma mistura regulada por estabilidade para proteger
+> medições ruidosas. A estratégia foi projetada para transferência de calibração
+> entre sensores e cenários industriais heterogêneos.
+
 A documentação completa está disponível em [https://Thesaidctm.github.io/nirtooltik/](https://Thesaidctm.github.io/nirtooltik/).
 
 Antes de executar os comandos a seguir, recomenda-se criar e ativar um
@@ -52,7 +59,7 @@ Para treinar todos os modelos disponíveis (pode exigir dependências opcionais)
 nircls run-all --config configs/eucalipto_spxy.yaml --all-models
 ```
 
-Para aplicar todos os pré-processamentos suportados (SNV, MSC, DETREND, SG, EMSC, EPO, SCALE) em conjunto com todos os modelos, combine as duas flags:
+Para aplicar todos os pré-processamentos suportados (SNV, MSC, DETREND, SG, EMSC, EPO, AQS, SCALE) em conjunto com todos os modelos, combine as duas flags:
 
 ```bash
 nircls run-all --config configs/eucalipto_spxy.yaml --all-models --all-preprocess
@@ -269,10 +276,14 @@ pelas variáveis de ambiente `NIRCLS_RAW` e `NIRCLS_RESULTS`.
   separados para cada transformador, anexando um sufixo como
   `__snv`/`__msc` ao nome do modelo. Isso permite medir o impacto de
   cada pré-processador isoladamente antes de combiná-los.
-- **steps** (`list[str]`): lista de pré-processadores, por exemplo
-  `SNV`, `MSC`, `DETREND`, `SG`, `EMSC`, `EPO`, `SCALE`.
-- **sg.window**, **sg.polyorder**, **sg.deriv** (`int` ou `list[int]`): parâmetros
-  do filtro Savitzky‑Golay. Listas ativam busca em grade.
+  - **steps** (`list[str]`): lista de pré-processadores, por exemplo
+    `SNV`, `MSC`, `DETREND`, `SG`, `EMSC`, `EPO`, `AQS`, `SCALE`.
+  - **sg.window**, **sg.polyorder**, **sg.deriv** (`int` ou `list[int]`): parâmetros
+    do filtro Savitzky‑Golay. Listas ativam busca em grade.
+  - **aqs.min_segment_size**, **aqs.blend_strength** (`int|float` ou listas):
+    hiperparâmetros do novo normalizador adaptativo por quantis. Quando listas
+    são informadas, o `GridSearchCV` avalia múltiplas combinações de tamanhos de
+    segmento e intensidade de mistura.
 
 #### cv
 - **random_state** (`int`, padrão `42`): semente aleatória global.
@@ -303,7 +314,7 @@ Cada item da lista define um estimador:
 
 ## Interface de linha de comando
 
-O comando principal é `nircls` e suporta várias sub‑rotinas. As mensagens da CLI podem ser exibidas em português (`--lang pt`) ou inglês (`--lang en`, padrão). Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar o modelo padrão PLSDA. Para tentar todos os modelos disponíveis (requer dependências opcionais como `xgboost`, `lightgbm`, `catboost` e `torch`), utilize a flag `--all-models`. Essa opção ignora qualquer lista `models:` definida no arquivo de configuração e treina todos os modelos suportados. Para aplicar todos os tratamentos de pré-processamento (`SNV`, `MSC`, `DETREND`, `SG`, `EMSC`, `EPO`, `SCALE`), utilize `--all-preprocess`:
+O comando principal é `nircls` e suporta várias sub‑rotinas. As mensagens da CLI podem ser exibidas em português (`--lang pt`) ou inglês (`--lang en`, padrão). Para usuários leigos, basta executar `nircls run-all` para processar dados no diretório definido por `NIRCLS_RAW` (padrão `data/RAW`), treinar e avaliar o modelo padrão PLSDA. Para tentar todos os modelos disponíveis (requer dependências opcionais como `xgboost`, `lightgbm`, `catboost` e `torch`), utilize a flag `--all-models`. Essa opção ignora qualquer lista `models:` definida no arquivo de configuração e treina todos os modelos suportados. Para aplicar todos os tratamentos de pré-processamento (`SNV`, `MSC`, `DETREND`, `SG`, `EMSC`, `EPO`, `AQS`, `SCALE`), utilize `--all-preprocess`:
 
 Antes de rodar qualquer comando `nircls`, crie e ative um ambiente virtual. Em sistemas Unix/macOS, utilize `python -m venv .venv` seguido de `source .venv/bin/activate`; no Windows, use `.venv\Scripts\activate`. Todos os comandos a seguir devem ser executados com o ambiente virtual ativo.
 
@@ -590,6 +601,7 @@ Pré-processadores disponíveis:
 * `Detrend` – remoção de tendências polinomiais
 * `EMSC` – Extended MSC
 * `EPO` – External Parameter Orthogonalization
+* `AQS` – Adaptive Quantile Segment Normalization (segmentação adaptativa com mistura sensível à estabilidade)
 * `SCALE` – padronização com `StandardScaler`
 
 Modelos implementados (modelos que dependem de pacotes extras são ignorados se as bibliotecas não estiverem instaladas):

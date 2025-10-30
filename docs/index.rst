@@ -22,13 +22,20 @@ desempenho dos modelos.
 
    preprocess:
      evaluate_individual: true
-     steps: [SNV, MSC, SG, SCALE]
+     steps: [SNV, MSC, AQS, SG, SCALE]
 
 Execute o arquivo diretamente para conferir o comportamento:
 
 .. code-block:: bash
 
    nircls run-all --config configs/eucalipto_spxy.yaml
+
+O transformador ``AQS`` (Adaptive Quantile Segment Normalization) aplica uma
+normalização patenteável baseada em segmentação adaptativa por derivadas e
+ajuste de quantis, combinando com uma etapa de mistura ponderada pela
+estabilidade espectral. Os parâmetros ``min_segment_size`` e
+``blend_strength`` podem ser ajustados com as chaves ``aqs.min_segment_size`` e
+``aqs.blend_strength`` dentro do arquivo YAML de configuração.
 
 Os relatórios criados pelo comando listam modelos como
 ``PLSDA__snv`` e ``RF__msc``, sinalizando o pré-processamento avaliado

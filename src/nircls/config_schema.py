@@ -63,9 +63,18 @@ class SGConfig(BaseModel):
         extra = "forbid"
 
 
+class AQSConfig(BaseModel):
+    min_segment_size: Union[int, List[int]] = 25
+    blend_strength: Union[float, List[float]] = 4.0
+
+    class Config:
+        extra = "forbid"
+
+
 class PreprocessConfig(BaseModel):
     steps: List[str] = Field(default_factory=list)
     sg: Optional[SGConfig] = None
+    aqs: Optional[AQSConfig] = None
     evaluate_individual: bool = False
 
     class Config:

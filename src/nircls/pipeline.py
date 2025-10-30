@@ -73,6 +73,7 @@ from .preprocessors.spectro import (
     EPO,
     MSC,
     SNV,
+    AdaptiveQuantileSegmentNormalizer,
     Detrend,
     SavitzkyGolayTransformer,
 )
@@ -445,6 +446,25 @@ def _make_preprocess(
             steps.append(("emsc", EMSC()))
         elif n == "EPO":
             steps.append(("epo", EPO()))
+        elif n == "AQS":
+            aqs_cfg = cfg.get("aqs", {})
+            min_seg = aqs_cfg.get("min_segment_size", 25)
+            blend_strength = aqs_cfg.get("blend_strength", 4.0)
+            if isinstance(min_seg, (list, tuple)):
+                grid["aqs__min_segment_size"] = [int(v) for v in min_seg]
+                min_seg = min_seg[0]
+            if isinstance(blend_strength, (list, tuple)):
+                grid["aqs__blend_strength"] = [float(v) for v in blend_strength]
+                blend_strength = blend_strength[0]
+            steps.append(
+                (
+                    "aqs",
+                    AdaptiveQuantileSegmentNormalizer(
+                        min_segment_size=int(min_seg),
+                        blend_strength=float(blend_strength),
+                    ),
+                )
+            )
         elif n == "SCALE":
             steps.append(("scaler", StandardScaler()))
         else:

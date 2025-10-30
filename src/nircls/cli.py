@@ -64,6 +64,10 @@ PREPROCESS_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "en": "External Parameter Orthogonalization",
         "pt": "Ortogonalização de Parâmetro Externo",
     },
+    "AQS": {
+        "en": "Adaptive Quantile Segment Normalization",
+        "pt": "Normalização Adaptativa por Segmentos Quantílicos",
+    },
     "SCALE": {
         "en": "Standard Scaling",
         "pt": "Escalonamento Padrão",
@@ -83,7 +87,7 @@ STRINGS = {
         "run_all_help": "Process raw data and run training + evaluation with defaults",
         "run_all_config_help": "Configuration file to override defaults",
         "run_all_models_help": "Use all available models (requires optional dependencies)",
-        "run_all_preprocess_help": "Apply all preprocessing steps (SNV, MSC, DETREND, SG, EMSC, EPO, SCALE)",
+        "run_all_preprocess_help": "Apply all preprocessing steps (SNV, MSC, DETREND, SG, EMSC, EPO, AQS, SCALE)",
         "run_all_output_name_help": "Rename final results directory after completion",
         "resume_help": "Resume previously started runs when outputs exist",
         "run_id_help": "Existing run identifier to reuse (requires --resume)",
@@ -157,7 +161,7 @@ STRINGS = {
         "run_all_models_help": "Usar todos os modelos disponíveis (requer dependências opcionais)",
         "run_all_preprocess_help": (
             "Aplicar todos os pré-processamentos disponíveis (SNV, MSC, DETREND, SG, "
-            "EMSC, EPO, SCALE)"
+            "EMSC, EPO, AQS, SCALE)"
         ),
         "run_all_output_name_help": "Renomear a pasta final de resultados após a conclusão",
         "resume_help": "Retomar execuções já iniciadas quando os resultados existem",
