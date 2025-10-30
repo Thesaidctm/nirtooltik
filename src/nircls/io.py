@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from glob import glob
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, cast, Literal
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, cast, Literal
 
 import numpy as np
 import pandas as pd
-from joblib import dump
+from joblib import dump, load
 
 from .utils.errors import DataError
 from .utils.misc import RESULTS_DIR
@@ -15,6 +15,98 @@ _MISSING_OPENPYXL_MSG = (
     "Dependência opcional 'openpyxl' ausente. Instale com `pip install "
     "\"nircls[excel]\"` ou `pip install \"nircls[full]\"`."
 )
+
+_CACHE_VERSION = 1
+
+
+def _iter_input_files(pattern: str | Iterable[str]) -> List[Path]:
+    """Expand ``pattern`` into a sorted list of files.
+
+    Parameters
+    ----------
+    pattern:
+        Either a glob pattern or an iterable of glob patterns. ``Path.glob``
+        is not used because ``input_path`` may point to files outside the
+        current working tree.
+    """
+
+    if isinstance(pattern, (str, Path)):
+        patterns: Iterable[str | Path] = [pattern]
+    else:
+        patterns = pattern
+
+    files: List[Path] = []
+    for item in patterns:
+        for match in glob(str(item)):
+            files.append(Path(match))
+    files = [p for p in files if not p.name.startswith("~$")]
+    files.sort()
+    return files
+
+
+def _dataset_fingerprint(
+    path: Path,
+    spectral_range: Optional[Tuple[float, float]],
+    drop_nans: bool,
+) -> Dict[str, Any]:
+    """Return a dictionary describing the cache-relevant dataset state."""
+
+    return {
+        "version": _CACHE_VERSION,
+        "path": str(path.resolve()),
+        "mtime": path.stat().st_mtime,
+        "spectral_range": spectral_range,
+        "drop_nans": drop_nans,
+    }
+
+
+def _load_cached_features(
+    cache_path: Path, fingerprint: Dict[str, Any]
+) -> Optional[Tuple[pd.DataFrame, pd.Index, int]]:
+    """Return cached feature matrix, kept indices and NaN counts if valid."""
+
+    try:
+        payload = load(cache_path)
+    except FileNotFoundError:
+        return None
+    except Exception:  # pragma: no cover - defensive path
+        cache_path.unlink(missing_ok=True)
+        return None
+
+    if payload.get("fingerprint") != fingerprint:
+        return None
+
+    X = payload.get("X")
+    keep_idx = payload.get("keep_idx")
+    n_nans = payload.get("n_nans")
+    if not isinstance(X, pd.DataFrame) or keep_idx is None:
+        return None
+    index = pd.Index(keep_idx)
+    return X, index, int(n_nans)
+
+
+def _store_cached_features(
+    cache_path: Path,
+    fingerprint: Dict[str, Any],
+    X: pd.DataFrame,
+    keep_idx: pd.Index,
+    n_nans: int,
+) -> None:
+    """Persist processed feature matrix for reuse across runs."""
+
+    try:  # pragma: no cover - best effort cache write
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        dump(
+            {
+                "fingerprint": fingerprint,
+                "X": X,
+                "keep_idx": keep_idx.tolist(),
+                "n_nans": int(n_nans),
+            },
+            cache_path,
+        )
+    except Exception:
+        cache_path.unlink(missing_ok=True)
 
 
 def _normalize_columns_to_float(df: pd.DataFrame) -> pd.DataFrame:
@@ -236,8 +328,7 @@ def prepare_inputs(
     provided spectral range. Infinite values are replaced by ``NaN`` and rows
     containing missing values are dropped in a leakage-free manner.
     """
-    files = [Path(p) for p in glob(data_cfg["input_path"])]
-    files = [p for p in files if not p.name.startswith("~$")]
+    files = _iter_input_files(data_cfg["input_path"])
     if not files:
         raise DataError("Nenhum arquivo encontrado para o padrão informado")
     invalid = [p for p in files if not p.is_file()]
@@ -281,35 +372,34 @@ def prepare_inputs(
                 decimal=data_cfg.get("decimal", "."),
                 sheet_name=data_cfg.get("sheet_name"),
             )
-        X = _filter_range(X, sp)
-        if X.empty:
-            raise DataError("Intervalo espectral fora da faixa disponível")
-        X = X.replace([np.inf, -np.inf], np.nan)
-        n_nans = int(X.isna().any(axis=1).sum())
-        if drop_nans:
-            X = X.dropna(axis=0)
-        keep_idx = X.index
-        if groups is not None:
-            groups = groups.loc[keep_idx]
-        X_reset = X.reset_index(drop=True)
-        groups_reset = groups.reset_index(drop=True) if groups is not None else None
-
+        fingerprint: Optional[Dict[str, Any]] = None
+        cache_hit: Optional[Tuple[pd.DataFrame, pd.Index, int]] = None
+        cache_path = cache_dir / f"{f.stem}.joblib"
         if use_cache:
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            fingerprint = {
-                "mtime": f.stat().st_mtime,
-                "spectral_range": sp,
-                "drop_nans": drop_nans,
-            }
-            dump(
-                {
-                    "fingerprint": fingerprint,
-                    "X": X_reset,
-                    "keep_idx": keep_idx.tolist(),
-                    "n_nans": n_nans,
-                },
-                cache_dir / f"{f.stem}.joblib",
-            )
+            fingerprint = _dataset_fingerprint(f, sp, drop_nans)
+            cache_hit = _load_cached_features(cache_path, fingerprint)
+
+        if cache_hit is None:
+            X = _filter_range(X, sp)
+            if X.empty:
+                raise DataError("Intervalo espectral fora da faixa disponível")
+            X = X.replace([np.inf, -np.inf], np.nan)
+            n_nans = int(X.isna().any(axis=1).sum())
+            if drop_nans:
+                X = X.dropna(axis=0)
+            keep_idx = X.index
+            if groups is not None:
+                groups = groups.loc[keep_idx]
+            X_reset = X.reset_index(drop=True)
+            n_nans_out = n_nans
+            if use_cache and fingerprint is not None:
+                _store_cached_features(cache_path, fingerprint, X_reset, keep_idx, n_nans)
+        else:
+            X_reset, keep_idx, n_nans_out = cache_hit
+            if groups is not None:
+                groups = groups.loc[keep_idx]
+
+        groups_reset = groups.reset_index(drop=True) if groups is not None else None
 
         for name, y in y_list:
             y = y.loc[keep_idx]
@@ -318,7 +408,7 @@ def prepare_inputs(
                 "target": name,
                 "X": X_reset,
                 "Y": y.reset_index(drop=True),
-                "n_nans": n_nans,
+                "n_nans": n_nans_out,
                 "target_type": target_type,
                 "task_type": target_type,
             }
