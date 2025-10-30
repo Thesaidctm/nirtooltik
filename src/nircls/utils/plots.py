@@ -100,6 +100,10 @@ def _export(fig: "go.Figure", out_base: Path, interactive: bool) -> None:
         logger.warning(
             "Kaleido engine not found. Install with 'pip install -U kaleido' to enable static image export."
         )
+        for suffix in [".png", ".svg"]:
+            out = out_base.with_suffix(suffix)
+            if not out.exists():
+                _write_placeholder_image(out)
     else:
         for suffix in [".png", ".svg"]:
             out = out_base.with_suffix(suffix)
