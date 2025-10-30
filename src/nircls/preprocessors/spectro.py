@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.signal import savgol_filter
+from scipy.stats import median_abs_deviation
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
@@ -158,3 +159,154 @@ class EPO(BaseEstimator, TransformerMixin):
         if self.P_ is None:
             return X
         return X @ self.P_
+
+
+class AdaptiveQuantileSegmentNormalizer(BaseEstimator, TransformerMixin):
+    """Adaptive quantile-based normalization for NIR spectra.
+
+    This transformer implements a patent-oriented pre-processing strategy that
+    dynamically segments spectra according to local activity and aligns each
+    segment to a robust global reference. The procedure combines three
+    innovations to improve calibration transfer:
+
+    1. **Derivative-driven segmentation** – spectral bands with high
+       structural activity are detected using the median absolute deviation of
+       first-order derivatives. The routine automatically chooses segment
+       boundaries while enforcing a minimum width to avoid overfitting noise.
+    2. **Quantile invariant scaling** – within each segment, every spectrum is
+       normalized so that its median and interquartile range match those of the
+       calibration reference computed during ``fit``. This preserves local
+       contrast without assuming Gaussian behaviour.
+    3. **Stability-aware blending** – spectra with atypical derivative energy
+       are softly blended with the raw signal through a logistic weighting,
+       preventing aggressive corrections on unstable measurements.
+
+    Parameters
+    ----------
+    min_segment_size : int, default=25
+        Minimum number of wavelengths per adaptive segment. Larger values make
+        the segmentation more conservative.
+    blend_strength : float, default=4.0
+        Controls the slope of the logistic curve used for stability-aware
+        blending. Higher values reduce the contribution of corrected spectra
+        when derivative energy deviates from the calibration set.
+    """
+
+    def __init__(self, min_segment_size: int = 25, blend_strength: float = 4.0):
+        if min_segment_size < 5:
+            raise ValueError("min_segment_size must be ≥ 5")
+        if blend_strength < 0:
+            raise ValueError("blend_strength must be non-negative")
+        self.min_segment_size = int(min_segment_size)
+        self.blend_strength = float(blend_strength)
+
+    def fit(self, X, y=None):  # noqa: D401 - standard sklearn signature
+        """Learn adaptive segments and reference quantiles from ``X``."""
+
+        X = np.asarray(X, dtype=float)
+        if X.ndim != 2:
+            raise ValueError("AdaptiveQuantileSegmentNormalizer expects 2D input")
+        n_samples, n_features = X.shape
+        if n_features < 2:
+            raise ValueError("At least two spectral features are required")
+
+        diff = np.diff(X, axis=1)
+        activity = np.median(np.abs(diff), axis=0)
+        activity_center = float(np.median(activity))
+        activity_spread = float(
+            median_abs_deviation(activity, scale="normal") or 0.0
+        )
+        if not np.isfinite(activity_spread) or activity_spread == 0.0:
+            activity_spread = max(activity_center, 1.0)
+        threshold = activity_center + 0.5 * activity_spread
+
+        candidates = np.where(activity > threshold)[0] + 1
+        segments = [0]
+        for idx in candidates:
+            idx = int(idx)
+            if idx - segments[-1] < self.min_segment_size:
+                continue
+            if n_features - idx < self.min_segment_size:
+                continue
+            if idx not in segments:
+                segments.append(idx)
+        if segments[-1] != n_features:
+            segments.append(n_features)
+        if len(segments) == 2:  # enforce at least one adaptive split
+            midpoint = n_features // 2
+            if midpoint - segments[0] >= self.min_segment_size:
+                segments.insert(1, midpoint)
+            elif n_features - self.min_segment_size > segments[0]:
+                segments.insert(1, n_features - self.min_segment_size)
+
+        segments = sorted({int(s) for s in segments})
+        if segments[0] != 0:
+            segments.insert(0, 0)
+        if segments[-1] != n_features:
+            segments.append(n_features)
+
+        pairs = list(zip(segments[:-1], segments[1:]))
+        references = []
+        for start, end in pairs:
+            block = X[:, start:end]
+            ref_median = float(np.median(block))
+            q75 = np.percentile(block, 75)
+            q25 = np.percentile(block, 25)
+            ref_iqr = float(q75 - q25)
+            if not np.isfinite(ref_iqr) or ref_iqr == 0.0:
+                ref_iqr = 1.0
+            references.append((start, end, ref_median, ref_iqr))
+
+        energy = np.sqrt(np.mean(diff**2, axis=1))
+        energy_center = float(np.median(energy))
+        energy_spread = float(
+            median_abs_deviation(energy, scale="normal") or 0.0
+        )
+        if not np.isfinite(energy_spread) or energy_spread == 0.0:
+            energy_spread = max(energy_center, 1.0)
+
+        self._segment_pairs_ = pairs
+        self._references_ = references
+        self._energy_center_ = energy_center
+        self._energy_spread_ = energy_spread
+        self._n_features_ = n_features
+        self._n_samples_fit_ = n_samples
+        return self
+
+    def transform(self, X):
+        if not hasattr(self, "_references_"):
+            raise RuntimeError("fit must be called before transform")
+
+        X = np.asarray(X, dtype=float)
+        if X.ndim != 2:
+            raise ValueError("AdaptiveQuantileSegmentNormalizer expects 2D input")
+        if X.shape[1] != self._n_features_:
+            raise ValueError(
+                "Number of features during transform does not match fitted data"
+            )
+
+        Xt = X.copy()
+        eps = np.finfo(float).eps
+        for start, end, ref_median, ref_iqr in self._references_:
+            segment = Xt[:, start:end]
+            sample_median = np.median(segment, axis=1, keepdims=True)
+            q75 = np.percentile(segment, 75, axis=1, keepdims=True)
+            q25 = np.percentile(segment, 25, axis=1, keepdims=True)
+            sample_iqr = q75 - q25
+            sample_iqr = np.where(np.isfinite(sample_iqr), sample_iqr, 0.0)
+            sample_iqr = np.where(np.abs(sample_iqr) < eps, 1.0, sample_iqr)
+            normalized = (segment - sample_median) / sample_iqr
+            Xt[:, start:end] = normalized * ref_iqr + ref_median
+
+        if self.blend_strength > 0:
+            diff = np.diff(X, axis=1)
+            energy = np.sqrt(np.mean(diff**2, axis=1))
+            spread = self._energy_spread_
+            if not np.isfinite(spread) or spread == 0.0:
+                spread = 1.0
+            stability = (energy - self._energy_center_) / spread
+            stability = np.clip(stability, -20, 20)
+            weights = 1.0 / (1.0 + np.exp(self.blend_strength * stability))
+            Xt = weights[:, None] * Xt + (1.0 - weights)[:, None] * X
+
+        return Xt
