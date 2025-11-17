@@ -37,6 +37,7 @@ def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> No
         warnings_logger.propagate = True
     logging.getLogger("kaleido").setLevel(logging.WARNING)
     logging.getLogger("choreography").setLevel(logging.WARNING)
+    logging.getLogger("choreographer").setLevel(logging.WARNING)
 
 
 def log_versions() -> None:
