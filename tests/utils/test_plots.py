@@ -49,21 +49,13 @@ def test_export_static_missing_kaleido(tmp_path, monkeypatch, caplog):
         "nircls.utils.plots.importlib.util.find_spec", lambda name: None
     )
 
-    called = False
-
-    def fail_write_image(self, file, *args, **kwargs):
-        nonlocal called
-        called = True
-
-    monkeypatch.setattr(go.Figure, "write_image", fail_write_image)
     out_base = tmp_path / "plot"
 
     with caplog.at_level("WARNING"):
         _export(fig, out_base, interactive=False)
 
-    assert called is False
-    assert not (tmp_path / "plot.png").exists()
-    assert not (tmp_path / "plot.svg").exists()
+    assert (tmp_path / "plot.png").exists()
+    assert (tmp_path / "plot.svg").exists()
     assert "Kaleido engine not found" in caplog.text
 
 
@@ -73,7 +65,11 @@ def test_export_static_write_image_error(tmp_path, monkeypatch, caplog):
         "nircls.utils.plots.importlib.util.find_spec", lambda name: object()
     )
 
+    called = False
+
     def raise_write_image(self, file, *args, **kwargs):
+        nonlocal called
+        called = True
         raise RuntimeError("boom")
 
     monkeypatch.setattr(go.Figure, "write_image", raise_write_image)
@@ -82,9 +78,10 @@ def test_export_static_write_image_error(tmp_path, monkeypatch, caplog):
     with caplog.at_level("WARNING"):
         _export(fig, out_base, interactive=False)
 
+    assert called is True
     assert "Export failed for" in caplog.text
-    assert not (tmp_path / "plot.png").exists()
-    assert not (tmp_path / "plot.svg").exists()
+    assert (tmp_path / "plot.png").exists()
+    assert (tmp_path / "plot.svg").exists()
 
 
 def test_export_interactive_html_error(tmp_path, monkeypatch, caplog):
