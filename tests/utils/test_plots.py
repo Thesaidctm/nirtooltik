@@ -7,6 +7,8 @@ import pytest
 
 from nircls.utils.palettes import PALETTE_MAP, Palette
 from nircls.utils.plots import (
+    _PLACEHOLDER_PNG,
+    _PLACEHOLDER_SVG,
     _export,
     plot_pls_loadings,
     plot_pls_weights,
@@ -62,8 +64,8 @@ def test_export_static_missing_kaleido(tmp_path, monkeypatch, caplog):
         _export(fig, out_base, interactive=False)
 
     assert called is False
-    assert not (tmp_path / "plot.png").exists()
-    assert not (tmp_path / "plot.svg").exists()
+    assert (tmp_path / "plot.png").read_bytes() == _PLACEHOLDER_PNG
+    assert (tmp_path / "plot.svg").read_text() == _PLACEHOLDER_SVG
     assert "Kaleido engine not found" in caplog.text
 
 
@@ -83,8 +85,8 @@ def test_export_static_write_image_error(tmp_path, monkeypatch, caplog):
         _export(fig, out_base, interactive=False)
 
     assert "Export failed for" in caplog.text
-    assert not (tmp_path / "plot.png").exists()
-    assert not (tmp_path / "plot.svg").exists()
+    assert (tmp_path / "plot.png").read_bytes() == _PLACEHOLDER_PNG
+    assert (tmp_path / "plot.svg").read_text() == _PLACEHOLDER_SVG
 
 
 def test_export_interactive_html_error(tmp_path, monkeypatch, caplog):

@@ -113,7 +113,7 @@ def _export(fig: "go.Figure", out_base: Path, interactive: bool) -> None:
                 logger.debug("Exported %s", out)
             except Exception as exc:  # pragma: no cover - small message
                 logger.warning("Export failed for %s: %s", out, exc)
-                if "kaleido" in str(exc).lower() and not out.exists():
+                if not out.exists():
                     _write_placeholder_image(out)
 
     if interactive:
