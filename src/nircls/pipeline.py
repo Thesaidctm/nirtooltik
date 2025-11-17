@@ -1005,6 +1005,34 @@ def _maybe_run_qc(
         else:
             labels = pd.Series(y, index=X.index)
 
+        def _record_pca(step_slug: str, scores: pd.DataFrame, *, key_suffix: str) -> None:
+            scores_export = scores.copy()
+            scores_export["target"] = labels.reindex(scores.index)
+
+            key = f"pca_{key_suffix}"
+            entry[key] = scores_export.to_dict(orient="index")
+
+            per_step_frames.setdefault(step_slug, []).append(
+                (
+                    _make_sheet_name(base_sheet, step_slug, sheet_names),
+                    scores_export,
+                )
+            )
+
+            step_dir = Path(step_slug)
+            excel_rel = step_dir / f"qc_pca_{step_slug}.xlsx"
+            entry[f"{key}_file"] = excel_rel.as_posix()
+
+            fig_stem = f"{Path(ds['file']).stem}__{ds['target']}__pca_{step_slug}"
+            fig_rel = step_dir / "figures" / fig_stem
+            entry[f"{key}_figure"] = fig_rel.with_suffix(".png").as_posix()
+            fig_path = out_dir / fig_rel
+            fig_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                plot_pca_scores(scores, labels, fig_path, interactive=interactive)
+            except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+                logger.warning("Skipping PCA plot export for %s: %s", step_slug, exc)
+
         raw_scores = pca_outliers(X, n_components=2)
         raw_export = raw_scores.copy()
         raw_export["target"] = labels
@@ -1018,6 +1046,8 @@ def _maybe_run_qc(
         }
 
         base_sheet = f"{idx}_{Path(ds['file']).stem}_{ds['target']}"
+
+        _record_pca("raw", raw_scores, key_suffix="raw")
 
         for step in steps_cfg:
             step_slug = _normalize_step(step)
@@ -1043,29 +1073,7 @@ def _maybe_run_qc(
                 Xp_df = X
 
             scores = pca_outliers(Xp_df, n_components=2)
-            scores_export = scores.copy()
-            scores_export["target"] = labels.reindex(scores.index)
-
-            key = f"pca_{step}"
-            entry[key] = scores_export.to_dict(orient="index")
-
-            per_step_frames.setdefault(step_slug, []).append(
-                (
-                    _make_sheet_name(base_sheet, step_slug, sheet_names),
-                    scores_export,
-                )
-            )
-
-            step_dir = Path(step_slug)
-            excel_rel = step_dir / f"qc_pca_{step_slug}.xlsx"
-            entry[f"{key}_file"] = excel_rel.as_posix()
-
-            fig_stem = f"{Path(ds['file']).stem}__{ds['target']}__pca_{step_slug}"
-            fig_rel = step_dir / "figures" / fig_stem
-            entry[f"{key}_figure"] = fig_rel.with_suffix(".png").as_posix()
-            fig_path = out_dir / fig_rel
-            fig_path.parent.mkdir(parents=True, exist_ok=True)
-            plot_pca_scores(scores, labels, fig_path, interactive=interactive)
+            _record_pca(step_slug, scores, key_suffix=step)
 
         report.append(entry)
 
@@ -1076,9 +1084,12 @@ def _maybe_run_qc(
         excel_rel = step_dir / f"qc_pca_{slug}.xlsx"
         xlsx_path = out_dir / excel_rel
         xlsx_path.parent.mkdir(parents=True, exist_ok=True)
-        with pd.ExcelWriter(xlsx_path) as writer:
-            for sheet_name, frame in frames:
-                frame.to_excel(writer, sheet_name=sheet_name, index=True)
+        try:
+            with pd.ExcelWriter(xlsx_path) as writer:
+                for sheet_name, frame in frames:
+                    frame.to_excel(writer, sheet_name=sheet_name, index=True)
+        except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+            logger.warning("Skipping PCA Excel export for %s: %s", slug, exc)
 
     with open(out_dir / "qc_report.json", "w") as f:
         json.dump(report, f, indent=2)
