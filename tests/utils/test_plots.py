@@ -2,8 +2,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import pytest
+
+pytest.importorskip("plotly")
+
+import plotly.graph_objects as go
 
 from nircls.utils.palettes import PALETTE_MAP, Palette
 from nircls.utils.plots import (
