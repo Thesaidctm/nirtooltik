@@ -9,10 +9,11 @@ from typing import Any, Union
 import yaml  # type: ignore[import-untyped]
 
 from ..config_schema import ConfigModel
+from ..core.settings import settings
 from ..processing.models.factory import get_model_builders, get_model_descriptions
 from ..processing.pipeline import run_multiple_eval, train_and_save
 from ..utils.errors import DataError, ModelError
-from ..utils.misc import RESULTS_DIR, ensure_dirs, make_run_id
+from ..utils.misc import ensure_dirs, make_run_id
 from .common import (
     PREPROCESS_DESCRIPTIONS,
     _get_preprocess_description,
@@ -99,7 +100,7 @@ def run_wizard(args: argparse.Namespace) -> int:
         cfg_obj = ConfigModel(**cfg_dict)
         run_id = make_run_id("wizard")
         setup_run_logging(run_id, args.log_level_value, args.log_file)
-        base_dir = Path(cfg_obj.data.out_dir or RESULTS_DIR) / run_id
+        base_dir = Path(cfg_obj.data.out_dir or settings.RESULTS_DIR) / run_id
         ensure_dirs(base_dir)
         train_dir = base_dir / "train"
         ensure_dirs(train_dir)

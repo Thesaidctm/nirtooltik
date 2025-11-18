@@ -12,12 +12,16 @@ import yaml  # type: ignore[import-untyped]
 
 from .. import __version__
 from ..config_schema import ConfigModel, ValidationError
-from ..utils.misc import RESULTS_DIR, ensure_dirs
+from ..core.settings import settings
+from ..utils.misc import ensure_dirs
 from ..utils.logging import setup_logging
 
 LANG = "en"
 
 logger = logging.getLogger(__name__)
+
+# Backwards-compatible alias for the configured results directory
+RESULTS_DIR = settings.RESULTS_DIR
 
 
 # Human-friendly names for interactive wizard choices
@@ -530,7 +534,7 @@ def load_config(
 def setup_run_logging(run_id: str, log_level: int, log_file: Path | None) -> Path:
     """Configure run-specific logging and return the log path."""
 
-    log_path = log_file or RESULTS_DIR / run_id / "nircls.log"
+    log_path = log_file or settings.RESULTS_DIR / run_id / "nircls.log"
     ensure_dirs(log_path.parent)
     setup_logging(level=log_level, log_file=log_path)
     return log_path

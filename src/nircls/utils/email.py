@@ -15,6 +15,7 @@ from pathlib import Path
 import keyring
 
 from .logging import logger
+from ..core.settings import settings
 
 
 def _load_config() -> dict:
@@ -27,11 +28,11 @@ def _load_config() -> dict:
     """
 
     cfg: dict = {}
-    cfg_path = os.getenv("NIRCLS_EMAIL_CONFIG")
+    cfg_path = settings.EMAIL_CONFIG_PATH
     if cfg_path is None:
         default_path = Path.home() / ".nircls_email.json"
         if default_path.exists():
-            cfg_path = str(default_path)
+            cfg_path = default_path
     if cfg_path:
         try:
             cfg = json.loads(Path(cfg_path).read_text(encoding="utf-8"))
@@ -47,7 +48,7 @@ def _load_config() -> dict:
             "from_addr": os.getenv("NIRCLS_EMAIL_FROM", cfg.get("from_addr")),
             "to_addr": os.getenv("NIRCLS_EMAIL_TO", cfg.get("to_addr")),
             "use_tls": os.getenv("NIRCLS_EMAIL_TLS", str(cfg.get("use_tls", "1"))),
-            "results_dir": os.getenv("NIRCLS_RESULTS", cfg.get("results_dir")),
+            "results_dir": cfg.get("results_dir", str(settings.RESULTS_DIR)),
         }
     )
 
@@ -72,11 +73,7 @@ def _save_config(cfg: dict) -> None:
     """
 
     password = cfg.pop("password", None)
-    cfg_path = os.getenv("NIRCLS_EMAIL_CONFIG")
-    if cfg_path is None:
-        cfg_path = Path.home() / ".nircls_email.json"
-    else:
-        cfg_path = Path(cfg_path)
+    cfg_path = settings.EMAIL_CONFIG_PATH or (Path.home() / ".nircls_email.json")
     try:  # pragma: no cover - best effort
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")

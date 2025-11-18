@@ -1,18 +1,21 @@
 
 from __future__ import annotations
-from pathlib import Path
 from datetime import datetime
 import os
 import random
 import hashlib
 import subprocess
+from pathlib import Path
 
 import numpy as np
 
 
+from ..core.settings import settings
+
+
 # Default directories for raw data and results
-RAW_DIR = Path(os.getenv("NIRCLS_RAW", "data/RAW"))
-RESULTS_DIR = Path(os.getenv("NIRCLS_RESULTS", "results"))
+RAW_DIR = settings.RAW_DIR
+RESULTS_DIR = settings.RESULTS_DIR
 
 def ensure_dirs(*paths: Path) -> None:
     """Create directories if they do not already exist."""

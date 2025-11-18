@@ -5,6 +5,7 @@ import logging
 import sys
 from pathlib import Path
 
+from ..core.settings import settings
 from ..processing.io import export_xy_xlsx, summarize_dataset
 from ..processing.pipeline import prepare_inputs
 from ..utils.errors import DataError
@@ -41,7 +42,7 @@ def run_prepare_data(args: argparse.Namespace) -> int:
 
     run_id = make_run_id("prepare")
     setup_run_logging(run_id, args.log_level_value, args.log_file)
-    out_dir = Path(cfg.data.out_dir or common.RESULTS_DIR) / run_id
+    out_dir = Path(cfg.data.out_dir or settings.RESULTS_DIR) / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
     try:

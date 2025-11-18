@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml  # type: ignore[import-untyped]
 
 from ..config_schema import ConfigModel, ValidationError
+from ..core.settings import settings
 from ..processing.io import export_xy_xlsx
 from ..processing.pipeline import prepare_inputs, run_multiple_eval, train_and_save
 from ..utils.errors import DataError, ModelError
@@ -45,7 +46,7 @@ def run_demo(args: argparse.Namespace) -> int:
 
     run_id = make_run_id("demo")
     setup_run_logging(run_id, args.log_level_value, args.log_file)
-    base_dir = Path(cfg.data.out_dir or common.RESULTS_DIR) / run_id
+    base_dir = Path(cfg.data.out_dir or settings.RESULTS_DIR) / run_id
     ensure_dirs(base_dir)
 
     ds_list = []

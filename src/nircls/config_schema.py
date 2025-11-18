@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, Required, ValidationError, root_validator
 
-from .utils.misc import RESULTS_DIR
+from .core.settings import settings
 from .utils.palettes import Palette
 
 
@@ -39,7 +39,7 @@ class DataConfig(BaseModel):
         "classification", description="Task type for the provided targets"
     )
     out_dir: Optional[str] = Field(
-        default_factory=lambda: str(RESULTS_DIR),
+        default_factory=lambda: str(settings.RESULTS_DIR),
         description="Base output directory",
     )
     qc: bool = False

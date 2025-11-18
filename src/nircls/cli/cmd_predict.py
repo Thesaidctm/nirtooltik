@@ -5,6 +5,7 @@ import logging
 import sys
 from pathlib import Path
 
+from ..core.settings import settings
 from ..processing.pipeline import predict_with_model
 from ..utils.errors import DataError, ModelError
 from . import common
@@ -17,7 +18,7 @@ def register_subparser(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser("predict")
     parser.add_argument("--model", required=True)
     parser.add_argument("--data", required=True)
-    parser.add_argument("--output", default=str(common.RESULTS_DIR))
+    parser.add_argument("--output", default=str(settings.RESULTS_DIR))
     parser.set_defaults(func=run_predict)
 
 

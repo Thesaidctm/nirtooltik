@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -13,7 +12,8 @@ SRC_DIR = Path(__file__).resolve().parents[3]
 if SRC_DIR.exists() and str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from nircls.db.database import Base, DATABASE_URL  # noqa: E402
+from nircls.core.settings import settings  # noqa: E402
+from nircls.db.database import Base  # noqa: E402
 from nircls.db import models  # noqa: F401,E402  # ensure models are imported
 
 config = context.config
@@ -21,8 +21,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Allow DATABASE_URL from environment to override the default configuration
-config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", DATABASE_URL))
+# Use the configured database URL
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 target_metadata = Base.metadata
 
