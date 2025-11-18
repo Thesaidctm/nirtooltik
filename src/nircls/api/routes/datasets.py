@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ... import i18n
@@ -44,3 +45,32 @@ def create_new_dataset(
         created_by_id=current_user.user_id,
         storage_path=payload.storage_path,
     )
+
+
+@router.post("/{dataset_id}/upload")
+async def upload_dataset_file(
+    dataset_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    # Validação simples de extensão
+    allowed_extensions = {".csv", ".xlsx"}
+    _, ext = os.path.splitext(file.filename or "")
+    if ext.lower() not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type. Allowed: .csv, .xlsx",
+        )
+
+    # Opcional: checar tamanho do arquivo (se o servidor tiver essa info)
+    # Este passo pode depender da infra; aqui podemos apenas ler o conteúdo para um buffer temporário
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty file",
+        )
+
+    # TODO: salvar em storage e agendar parsing
+    # Por enquanto, apenas retorne um ack simples
+    return {"dataset_id": dataset_id, "filename": file.filename, "size": len(content)}
