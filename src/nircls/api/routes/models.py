@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_user, get_db
@@ -12,6 +13,16 @@ from ...db import crud
 from ...db.models import ModelRegistry, User
 
 router = APIRouter()
+
+
+class ModelEvalRequest(BaseModel):
+    dataset_id: int
+    target_index: int = 0
+
+
+class ModelEvalResponse(BaseModel):
+    dataset_id: int
+    metrics: Dict[str, float]
 
 
 @router.get("", response_model=List[ModelRead])
@@ -70,3 +81,20 @@ def predict_with_registered_model(
 ):
     y_hat = services.models.predict_with_model(db, model_id=model_id, spectra=req.spectra)
     return PredictResponse(y_hat=y_hat)
+
+
+@router.post("/{model_id}/evaluate", response_model=ModelEvalResponse)
+def evaluate_model_on_dataset_endpoint(
+    model_id: int,
+    req: ModelEvalRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    metrics = services.models.evaluate_model_on_dataset(
+        db,
+        model_id=model_id,
+        dataset_id=req.dataset_id,
+        target_index=req.target_index,
+        out_dir=None,
+    )
+    return ModelEvalResponse(dataset_id=req.dataset_id, metrics=metrics)
