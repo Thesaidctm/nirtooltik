@@ -11,7 +11,7 @@ import pandas as pd
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 import nircls
-from nircls.cli import _load_preprocess_steps
+from nircls.cli.common import _load_preprocess_steps
 
 
 def test_version_cli():
