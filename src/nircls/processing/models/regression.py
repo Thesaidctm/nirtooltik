@@ -18,6 +18,7 @@ __all__ = [
     "REGRESSION_DEFAULT_GRIDS",
     "REGRESSION_MODEL_BUILDERS",
     "REGRESSION_MODEL_DESCRIPTIONS",
+    "default_pls_components",
 ]
 
 
@@ -53,6 +54,15 @@ REGRESSION_MODEL_DESCRIPTIONS: Dict[str, str] = {
     "DECISIONTREEREGRESSOR": "Decision Tree Regressor",
     "DT_REG": "Decision Tree Regressor",
 }
+
+
+def default_pls_components(n_features: int, n_samples: int) -> List[int]:
+    max_comp = min(20, n_features, max(1, n_samples - 1))
+    base = [2, 4, 6, 8, 10]
+    if max_comp not in base:
+        base.append(max_comp)
+    comps = sorted(set(c for c in base if 1 <= c <= max_comp))
+    return comps
 
 
 REGRESSION_MODEL_BUILDERS = {

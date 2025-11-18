@@ -43,7 +43,12 @@ from sklearn.preprocessing import LabelEncoder
 from ... import i18n
 from .data_loading import prepare_inputs
 from .evaluation import _maybe_run_qc, _save_metrics, _save_plots, _save_pls_diagnostics
-from .hyperparameter_search import _get_n_components, _sanitize_n_jobs, LoggingGridSearchCV
+from .hyperparameter_search import (
+    _get_n_components,
+    _sanitize_n_jobs,
+    LoggingGridSearchCV,
+    compute_pls_lv_cv_curve,
+)
 from .metrics_utils import _rmse, _summarize_scores
 from .model_factory import (
     _call_build_pipeline,
@@ -53,10 +58,11 @@ from .model_factory import (
     _infer_task_type,
     _update_row_with_best_params,
 )
-from .persistence import build_model_spec, save_run_metadata
+from .persistence import build_model_spec, save_pls_lv_curve, save_run_metadata
 from .preprocessing import _validate_cfg
 from .splitting import CVConfig, _validate_split_capacity
 from ..io import export_xy_xlsx, summarize_dataset
+from ..models.regression import default_pls_components
 from ...core.services import runs as run_services
 from ...db import crud
 from ...db.models import Dataset, Run
@@ -116,6 +122,44 @@ def _relative_to_out_dir(path: Path, out_dir: Path) -> str:
         return path.relative_to(out_dir).as_posix()
     except ValueError:
         return path.as_posix()
+
+
+def _is_pls_regression_model(name: str) -> bool:
+    base = (name or "").split("__", 1)[0].upper()
+    return base in {"PLSREGRESSION", "PLSR", "PLS_REG"}
+
+
+def _is_lv_curve_enabled(model_cfg: Any) -> bool:
+    if model_cfg is None:
+        return False
+    configured = getattr(model_cfg, "compute_lv_curve", None)
+    if configured is None and isinstance(model_cfg, dict):
+        configured = model_cfg.get("compute_lv_curve")
+    return bool(configured)
+
+
+def _maybe_compute_pls_lv_curve(
+    *,
+    model_name: str,
+    model_cfg: Any,
+    estimator: Any,
+    X,
+    y,
+    cv,
+    groups=None,
+    out_dir: Path,
+) -> Optional[Path]:
+    if not _is_pls_regression_model(model_name):
+        return None
+    if not _is_lv_curve_enabled(model_cfg):
+        return None
+    candidates = default_pls_components(X.shape[1], X.shape[0])
+    rmsecv_map = compute_pls_lv_cv_curve(
+        estimator, X, y, cv, candidates, groups
+    )
+    if not rmsecv_map:
+        return None
+    return save_pls_lv_curve(rmsecv_map, out_dir)
 
 
 def _run_cv_classification(
@@ -777,7 +821,7 @@ def _run_cv_regression(
         for idx, (name, pipe, grid) in enumerate(pipelines):
             if not model_cfgs:
                 continue
-            _ = model_cfgs[idx % len(model_cfgs)]
+            model_cfg = model_cfgs[idx % len(model_cfgs)]
             logger.info("Running %s", name)
             scores_val: Dict[str, List[float]] = {
                 "RMSE": [],
@@ -801,6 +845,16 @@ def _run_cv_regression(
             n_comp_list: List[int] = []
             results_dir = out_dir / "results"
             results_dir.mkdir(parents=True, exist_ok=True)
+            pls_curve_path = _maybe_compute_pls_lv_curve(
+                model_name=name,
+                model_cfg=model_cfg,
+                estimator=pipe,
+                X=X,
+                y=y,
+                cv=outer,
+                groups=groups,
+                out_dir=results_dir,
+            )
 
             def _export_residuals_csv() -> Optional[Path]:
                 if not fold_predictions:
@@ -901,6 +955,10 @@ def _run_cv_regression(
                 "model": model_label,
                 "calibrated": False,
             }
+            if pls_curve_path is not None:
+                row["pls_lv_curve"] = _relative_to_out_dir(
+                    pls_curve_path, out_dir
+                )
             residuals_path = _export_residuals_csv()
             if residuals_path is not None:
                 row["cv_residuals_csv"] = _relative_to_out_dir(
@@ -1337,6 +1395,8 @@ def _run_holdout_regression(
         pipelines = _call_build_pipeline(
             cfg, random_state=random_state, n_jobs=n_jobs
         )
+        results_dir = out_dir / "results"
+        results_dir.mkdir(parents=True, exist_ok=True)
         Xtr, Xte, ytr, yte = train_test_split(
             X.values,
             y,
@@ -1367,6 +1427,15 @@ def _run_holdout_regression(
                     shuffle=True,
                     random_state=random_state,
                 )
+            pls_curve_path = _maybe_compute_pls_lv_curve(
+                model_name=name,
+                model_cfg=m_cfg,
+                estimator=pipe,
+                X=Xtr,
+                y=ytr,
+                cv=inner,
+                out_dir=results_dir,
+            )
             gs = GridSearchCV(
                 pipe,
                 grid,
@@ -1440,6 +1509,10 @@ def _run_holdout_regression(
                 _get_preprocess_steps_from_pipeline(best)
             )
             row["preprocess_steps"] = preprocess_steps
+            if pls_curve_path is not None:
+                row["pls_lv_curve"] = _relative_to_out_dir(
+                    pls_curve_path, out_dir
+                )
             _update_row_with_best_params(row, gs.best_params_)
             pls_artifacts = _save_pls_diagnostics(
                 template_pipe=pipe,
@@ -2249,6 +2322,8 @@ def _train_and_save_regression(
             groups = ds.get("groups")
             out_dir.mkdir(parents=True, exist_ok=True)
             save_run_metadata(cfg, out_dir)
+            results_dir = out_dir / "results"
+            results_dir.mkdir(parents=True, exist_ok=True)
 
             input_hashes = {}
             if Path(ds["file"]).exists():
@@ -2270,6 +2345,7 @@ def _train_and_save_regression(
             name, pipe, grid = _call_build_pipeline(
                 cfg, random_state=random_state, n_jobs=n_jobs
             )[0]
+            model_cfg = (cfg.get("models") or [{}])[0]
             steps_cfg = cfg.get("preprocess", {}).get("steps", [])
             logger.info("Running %s with steps: %s", name, steps_cfg)
             mem_start = None
@@ -2313,6 +2389,16 @@ def _train_and_save_regression(
                     shuffle=True,
                     random_state=random_state,
                 )
+            pls_curve_path = _maybe_compute_pls_lv_curve(
+                model_name=name,
+                model_cfg=model_cfg,
+                estimator=pipe,
+                X=X,
+                y=y,
+                cv=cv,
+                groups=fit_kwargs.get("groups"),
+                out_dir=results_dir,
+            )
             gs = LoggingGridSearchCV(
                 pipe,
                 grid,
@@ -2378,6 +2464,10 @@ def _train_and_save_regression(
                 "train_RMSEP": float(rmsep) if np.isfinite(rmsep) else None,
                 "train_RPD": float(rpd) if np.isfinite(rpd) else None,
             }
+            if pls_curve_path is not None:
+                row["pls_lv_curve"] = _relative_to_out_dir(
+                    pls_curve_path, out_dir
+                )
             if n_comp is not None:
                 row["n_components"] = int(n_comp)
             _update_row_with_best_params(row, gs.best_params_)
@@ -2598,6 +2688,9 @@ def run_pipeline(
                 "summary_csv": str(summary_dir / "metrics_summary.csv"),
                 "summary_xlsx": str(summary_dir / "metrics_summary.xlsx"),
             }
+            curve_path = train_dir / "results" / "pls_lv_curve.json"
+            if curve_path.exists():
+                metrics_manifest["pls_lv_curve"] = str(curve_path)
             extras = {
                 "prepared_data": str(train_dir / "prepared_XY.xlsx"),
             }

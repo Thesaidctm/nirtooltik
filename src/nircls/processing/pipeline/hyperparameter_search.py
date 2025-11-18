@@ -5,9 +5,13 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
+import numpy as np
+from sklearn.base import clone
 from sklearn.model_selection import GridSearchCV, ParameterGrid
+from sklearn.metrics import make_scorer, mean_squared_error
+from sklearn.model_selection import cross_val_score
 
 logger = logging.getLogger(__name__)
 
@@ -62,4 +66,48 @@ def _get_n_components(best_params: Dict[str, Any]) -> Optional[int]:
     return None
 
 
-__all__ = ["_sanitize_n_jobs", "LoggingGridSearchCV", "_get_n_components"]
+def compute_pls_lv_cv_curve(
+    base_estimator,
+    X,
+    y,
+    cv,
+    candidates: List[int],
+    groups=None,
+) -> Dict[int, float]:
+    """
+    Calcula RMSECV para cada n_components em ``candidates``.
+    Retorna um dict {n_components: rmsecv}.
+    NÃO escolhe LV ótima; apenas calcula a curva.
+    """
+
+    scorer = make_scorer(mean_squared_error, greater_is_better=False)
+    rmsecv_map: Dict[int, float] = {}
+
+    params = getattr(base_estimator, "get_params", None)
+    param_key = "n_components"
+    if callable(params):
+        for key in params().keys():
+            if key.endswith("n_components"):
+                param_key = key
+                break
+
+    for n_comp in candidates:
+        est = clone(base_estimator)
+        try:
+            est.set_params(**{param_key: n_comp})
+        except ValueError:
+            continue
+        scores = cross_val_score(est, X, y, cv=cv, scoring=scorer, groups=groups)
+        mse_vals = -scores  # porque greater_is_better=False
+        rmse_vals = np.sqrt(mse_vals)
+        rmsecv_map[n_comp] = float(np.mean(rmse_vals))
+
+    return rmsecv_map
+
+
+__all__ = [
+    "_sanitize_n_jobs",
+    "LoggingGridSearchCV",
+    "_get_n_components",
+    "compute_pls_lv_cv_curve",
+]
