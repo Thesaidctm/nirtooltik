@@ -16,6 +16,19 @@ from sqlalchemy.orm import relationship
 from .database import Base
 
 
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    created_at = Column(DateTime, server_default=sa.func.now())
+
+    users = relationship("User", back_populates="organization")
+    projects = relationship("Project", back_populates="organization")
+    datasets = relationship("Dataset", back_populates="organization")
+    runs = relationship("Run", back_populates="organization")
+
+
 class Role(Base):
     __tablename__ = "roles"
 
@@ -32,11 +45,13 @@ class User(Base):
     username = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(128), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
 
     roles = relationship("Role", secondary="user_roles", back_populates="users")
     projects = relationship("Project", back_populates="owner")
     datasets = relationship("Dataset", back_populates="created_by")
     runs = relationship("Run", back_populates="user")
+    organization = relationship("Organization", back_populates="users")
 
 
 class Variavel(Base):
@@ -60,12 +75,14 @@ class Project(Base):
     name = Column(String(255), nullable=False, unique=True)
     description = Column(String(500), nullable=True)
     owner_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
 
     owner = relationship("User", back_populates="projects")
     datasets = relationship(
         "Dataset", back_populates="project", cascade="all, delete-orphan"
     )
     runs = relationship("Run", back_populates="project")
+    organization = relationship("Organization", back_populates="projects")
 
 
 class Dataset(Base):
@@ -81,10 +98,12 @@ class Dataset(Base):
     project_id = Column(Integer, ForeignKey("projects.project_id"), nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     storage_path = Column(String(500), nullable=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
 
     project = relationship("Project", back_populates="datasets")
     created_by = relationship("User", back_populates="datasets")
     runs = relationship("Run", back_populates="dataset")
+    organization = relationship("Organization", back_populates="datasets")
 
 
 class Run(Base):
@@ -95,6 +114,7 @@ class Run(Base):
     project_id = Column(Integer, ForeignKey("projects.project_id"), nullable=True)
     dataset_id = Column(Integer, ForeignKey("datasets.dataset_id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     config = Column(JSON, nullable=False)
     status = Column(String(50), nullable=False, default="running")
     artifacts = Column(JSON, nullable=True)
@@ -106,6 +126,7 @@ class Run(Base):
     dataset = relationship("Dataset", back_populates="runs")
     user = relationship("User", back_populates="runs")
     models = relationship("ModelRegistry", back_populates="run")
+    organization = relationship("Organization", back_populates="runs")
 
 
 class ModelRegistry(Base):

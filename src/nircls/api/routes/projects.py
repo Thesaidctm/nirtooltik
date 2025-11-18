@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ... import i18n
-from ..deps import get_current_user, get_db, require_role
+from ..deps import get_current_user, get_db, is_global_admin, require_role
 from ..schemas import ProjectCreate, ProjectRead
 from ...db import crud
 from ...db.models import Project, User
@@ -14,13 +14,21 @@ from ...db.models import Project, User
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 @router.get("", response_model=List[ProjectRead])
-def list_all_projects(db: Session = Depends(get_db)) -> List[Project]:
-    return crud.list_projects(db)
+def list_all_projects(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> List[Project]:
+    organization_id = None if is_global_admin(current_user) else current_user.organization_id
+    return crud.list_projects(db, organization_id=organization_id)
 
 
 @router.get("/{project_id}", response_model=ProjectRead)
-def get_project_detail(project_id: int, db: Session = Depends(get_db)) -> Project:
-    project = crud.get_project(db, project_id)
+def get_project_detail(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Project:
+    organization_id = None if is_global_admin(current_user) else current_user.organization_id
+    project = crud.get_project(db, project_id, organization_id=organization_id)
     if project is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -45,4 +53,5 @@ def create_new_project(
         name=payload.name,
         description=payload.description,
         owner_id=current_user.user_id,
+        organization_id=current_user.organization_id,
     )

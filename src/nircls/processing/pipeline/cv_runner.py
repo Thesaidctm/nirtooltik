@@ -2545,6 +2545,7 @@ def run_pipeline(
                 project_id=resolved_project_id,
                 dataset_id=dataset_id,
                 user_id=user_id,
+                organization_id=None,
                 config=cfg,
                 status="running",
                 artifacts={"base_dir": str(out_dir)},
