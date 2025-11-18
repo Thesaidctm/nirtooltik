@@ -1,42 +1,24 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_user, get_db
+from ..schemas import RunCreate, RunRead
 from ...core.services import runs as run_service
 from ...db import crud
 from ...db.models import Run, User
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
-
-class RunCreate(BaseModel):
-    project_id: Optional[int] = None
-    dataset_id: Optional[int] = None
-    config: Dict[str, Any]
-    status: Optional[str] = "running"
-    artifacts: Optional[Dict[str, Any]] = None
-
-
-class RunResponse(RunCreate):
-    run_id: int
-    user_id: Optional[int] = None
-    error_message: Optional[str] = None
-
-    class Config:
-        orm_mode = True
-
-
-@router.get("", response_model=List[RunResponse])
+@router.get("", response_model=List[RunRead])
 def list_all_runs(db: Session = Depends(get_db)) -> List[Run]:
     return crud.list_runs(db)
 
 
-@router.get("/{run_id}", response_model=RunResponse)
+@router.get("/{run_id}", response_model=RunRead)
 def get_run_detail(run_id: int, db: Session = Depends(get_db)) -> Run:
     run = crud.get_run(db, run_id)
     if run is None:
@@ -44,7 +26,7 @@ def get_run_detail(run_id: int, db: Session = Depends(get_db)) -> Run:
     return run
 
 
-@router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RunRead, status_code=status.HTTP_201_CREATED)
 def create_new_run(
     payload: RunCreate,
     db: Session = Depends(get_db),
@@ -56,6 +38,6 @@ def create_new_run(
         dataset_id=payload.dataset_id,
         user_id=current_user.user_id,
         config=payload.config,
-        status=payload.status or "running",
+        status=payload.status,
         artifacts=payload.artifacts,
     )
