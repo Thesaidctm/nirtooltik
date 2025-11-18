@@ -7,12 +7,20 @@ from sqlalchemy.orm import Session
 from ..models import Dataset
 
 
-def list_datasets(session: Session) -> List[Dataset]:
-    return session.query(Dataset).all()
+def list_datasets(session: Session, *, organization_id: Optional[int] = None) -> List[Dataset]:
+    query = session.query(Dataset)
+    if organization_id is not None:
+        query = query.filter(Dataset.organization_id == organization_id)
+    return query.all()
 
 
-def get_dataset(session: Session, dataset_id: int) -> Optional[Dataset]:
-    return session.get(Dataset, dataset_id)
+def get_dataset(
+    session: Session, dataset_id: int, *, organization_id: Optional[int] = None
+) -> Optional[Dataset]:
+    dataset = session.get(Dataset, dataset_id)
+    if organization_id is not None and dataset and dataset.organization_id != organization_id:
+        return None
+    return dataset
 
 
 def create_dataset(
@@ -24,6 +32,7 @@ def create_dataset(
     project_id: int | None = None,
     created_by_id: int | None = None,
     storage_path: str | None = None,
+    organization_id: int | None = None,
 ) -> Dataset:
     dataset = Dataset(
         name=name,
@@ -32,6 +41,7 @@ def create_dataset(
         project_id=project_id,
         created_by_id=created_by_id,
         storage_path=storage_path,
+        organization_id=organization_id,
     )
     session.add(dataset)
     session.commit()

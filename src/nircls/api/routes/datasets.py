@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ... import i18n
-from ..deps import get_current_user, get_db
+from ..deps import get_current_user, get_db, is_global_admin
 from ..schemas import DatasetCreate, DatasetRead
 from ...core.services.datasets import save_dataset_file
 from ...db import crud
@@ -16,13 +16,21 @@ from ...db.models import Dataset, User
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 @router.get("", response_model=List[DatasetRead])
-def list_all_datasets(db: Session = Depends(get_db)) -> List[Dataset]:
-    return crud.list_datasets(db)
+def list_all_datasets(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> List[Dataset]:
+    organization_id = None if is_global_admin(current_user) else current_user.organization_id
+    return crud.list_datasets(db, organization_id=organization_id)
 
 
 @router.get("/{dataset_id}", response_model=DatasetRead)
-def get_dataset_detail(dataset_id: int, db: Session = Depends(get_db)) -> Dataset:
-    dataset = crud.get_dataset(db, dataset_id)
+def get_dataset_detail(
+    dataset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dataset:
+    organization_id = None if is_global_admin(current_user) else current_user.organization_id
+    dataset = crud.get_dataset(db, dataset_id, organization_id=organization_id)
     if dataset is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -45,6 +53,7 @@ def create_new_dataset(
         project_id=payload.project_id,
         created_by_id=current_user.user_id,
         storage_path=payload.storage_path,
+        organization_id=current_user.organization_id,
     )
 
 
@@ -55,7 +64,8 @@ async def upload_dataset_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    dataset = crud.get_dataset(db, dataset_id)
+    organization_id = None if is_global_admin(current_user) else current_user.organization_id
+    dataset = crud.get_dataset(db, dataset_id, organization_id=organization_id)
     if dataset is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

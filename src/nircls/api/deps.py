@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .security import SESSION_COOKIE_NAME, decode_token
 from ..db.database import SessionLocal
-from ..db.models import User
+from ..db.models import Organization, User
 from ..utils.errors import AuthError
 
 
@@ -49,11 +49,21 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     return user
 
 
+def is_global_admin(user: User) -> bool:
+    roles = getattr(user, "roles", []) or []
+    return any(getattr(role, "name", None) == "admin" for role in roles)
+
+
+def get_current_organization(
+    user: User = Depends(get_current_user),
+) -> Organization | None:
+    return user.organization
+
+
 def require_role(*roles: str):
     def _dep(user: User = Depends(get_current_user)) -> User:
-        user_role = getattr(user, "role", None)
-        role_name = getattr(user_role, "name", None)
-        if role_name not in roles:
+        user_roles = getattr(user, "roles", []) or []
+        if not any(getattr(role, "name", None) in roles for role in user_roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions",
@@ -62,5 +72,10 @@ def require_role(*roles: str):
 
     return _dep
 
-
-__all__ = ["get_db", "get_current_user", "require_role"]
+__all__ = [
+    "get_db",
+    "get_current_user",
+    "require_role",
+    "get_current_organization",
+    "is_global_admin",
+]

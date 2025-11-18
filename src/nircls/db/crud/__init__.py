@@ -11,6 +11,7 @@ from .projects import create_project, get_project, list_projects
 from .runs import create_run, get_run, list_runs, update_run_status
 from .variables import get_variavel, set_variavel
 from .models import create_model, get_model, list_models, update_model_status
+from .organizations import create_organization, get_organization, list_organizations
 
 __all__ = [
     "create_model",
@@ -41,4 +42,7 @@ __all__ = [
     "get_run",
     "list_runs",
     "update_run_status",
+    "create_organization",
+    "get_organization",
+    "list_organizations",
 ]

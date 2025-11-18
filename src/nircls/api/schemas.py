@@ -17,6 +17,7 @@ class ProjectCreate(ProjectBase):
 class ProjectRead(ProjectBase):
     project_id: int
     owner_id: Optional[int] = None
+    organization_id: Optional[int] = None
 
     class Config:
         orm_mode = True
@@ -38,6 +39,7 @@ class DatasetRead(DatasetBase):
     project_id: Optional[int]
     created_by_id: Optional[int] = None
     storage_path: Optional[str] = None
+    organization_id: Optional[int] = None
 
     class Config:
         orm_mode = True
@@ -64,6 +66,7 @@ class RunRead(RunBase):
     config: Dict[str, Any]
     artifacts: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
+    organization_id: Optional[int] = None
 
     class Config:
         orm_mode = True
@@ -73,6 +76,7 @@ class UserRead(BaseModel):
     user_id: int
     username: str
     email: str
+    organization_id: Optional[int] = None
 
     class Config:
         orm_mode = True
@@ -104,3 +108,15 @@ class PredictRequest(BaseModel):
 
 class PredictResponse(BaseModel):
     y_hat: List[float]
+
+
+class OrganizationCreate(BaseModel):
+    name: str
+
+
+class OrganizationRead(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        orm_mode = True

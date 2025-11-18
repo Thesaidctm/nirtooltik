@@ -7,12 +7,18 @@ from sqlalchemy.orm import Session
 from ..models import Run
 
 
-def list_runs(session: Session) -> List[Run]:
-    return session.query(Run).all()
+def list_runs(session: Session, *, organization_id: Optional[int] = None) -> List[Run]:
+    query = session.query(Run)
+    if organization_id is not None:
+        query = query.filter(Run.organization_id == organization_id)
+    return query.all()
 
 
-def get_run(session: Session, run_id: int) -> Optional[Run]:
-    return session.get(Run, run_id)
+def get_run(session: Session, run_id: int, *, organization_id: Optional[int] = None) -> Optional[Run]:
+    run = session.get(Run, run_id)
+    if organization_id is not None and run and run.organization_id != organization_id:
+        return None
+    return run
 
 
 def get_run_by_uid(session: Session, run_uid: str) -> Optional[Run]:
@@ -30,6 +36,7 @@ def create_run(
     status: str = "running",
     artifacts: Dict[str, Any] | None = None,
     error_message: str | None = None,
+    organization_id: int | None = None,
 ) -> Run:
     run = Run(
         project_id=project_id,
@@ -40,6 +47,7 @@ def create_run(
         status=status,
         artifacts=artifacts,
         error_message=error_message,
+        organization_id=organization_id,
     )
     session.add(run)
     session.commit()
