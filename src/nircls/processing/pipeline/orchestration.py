@@ -63,7 +63,7 @@ from .io import export_xy_xlsx
 from .io import prepare_inputs as _prepare_inputs
 from .io import read_tabular, read_xlsx_xy, summarize_dataset
 from ...core.settings import settings
-from ...db.crud import create_run, update_run_status
+from ...db import crud
 from ...db.models import Dataset, Run
 from ..results.metrics.classification import expected_calibration_error
 from ..results.metrics.regression import (
@@ -3449,7 +3449,7 @@ def run_pipeline(
         if dataset:
             resolved_project_id = dataset.project_id
 
-    run = create_run(
+    run = crud.create_run(
         db,
         project_id=resolved_project_id,
         dataset_id=dataset_id,
@@ -3496,7 +3496,7 @@ def run_pipeline(
             "cv_dir": str(cv_dir),
             "cv_summary_dir": str(summary_dir),
         }
-        updated_run = update_run_status(
+        updated_run = crud.update_run_status(
             db, run.run_id, status="completed", artifacts=artifacts, error_message=None
         )
         return updated_run or run
@@ -3506,7 +3506,7 @@ def run_pipeline(
             "train_dir": str(train_dir),
             "cv_dir": str(cv_dir),
         }
-        update_run_status(
+        crud.update_run_status(
             db,
             run.run_id,
             status="failed",
