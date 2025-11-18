@@ -49,6 +49,7 @@ from .model_factory import (
 from .splitting import _validate_split_capacity
 from .io import summarize_dataset
 from ...core.services import runs as run_services
+from ...db import crud
 from ...db.models import Dataset, Run
 from ..utils.compliance import check_astm_classification
 from ..results.metrics.classification import expected_calibration_error
@@ -64,6 +65,27 @@ from ..utils.split import spxy_split
 from ..utils.y_scramble import y_scramble_scores
 
 logger = logging.getLogger(__name__)
+
+
+class _RunContextFilter(logging.Filter):
+    """Attach run context information to all log records for observability."""
+
+    def __init__(self, run_id: int | None = None, run_uid: str | None = None) -> None:
+        super().__init__()
+        self.run_id = run_id
+        self.run_uid = run_uid
+
+    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover - logging glue
+        if self.run_id is not None:
+            record.run_id = self.run_id
+        if self.run_uid is not None:
+            record.run_uid = self.run_uid
+        return True
+
+
+def _get_run_logger(run_id: int | None, run_uid: str | None) -> logging.LoggerAdapter:
+    extra = {k: v for k, v in {"run_id": run_id, "run_uid": run_uid}.items() if v is not None}
+    return logging.LoggerAdapter(logger, extra)
 
 __all__ = [
     "_run_cv",
@@ -2465,6 +2487,7 @@ def run_pipeline(
     *,
     db: Session,
     run_id: int | None = None,
+    run_uid: str | None = None,
     user_id: int | None = None,
     dataset_id: int | None = None,
     project_id: int | None = None,
@@ -2479,85 +2502,121 @@ def run_pipeline(
 ) -> Run:
     """Execute a full pipeline run and register progress in the database."""
 
-    resolved_project_id = project_id
-    if resolved_project_id is None and dataset_id is not None:
-        dataset = db.get(Dataset, dataset_id)
-        if dataset:
-            resolved_project_id = dataset.project_id
-
-    if run_id is not None:
-        run = db.get(Run, run_id)
-        if run is None:
-            raise ValueError(f"Run with id {run_id} not found")
-    else:
-        run = run_services.create_run(
-            db,
-            project_id=resolved_project_id,
-            dataset_id=dataset_id,
-            user_id=user_id,
-            config=cfg,
-            status="running",
-            artifacts={"base_dir": str(out_dir)},
-        )
-
-    train_dir = out_dir / "train"
-    cv_dir = out_dir / "cv"
-    train_dir.mkdir(parents=True, exist_ok=True)
-    cv_dir.mkdir(parents=True, exist_ok=True)
+    context_filter = _RunContextFilter(run_id=run_id, run_uid=run_uid)
+    logger.addFilter(context_filter)
 
     try:
-        _validate_cfg(cfg, need_data=True, need_models=True, need_cv=True)
-        prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+        resolved_project_id = project_id
+        if resolved_project_id is None and dataset_id is not None:
+            dataset = db.get(Dataset, dataset_id)
+            if dataset:
+                resolved_project_id = dataset.project_id
 
-        train_and_save(
-            cfg,
-            train_dir,
-            random_state=random_state,
-            interactive=interactive,
-            n_jobs=n_jobs,
-            mlflow_uri=mlflow_uri,
-            gs_verbose=gs_verbose,
-            show_progress=show_progress,
-            log_memory=log_memory,
-            resume=resume,
-        )
-        _outputs, summary_dir = run_multiple_eval(
-            cfg,
-            cv_dir,
-            random_state=random_state,
-            interactive=interactive,
-            n_jobs=n_jobs,
-            mlflow_uri=mlflow_uri,
-            log_memory=log_memory,
-            resume=resume,
-        )
-        artifacts = {
-            "base_dir": str(out_dir),
-            "train_dir": str(train_dir),
-            "cv_dir": str(cv_dir),
-            "cv_summary_dir": str(summary_dir),
-        }
-        metrics = {
-            "summary_csv": str(summary_dir / "metrics_summary.csv"),
-            "summary_xlsx": str(summary_dir / "metrics_summary.xlsx"),
-        }
-        return run_services.mark_run_completed(
-            db, run.run_id, artifacts=artifacts, metrics=metrics
-        )
-    except Exception as exc:
-        artifacts = {
-            "base_dir": str(out_dir),
-            "train_dir": str(train_dir),
-            "cv_dir": str(cv_dir),
-        }
-        run_services.mark_run_failed(db, run.run_id, str(exc), artifacts=artifacts)
-        raise
+        run: Run | None = None
+        if run_id is not None:
+            run = db.get(Run, run_id)
+            if run is None:
+                raise ValueError(f"Run with id {run_id} not found")
+            run_uid = run.run_uid or run_uid
+        elif run_uid is not None:
+            run = crud.get_run_by_uid(db, run_uid)
+            if run is None:
+                raise ValueError(f"Run with uid {run_uid} not found")
+        if run is None:
+            run = run_services.create_run(
+                db,
+                project_id=resolved_project_id,
+                dataset_id=dataset_id,
+                user_id=user_id,
+                config=cfg,
+                status="running",
+                artifacts={"base_dir": str(out_dir)},
+                run_uid=run_uid,
+            )
+
+        context_filter.run_id = run.run_id
+        context_filter.run_uid = run.run_uid
+        run_logger = _get_run_logger(run.run_id, run.run_uid)
+        run_logger.info("Starting pipeline execution")
+
+        train_dir = out_dir / "train"
+        cv_dir = out_dir / "cv"
+        train_dir.mkdir(parents=True, exist_ok=True)
+        cv_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            _validate_cfg(cfg, need_data=True, need_models=True, need_cv=True)
+            prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+
+            train_and_save(
+                cfg,
+                train_dir,
+                random_state=random_state,
+                interactive=interactive,
+                n_jobs=n_jobs,
+                mlflow_uri=mlflow_uri,
+                gs_verbose=gs_verbose,
+                show_progress=show_progress,
+                log_memory=log_memory,
+                resume=resume,
+            )
+            _outputs, summary_dir = run_multiple_eval(
+                cfg,
+                cv_dir,
+                random_state=random_state,
+                interactive=interactive,
+                n_jobs=n_jobs,
+                mlflow_uri=mlflow_uri,
+                gs_verbose=gs_verbose,
+                show_progress=show_progress,
+                log_memory=log_memory,
+                resume=resume,
+            )
+            model_path = train_dir / "model.joblib"
+            reports = [train_dir / "model_card.md"]
+            plots = [cv_dir / "figures"]
+            metrics_manifest = {
+                "summary_csv": str(summary_dir / "metrics_summary.csv"),
+                "summary_xlsx": str(summary_dir / "metrics_summary.xlsx"),
+            }
+            extras = {
+                "prepared_data": str(train_dir / "prepared_XY.xlsx"),
+            }
+            run_logger.info("Pipeline completed successfully")
+            return run_services.mark_run_completed(
+                db,
+                run.run_id,
+                base_dir=out_dir,
+                train_dir=train_dir,
+                cv_dir=cv_dir,
+                summary_dir=summary_dir,
+                models=[model_path],
+                plots=plots,
+                reports=reports,
+                metrics=metrics_manifest,
+                extras=extras,
+            )
+        except Exception as exc:
+            artifacts = {
+                "base_dir": str(out_dir),
+                "directories": {
+                    "train": str(train_dir),
+                    "cross_validation": str(cv_dir),
+                },
+            }
+            run_logger.exception("Pipeline failed: %s", exc)
+            run_services.mark_run_failed(db, run.run_id, str(exc), artifacts=artifacts)
+            raise
+    finally:
+        logger.removeFilter(context_filter)
 
 
 def run_experiment(
     cfg: Dict[str, Any],
     out_dir: Path,
     *,
+    run_id: int | None = None,
+    run_uid: str | None = None,
     interactive: bool = False,
     random_state: int = 42,
     n_jobs: int = -1,
@@ -2588,12 +2647,16 @@ def run_experiment(
         :func:`train_and_save` e :func:`run_multiple_eval`.
     """
 
+    context_filter = _RunContextFilter(run_id=run_id, run_uid=run_uid)
+    logger.addFilter(context_filter)
+    run_logger = _get_run_logger(run_id, run_uid)
     email = cfg.get("notification_email")
     try:
         _validate_cfg(cfg, need_data=True, need_models=True, need_cv=True)
         prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
 
         train_dir = out_dir / "train"
+        run_logger.info("Training models for experiment")
         train_outputs = train_and_save(
             cfg,
             train_dir,
@@ -2604,6 +2667,7 @@ def run_experiment(
         )
 
         cv_dir = out_dir / "cv"
+        run_logger.info("Running evaluation for experiment")
         cv_outputs = run_multiple_eval(
             cfg,
             cv_dir,
@@ -2618,7 +2682,10 @@ def run_experiment(
         tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
         if email:
             enviar_email("Erro no processamento", f"{exc}\n\n{tb}", to_addr=email)
+        run_logger.exception("Experiment failed: %s", exc)
         raise
+    finally:
+        logger.removeFilter(context_filter)
 
 
 def evaluate_saved_model(model_path: Path, data_path: Path) -> None:

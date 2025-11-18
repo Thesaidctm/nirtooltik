@@ -45,6 +45,7 @@ class DatasetRead(DatasetBase):
 
 class RunBase(BaseModel):
     status: Literal["running", "completed", "failed", "cancelled"] = "running"
+    run_uid: Optional[str] = None
 
 
 class RunCreate(RunBase):

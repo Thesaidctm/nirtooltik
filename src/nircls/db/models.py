@@ -90,6 +90,7 @@ class Run(Base):
     __tablename__ = "runs"
 
     run_id = Column(Integer, primary_key=True, autoincrement=True)
+    run_uid = Column(String(36), unique=True, nullable=True)
     project_id = Column(Integer, ForeignKey("projects.project_id"), nullable=True)
     dataset_id = Column(Integer, ForeignKey("datasets.dataset_id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)

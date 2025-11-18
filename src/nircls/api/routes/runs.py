@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -40,4 +40,13 @@ def create_new_run(
         config=payload.config,
         status=payload.status,
         artifacts=payload.artifacts,
+        run_uid=payload.run_uid,
     )
+
+
+@router.get("/{run_id}/artifacts", response_model=Dict[str, Any])
+def get_run_artifacts(run_id: int, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    run = crud.get_run(db, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    return run.artifacts or {}
