@@ -17,7 +17,7 @@ from copy import deepcopy
 from datetime import datetime
 from glob import glob
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, TypedDict
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 
@@ -110,6 +110,17 @@ warnings.filterwarnings(
 )
 
 logger = logging.getLogger(__name__)
+
+
+class CVConfig(TypedDict, total=False):
+    """Cross-validation configuration options."""
+
+    cv_method: str
+    inner_folds: int
+    outer_folds: int
+    random_state: int
+    strategies: List[Dict[str, Any]]
+    train_n_splits: int
 
 
 _WINDOWS_WAIT_HANDLE_LIMIT = 63
