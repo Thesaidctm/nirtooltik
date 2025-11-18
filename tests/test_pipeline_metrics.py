@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 
-from nircls.pipeline import _coerce_param_value, _save_metrics
+from nircls.processing.pipeline import _coerce_param_value, _save_metrics
 
 
 def _make_basic_row() -> dict:

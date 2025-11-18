@@ -24,10 +24,10 @@ from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))  # noqa: E402
-import nircls.pipeline as pipeline  # noqa: E402
-from nircls.feature_selection.vip import compute_vip  # noqa: E402
-from nircls.io import prepare_inputs, summarize_dataset  # noqa: E402
-from nircls.pipeline import (  # noqa: E402
+import nircls.processing.pipeline as pipeline  # noqa: E402
+from nircls.processing.feature_selection.vip import compute_vip  # noqa: E402
+from nircls.processing.io import prepare_inputs, summarize_dataset  # noqa: E402
+from nircls.processing.pipeline import (  # noqa: E402
     build_pipeline_from_config,
     predict_with_model,
     run_multiple_eval,
@@ -41,9 +41,9 @@ from nircls.pipeline import (  # noqa: E402
     _train_and_save_regression,
     _sanitize_n_jobs,
 )
-from nircls.metrics.regression import compute_rmsecv  # noqa: E402
-from nircls.models.plsda import PLSDA  # noqa: E402
-from nircls.models.plslocal import PLSLocalRegressor  # noqa: E402
+from nircls.results.metrics.regression import compute_rmsecv  # noqa: E402
+from nircls.processing.models.plsda import PLSDA  # noqa: E402
+from nircls.processing.models.plslocal import PLSLocalRegressor  # noqa: E402
 from nircls.utils.errors import DataError, ModelError  # noqa: E402
 from nircls.utils.palettes import Palette  # noqa: E402
 
@@ -244,7 +244,7 @@ def test_run_cv_regression_populates_r2_mean(tmp_path, monkeypatch):
             }
         ]
 
-    monkeypatch.setattr("nircls.pipeline.prepare_inputs", fake_prepare_inputs)
+    monkeypatch.setattr("nircls.processing.pipeline.prepare_inputs", fake_prepare_inputs)
 
     cfg = {
         "data": {
@@ -1150,7 +1150,7 @@ def test_train_and_save_file_not_found(monkeypatch, tmp_path, method):
     def raise_data_error(_, **kwargs):
         raise DataError("Arquivo de dados não encontrado")
 
-    monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_data_error)
+    monkeypatch.setattr("nircls.processing.pipeline.prepare_inputs", raise_data_error)
     with pytest.raises(DataError, match="Arquivo de dados não encontrado"):
         train_and_save(cfg, tmp_path, n_jobs=1)
 
@@ -1162,7 +1162,7 @@ def test_train_and_save_missing_data_error(monkeypatch, tmp_path, method):
     def raise_data_error(_, **kwargs):
         raise DataError("dados inexistentes na planilha")
 
-    monkeypatch.setattr("nircls.pipeline.prepare_inputs", raise_data_error)
+    monkeypatch.setattr("nircls.processing.pipeline.prepare_inputs", raise_data_error)
     with pytest.raises(DataError, match="dados inexistentes"):
         train_and_save(cfg, tmp_path, n_jobs=1)
 
@@ -1179,8 +1179,8 @@ def test_train_and_save_model_incompatible(monkeypatch, tmp_path, method):
     def raise_model_error(_):
         raise ModelError("modelo incompatível")
 
-    monkeypatch.setattr("nircls.pipeline.prepare_inputs", dummy_prepare)
-    monkeypatch.setattr("nircls.pipeline.build_pipeline_from_config", raise_model_error)
+    monkeypatch.setattr("nircls.processing.pipeline.prepare_inputs", dummy_prepare)
+    monkeypatch.setattr("nircls.processing.pipeline.build_pipeline_from_config", raise_model_error)
     with pytest.raises(ModelError, match="modelo incompatível"):
         train_and_save(cfg, tmp_path, n_jobs=1)
 
@@ -1213,7 +1213,7 @@ def _two_sample_same_group_dataset() -> Dict[str, Any]:
 def test_run_cv_regression_raises_on_single_sample(monkeypatch, tmp_path):
     cfg = _minimal_regression_cfg(cv_method="stratified")
     monkeypatch.setattr(
-        "nircls.pipeline.prepare_inputs",
+        "nircls.processing.pipeline.prepare_inputs",
         lambda *_args, **_kwargs: [_single_sample_dataset()],
     )
     progress = DummyProgress()
@@ -1234,7 +1234,7 @@ def test_run_cv_regression_group_raises_on_single_group(monkeypatch, tmp_path):
     cfg = _minimal_regression_cfg(cv_method="group")
     dataset = _two_sample_same_group_dataset()
     monkeypatch.setattr(
-        "nircls.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
+        "nircls.processing.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
     )
     progress = DummyProgress()
     with pytest.raises(
@@ -1255,7 +1255,7 @@ def test_run_holdout_regression_raises_on_single_train_sample(monkeypatch, tmp_p
     dataset = _two_sample_same_group_dataset()
     dataset.pop("groups", None)
     monkeypatch.setattr(
-        "nircls.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
+        "nircls.processing.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
     )
     with pytest.raises(
         DataError, match="Número insuficiente de amostras para validação cruzada"
@@ -1276,7 +1276,7 @@ def test_run_holdout_regression_spxy_raises_on_single_train_sample(
     dataset = _two_sample_same_group_dataset()
     dataset.pop("groups", None)
     monkeypatch.setattr(
-        "nircls.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
+        "nircls.processing.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
     )
     with pytest.raises(
         DataError, match="Número insuficiente de amostras para validação cruzada"
@@ -1297,17 +1297,17 @@ def test_run_holdout_classification_reuses_single_split(monkeypatch, tmp_path):
     dataset = {"X": X, "Y": y, "file": "dummy.csv", "target": "target"}
 
     monkeypatch.setattr(
-        "nircls.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
+        "nircls.processing.pipeline.prepare_inputs", lambda *_args, **_kwargs: [dataset]
     )
-    monkeypatch.setattr("nircls.pipeline._maybe_run_qc", lambda *args, **kwargs: None)
+    monkeypatch.setattr("nircls.processing.pipeline._maybe_run_qc", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "nircls.pipeline._save_plots", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        "nircls.pipeline._save_pls_diagnostics", lambda *args, **kwargs: {}
+        "nircls.processing.pipeline._save_plots", lambda *args, **kwargs: None
     )
     monkeypatch.setattr(
-        "nircls.pipeline.generate_scientific_report", lambda *args, **kwargs: None
+        "nircls.processing.pipeline._save_pls_diagnostics", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        "nircls.processing.pipeline.generate_scientific_report", lambda *args, **kwargs: None
     )
 
     cfg = {
@@ -1342,7 +1342,7 @@ def test_run_holdout_classification_reuses_single_split(monkeypatch, tmp_path):
 def test_train_and_save_regression_raises_on_single_sample(monkeypatch, tmp_path):
     cfg = _minimal_regression_cfg(cv_method="stratified")
     monkeypatch.setattr(
-        "nircls.pipeline.prepare_inputs",
+        "nircls.processing.pipeline.prepare_inputs",
         lambda *_args, **_kwargs: [_single_sample_dataset()],
     )
     with pytest.raises(
@@ -1384,7 +1384,7 @@ def test_run_multiple_eval_sends_notification_email(tmp_path, monkeypatch):
         calls.append((subject, body, to_addr))
 
     monkeypatch.setattr(
-        "nircls.pipeline.enviar_email", fake_enviar_email, raising=False
+        "nircls.processing.pipeline.enviar_email", fake_enviar_email, raising=False
     )
 
     out_dir = tmp_path / "out"

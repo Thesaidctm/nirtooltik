@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 import yaml
-from nircls.io import prepare_inputs, export_xy_xlsx
+from nircls.processing.io import export_xy_xlsx, prepare_inputs
 
 def main(cfg_path: str, out_path: str) -> None:
     with open(cfg_path) as f:

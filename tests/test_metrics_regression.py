@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 
-from nircls.metrics.regression import (
+from nircls.results.metrics.regression import (
     compute_mae_percent,
     compute_rpd,
     compute_rmsecv,

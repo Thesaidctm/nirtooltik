@@ -8,8 +8,8 @@ from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.naive_bayes import GaussianNB
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
-from nircls.models.plsda import PLSDA  # noqa: E402
-from nircls.pipeline import build_pipeline_from_config  # noqa: E402
+from nircls.processing.models.plsda import PLSDA  # noqa: E402
+from nircls.processing.pipeline import build_pipeline_from_config  # noqa: E402
 
 
 def test_logreg_default_grid_contains_C_and_balanced_class_weight():
@@ -225,7 +225,7 @@ def test_estimator_without_proba_is_calibrated(monkeypatch):
             }
         ]
 
-    monkeypatch.setattr("nircls.pipeline.make_models_from_config", fake_factory)
+    monkeypatch.setattr("nircls.processing.pipeline.make_models_from_config", fake_factory)
     cfg = {"models": [{"name": "DUMMY"}]}
     name, pipe, grid = build_pipeline_from_config(cfg)[0]
     assert isinstance(pipe.named_steps["clf"], CalibratedClassifierCV)

@@ -5,7 +5,7 @@ import pathlib
 import sys
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
-from nircls.pipeline import build_pipeline_from_config  # noqa: E402
+from nircls.processing.pipeline import build_pipeline_from_config  # noqa: E402
 
 
 def test_yaml_grid_parsing_creates_valid_grid():

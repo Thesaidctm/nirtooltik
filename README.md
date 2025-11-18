@@ -86,7 +86,8 @@ nircls run-all --config configs/eucalipto_spxy.yaml --all-models --all-preproces
 17. [Docker](#docker)
 18. [Empacotamento para distribuição](#empacotamento-para-distribuicao)
 19. [Notificações por e-mail](#notificacoes-por-e-mail)
-20. [Créditos/Autoria](#creditosautoria)
+20. [Esquema de banco de dados (X, Y, L)](#esquema-de-banco-de-dados-x-y-l)
+21. [Créditos/Autoria](#creditosautoria)
 
 ## Requisitos
 
@@ -746,6 +747,19 @@ podem ser adicionados implementando classes compatíveis com `scikit-learn` e
 registrando‑as nos módulos apropriados. Contribuições são bem‑vindas via pull
 requests.
 
+Para facilitar a colaboração entre times diferentes, o código foi dividido por
+responsabilidade e tipo de tarefa:
+
+* **Classificação**: construtores e grades padrão vivem em
+  `src/nircls/processing/models/classification.py`, com métricas expostas por
+  `src/nircls/results/classification/`.
+* **Regressão**: contrapartes de regressão estão em
+  `src/nircls/processing/models/regression.py` e em
+  `src/nircls/results/regression/`.
+
+Esse particionamento mantém as bases de classificação e regressão isoladas sem
+quebrar a API compartilhada pelo pipeline.
+
 ### Plugins de modelos
 
 Desde a versão atual, modelos podem ser fornecidos por pacotes externos usando
@@ -754,7 +768,7 @@ Desde a versão atual, modelos podem ser fornecidos por pacotes externos usando
 
 ```python
 # my_plugin/builder.py
-from nircls.models.base import BaseModelBuilder
+from nircls.processing.models.base import BaseModelBuilder
 from sklearn.dummy import DummyClassifier
 
 class DummyBuilder(BaseModelBuilder):
@@ -945,6 +959,52 @@ enviar_email("Assunto", "Corpo da mensagem", "destinatario@exemplo.com")
 
 Ao definir `notification_email` no arquivo YAML de configuração do experimento,
 a pipeline chamará `enviar_email` automaticamente.
+
+## Esquema de banco de dados (X, Y, L)
+
+Para persistir os dados ingeridos em uma estrutura compatível com os arquivos
+de importação, o banco foi segmentado em três tabelas principais:
+
+- **L** (`l`): catalogo opcional de metadados das amostras com `sample_id`
+  (chave primária), `external_id` (identificador fornecido na coleta, agora
+  opcional), uma descrição opcional e um campo `metadata` em JSON para
+  atributos adicionais. Se você não tiver informações complementares, basta
+  não enviar L: o toolkit cria um registro vazio automaticamente ao salvar X e
+  Y.
+- **X** (`x`): matriz de preditores por amostra. Armazena um JSON em `values`
+  com o vetor espectral ou atributos numéricos, referenciando a amostra por
+  `sample_id` (chave estrangeira) e garantindo unicidade por amostra. Foi
+  testado com bases largas (≈2.300 colunas) através do armazenamento em JSON.
+- **Y** (`y`): valores alvo paralelos à matriz X. Permite múltiplos alvos por
+  amostra via pares `target_name`/`target_value`, associados ao mesmo
+  `sample_id` que X. Tanto X quanto Y devem ter a mesma quantidade de linhas.
+
+Utilize as funções utilitárias em `nircls.db` para manipular os registros:
+
+```python
+from nircls.db import (
+    Base,
+    create_sample,
+    replace_sample_targets,
+    set_sample_features,
+)
+
+sample = create_sample(session, external_id="amostra_001", metadata={"site": "A1"})
+set_sample_features(session, sample.sample_id, values={"1100.5": 0.123, "1200.0": 0.456})
+replace_sample_targets(session, sample.sample_id, targets=[("especie", "Eucalipto"), ("densidade", "0.88")])
+```
+
+Caso não haja metadados de L, é possível gravar apenas X e Y usando as
+helpers que criam um stub de L em branco automaticamente:
+
+```python
+features = set_sample_features(session, None, values={"1100.5": 0.123})
+replace_sample_targets(session, features.sample_id, targets=[("classe", "A")])
+```
+
+Os scripts de migração Alembic em `src/nircls/db/alembic/versions/` incluem a
+criação dessas tabelas (X, Y, L), mantendo o versionamento da estrutura de
+dados alinhado ao pipeline.
 
 ## Créditos/Autoria
 

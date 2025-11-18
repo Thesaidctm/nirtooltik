@@ -9,7 +9,7 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 
 torch = pytest.importorskip("torch")
 
-from nircls.models.neural import SpectralCNN, SpectralLSTM  # noqa: E402
+from nircls.processing.models.neural import SpectralCNN, SpectralLSTM  # noqa: E402
 
 
 @pytest.fixture

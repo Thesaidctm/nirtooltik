@@ -15,7 +15,7 @@ try:  # pragma: no cover - runtime convenience
 except PackageNotFoundError:  # pragma: no cover - development fallback
     __version__ = "0.0.0"
 
-from .pipeline import build_pipeline_from_config, train_and_save, run_experiment
+from .processing.pipeline import build_pipeline_from_config, train_and_save, run_experiment
 
 DEFAULT_RESULTS_DIR = Path.home() / "nircls_results"
 

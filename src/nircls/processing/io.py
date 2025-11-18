@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 from joblib import dump, load
 
-from .utils.errors import DataError
-from .utils.misc import RESULTS_DIR
+from ..utils.errors import DataError
+from ..utils.misc import RESULTS_DIR
 
 _MISSING_OPENPYXL_MSG = (
     "Dependência opcional 'openpyxl' ausente. Instale com `pip install "
