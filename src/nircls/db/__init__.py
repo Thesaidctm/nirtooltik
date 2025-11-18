@@ -1,17 +1,29 @@
 from .crud import (
     create_role,
+    create_sample,
     create_user,
     delete_role,
     delete_user,
     get_role,
+    get_sample,
     get_user,
     get_variavel,
+    replace_sample_targets,
+    set_sample_features,
     set_variavel,
     update_role,
     update_user,
 )
 from .database import Base, SessionLocal, engine, init_db
-from .models import Role, User, UserRole, Variavel
+from .models import (
+    Role,
+    SampleFeatures,
+    SampleMetadata,
+    SampleTarget,
+    User,
+    UserRole,
+    Variavel,
+)
 
 __all__ = [
     "Base",
@@ -22,6 +34,9 @@ __all__ = [
     "User",
     "Variavel",
     "UserRole",
+    "SampleMetadata",
+    "SampleFeatures",
+    "SampleTarget",
     "create_user",
     "get_user",
     "update_user",
@@ -30,6 +45,10 @@ __all__ = [
     "get_role",
     "update_role",
     "delete_role",
+    "create_sample",
+    "get_sample",
+    "set_sample_features",
+    "replace_sample_targets",
     "get_variavel",
     "set_variavel",
 ]

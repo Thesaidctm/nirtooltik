@@ -1,10 +1,17 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, Iterable, Optional
 
 from sqlalchemy.orm import Session
 
-from .models import Role, User, Variavel
+from .models import (
+    Role,
+    SampleFeatures,
+    SampleMetadata,
+    SampleTarget,
+    User,
+    Variavel,
+)
 
 # User CRUD operations
 
@@ -103,3 +110,65 @@ def set_variavel(session: Session, nome: str, var_id: Optional[int] = None) -> V
     session.commit()
     session.refresh(variavel)
     return variavel
+
+
+# Sample operations (X, Y, L tables)
+
+
+def create_sample(
+    session: Session,
+    *,
+    external_id: str,
+    description: Optional[str] = None,
+    metadata: Optional[Dict] = None,
+) -> SampleMetadata:
+    sample = SampleMetadata(
+        external_id=external_id,
+        description=description,
+        metadata_json=metadata or {},
+    )
+    session.add(sample)
+    session.commit()
+    session.refresh(sample)
+    return sample
+
+
+def set_sample_features(
+    session: Session, sample_id: int, values: Dict[str, float]
+) -> SampleFeatures:
+    sample = session.get(SampleMetadata, sample_id)
+    if not sample:
+        raise ValueError(f"Sample {sample_id} not found")
+
+    if sample.features:
+        sample.features.values = values
+        features = sample.features
+    else:
+        features = SampleFeatures(sample=sample, values=values)
+        session.add(features)
+
+    session.commit()
+    session.refresh(features)
+    return features
+
+
+def replace_sample_targets(
+    session: Session, sample_id: int, targets: Iterable[tuple[str, str]]
+) -> list[SampleTarget]:
+    sample = session.get(SampleMetadata, sample_id)
+    if not sample:
+        raise ValueError(f"Sample {sample_id} not found")
+
+    sample.targets.clear()
+    for target_name, target_value in targets:
+        sample.targets.append(
+            SampleTarget(target_name=target_name, target_value=target_value)
+        )
+
+    session.commit()
+    session.refresh(sample)
+    return list(sample.targets)
+
+
+def get_sample(session: Session, sample_id: int) -> Optional[SampleMetadata]:
+    return session.get(SampleMetadata, sample_id)

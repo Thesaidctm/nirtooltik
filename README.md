@@ -86,7 +86,8 @@ nircls run-all --config configs/eucalipto_spxy.yaml --all-models --all-preproces
 17. [Docker](#docker)
 18. [Empacotamento para distribuição](#empacotamento-para-distribuicao)
 19. [Notificações por e-mail](#notificacoes-por-e-mail)
-20. [Créditos/Autoria](#creditosautoria)
+20. [Esquema de banco de dados (X, Y, L)](#esquema-de-banco-de-dados-x-y-l)
+21. [Créditos/Autoria](#creditosautoria)
 
 ## Requisitos
 
@@ -945,6 +946,39 @@ enviar_email("Assunto", "Corpo da mensagem", "destinatario@exemplo.com")
 
 Ao definir `notification_email` no arquivo YAML de configuração do experimento,
 a pipeline chamará `enviar_email` automaticamente.
+
+## Esquema de banco de dados (X, Y, L)
+
+Para persistir os dados ingeridos em uma estrutura compatível com os arquivos
+de importação, o banco foi segmentado em três tabelas principais:
+
+- **L** (`l`): catalogo de amostras com `sample_id` (chave primária),
+  `external_id` (identificador fornecido na coleta), uma descrição opcional e
+  um campo `metadata` em JSON para atributos adicionais.
+- **X** (`x`): matriz de preditores por amostra. Armazena um JSON em `values`
+  com o vetor espectral ou atributos numéricos, referenciando a amostra por
+  `sample_id` (chave estrangeira) e garantindo unicidade por amostra.
+- **Y** (`y`): valores alvo. Permite múltiplos alvos por amostra via pares
+  `target_name`/`target_value`, associados a `sample_id`.
+
+Utilize as funções utilitárias em `nircls.db` para manipular os registros:
+
+```python
+from nircls.db import (
+    Base,
+    create_sample,
+    replace_sample_targets,
+    set_sample_features,
+)
+
+sample = create_sample(session, external_id="amostra_001", metadata={"site": "A1"})
+set_sample_features(session, sample.sample_id, values={"1100.5": 0.123, "1200.0": 0.456})
+replace_sample_targets(session, sample.sample_id, targets=[("especie", "Eucalipto"), ("densidade", "0.88")])
+```
+
+Os scripts de migração Alembic em `src/nircls/db/alembic/versions/` incluem a
+criação dessas tabelas (X, Y, L), mantendo o versionamento da estrutura de
+dados alinhado ao pipeline.
 
 ## Créditos/Autoria
 
