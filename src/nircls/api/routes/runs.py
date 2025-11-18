@@ -36,7 +36,7 @@ def create_new_run(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Run:
-    return run_service.create_run(
+    run = run_service.create_run(
         db,
         project_id=payload.project_id,
         dataset_id=payload.dataset_id,
@@ -46,6 +46,11 @@ def create_new_run(
         artifacts=payload.artifacts,
         run_uid=payload.run_uid,
     )
+
+    if payload.auto_execute:
+        run = run_service.execute_run(db, run)
+
+    return run
 
 
 @router.get("/{run_id}/artifacts", response_model=Dict[str, Any])
@@ -57,3 +62,23 @@ def get_run_artifacts(run_id: int, db: Session = Depends(get_db)) -> Dict[str, A
             detail=i18n.t("runs.not_found_by_id").format(run_id=run_id),
         )
     return run.artifacts or {}
+
+
+@router.post("/{run_id}/execute", response_model=RunRead)
+def execute_run_endpoint(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Executa a pipeline associada a este Run de forma síncrona.
+    """
+
+    run = crud.get_run(db, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=i18n.t("runs.not_found_by_id").format(run_id=run_id),
+        )
+
+    return run_service.execute_run(db, run)
