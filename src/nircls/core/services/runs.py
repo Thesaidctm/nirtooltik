@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy.orm import Session
 
 from nircls.db import crud
 from nircls.db.models import Run
+from nircls.config_schema import ConfigModel
+from nircls.core.services.config_builder import build_run_config_from_dataset
 from nircls import i18n
 from nircls.processing.pipeline.runs_train import run_pipeline
 from nircls.utils.errors import DatabaseError
@@ -28,12 +30,43 @@ def create_run(
     dataset_id: Optional[int],
     user_id: Optional[int],
     organization_id: Optional[int],
-    config: Dict[str, Any],
+    config: Optional[Dict[str, Any]],
+    target_cols: Optional[List[str]] = None,
+    model_names: Optional[List[str]] = None,
+    task_type: str = "regression",
     status: str = "running",
     artifacts: Optional[Dict[str, Any]] = None,
     run_uid: str | None = None,
 ) -> Run:
     """Create a Run row in the database for a new pipeline execution."""
+
+    dataset = None
+    if dataset_id is not None:
+        dataset = crud.get_dataset(db, dataset_id, organization_id=organization_id)
+        if dataset is None:
+            raise DatabaseError(
+                i18n.t("datasets.not_found_by_id").format(dataset_id=dataset_id)
+            )
+
+    cfg_dict = config or {}
+
+    if (not cfg_dict) and dataset is not None:
+        if not target_cols:
+            raise ValueError(
+                "target_cols must be provided when building config from dataset"
+            )
+        cfg_dict = build_run_config_from_dataset(
+            dataset,
+            target_cols=target_cols,
+            model_names=model_names or ["PLS_REG"],
+            task_type=task_type,
+        )
+
+    if not cfg_dict:
+        raise ValueError("config must be provided or derivable from dataset")
+
+    cfg_obj = ConfigModel(**cfg_dict)
+    validated_config = cfg_obj.model_dump()
 
     resolved_run_uid = run_uid or str(uuid.uuid4())
     return crud.create_run(
@@ -43,7 +76,7 @@ def create_run(
         user_id=user_id,
         organization_id=organization_id,
         run_uid=resolved_run_uid,
-        config=config,
+        config=validated_config,
         status=status,
         artifacts=artifacts,
     )
