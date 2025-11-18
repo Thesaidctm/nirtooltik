@@ -34,7 +34,7 @@ from .model_factory import (
     _sanitize_metrics_row as _model_sanitize_metrics_row,
     _update_row_with_best_params,
 )
-from .orchestration import _train_and_save_classification, _train_and_save_regression
+from .runs_train import _train_and_save_classification, _train_and_save_regression
 
 __all__ = [
     "_call_build_pipeline",
