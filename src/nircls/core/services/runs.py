@@ -111,18 +111,29 @@ def mark_run_completed(
     }``
     """
 
-    manifest: Dict[str, Any] = {
-        "base_dir": str(base_dir),
-        "models": [str(Path(p)) for p in (models or [])],
-        "plots": [str(Path(p)) for p in (plots or [])],
-        "reports": [str(Path(p)) for p in (reports or [])],
-        "extras": extras or {},
-    }
-    manifest["metrics"] = metrics or {}
-    manifest.setdefault("directories", {})["train"] = str(Path(train_dir))
-    manifest.setdefault("directories", {})["cross_validation"] = str(Path(cv_dir))
+    run = _require_run(db.get(Run, run_id), run_id)
+    existing_artifacts = run.artifacts or {}
+    manifest: Dict[str, Any] = {**existing_artifacts}
+    manifest.update(
+        {
+            "base_dir": str(base_dir),
+            "models": [str(Path(p)) for p in (models or [])],
+            "plots": [str(Path(p)) for p in (plots or [])],
+            "reports": [str(Path(p)) for p in (reports or [])],
+        }
+    )
+    manifest["metrics"] = metrics or manifest.get("metrics") or {}
+
+    directories = dict(manifest.get("directories") or {})
+    directories["train"] = str(Path(train_dir))
+    directories["cross_validation"] = str(Path(cv_dir))
     if summary_dir is not None:
-        manifest["directories"]["summary"] = str(Path(summary_dir))
+        directories["summary"] = str(Path(summary_dir))
+    manifest["directories"] = directories
+
+    existing_extras = manifest.get("extras") or {}
+    incoming_extras = extras or {}
+    manifest["extras"] = {**existing_extras, **incoming_extras}
 
     run = crud.update_run_status(
         db, run_id, status="completed", artifacts=manifest, error_message=None

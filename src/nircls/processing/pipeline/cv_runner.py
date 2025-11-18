@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import psutil
 import sklearn
-from joblib import dump
+from joblib import dump, load
 from sqlalchemy.orm import Session
 from rich.console import Console
 from rich.progress import Progress
@@ -53,7 +53,7 @@ from .model_factory import (
     _infer_task_type,
     _update_row_with_best_params,
 )
-from .persistence import save_run_metadata
+from .persistence import build_model_spec, save_run_metadata
 from .preprocessing import _validate_cfg
 from .splitting import CVConfig, _validate_split_capacity
 from ..io import export_xy_xlsx, summarize_dataset
@@ -2517,6 +2517,7 @@ def run_pipeline(
 
     context_filter = _RunContextFilter(run_id=run_id, run_uid=run_uid)
     logger.addFilter(context_filter)
+    dataset: Dataset | None = None
 
     try:
         resolved_project_id = project_id
@@ -2600,6 +2601,22 @@ def run_pipeline(
             extras = {
                 "prepared_data": str(train_dir / "prepared_XY.xlsx"),
             }
+            dataset_manifest = None
+            if dataset and dataset.storage_path:
+                dataset_manifest = str(Path(dataset.storage_path) / "manifest.json")
+            try:
+                best_estimator = load(model_path)
+            except Exception:  # pragma: no cover - best effort
+                best_estimator = None
+            extras.update(
+                {
+                    "random_state": random_state,
+                    "dataset_manifest": dataset_manifest,
+                    "model_spec": build_model_spec(best_estimator)
+                    if best_estimator is not None
+                    else None,
+                }
+            )
             run_logger.info("Pipeline completed successfully")
             return run_services.mark_run_completed(
                 db,

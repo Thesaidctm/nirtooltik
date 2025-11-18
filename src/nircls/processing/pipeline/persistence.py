@@ -126,6 +126,22 @@ def _relative_to_out_dir(path: Path, out_dir: Path) -> str:
 
 
 
+def build_model_spec(estimator: Any) -> Dict[str, Any]:
+    """Retorna uma descrição serializável do modelo treinado."""
+
+    class_path = f"{estimator.__class__.__module__}.{estimator.__class__.__name__}"
+    params = getattr(estimator, 'get_params', None)
+    if callable(params):
+        params = estimator.get_params()
+    else:
+        params = None
+
+    return {
+        "class_path": class_path,
+        "params": params,
+    }
+
+
 def save_run_metadata(cfg: Dict[str, Any], out_dir: Path) -> None:
     """Persist experiment configuration and environment details."""
 
