@@ -20,12 +20,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
 
-import nircls.preprocessors as preprocessors
+import nircls.processing.preprocessors as preprocessors
 from nircls.config_schema import ConfigModel, ValidationError
 from nircls.i18n import tr
-from nircls.io import prepare_inputs, summarize_dataset
-from nircls.models.factory import MODEL_DESCRIPTIONS
-from nircls.pipeline import run_multiple_eval, train_and_save
+from nircls.processing.io import prepare_inputs, summarize_dataset
+from nircls.processing.models.factory import MODEL_DESCRIPTIONS
+from nircls.processing.pipeline import run_multiple_eval, train_and_save
 from nircls.utils.email import _load_config as _load_email_config
 from nircls.utils.email import _save_config as _save_email_config
 from nircls.utils.email import enviar_email

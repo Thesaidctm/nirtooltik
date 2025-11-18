@@ -21,9 +21,9 @@ import yaml  # type: ignore[import-untyped]
 
 from . import __version__
 from .config_schema import ConfigModel, ValidationError
-from .io import export_xy_xlsx, summarize_dataset
-from .models.factory import get_model_builders, get_model_descriptions
-from .pipeline import (
+from .processing.io import export_xy_xlsx, summarize_dataset
+from .processing.models.factory import get_model_builders, get_model_descriptions
+from .processing.pipeline import (
     evaluate_saved_model,
     explain_model,
     predict_with_model,

@@ -754,7 +754,7 @@ Desde a versão atual, modelos podem ser fornecidos por pacotes externos usando
 
 ```python
 # my_plugin/builder.py
-from nircls.models.base import BaseModelBuilder
+from nircls.processing.models.base import BaseModelBuilder
 from sklearn.dummy import DummyClassifier
 
 class DummyBuilder(BaseModelBuilder):

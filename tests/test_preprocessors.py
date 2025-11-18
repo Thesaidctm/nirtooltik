@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
-from nircls.preprocessors.spectro import (
+from nircls.processing.preprocessors.spectro import (
     AdaptiveQuantileSegmentNormalizer,
     Detrend,
     EMSC,

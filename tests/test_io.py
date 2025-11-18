@@ -9,8 +9,8 @@ import pytest
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))  # noqa: E402
 
-from nircls.io import _extract_targets_and_groups, prepare_inputs
-from nircls.pipeline import prepare_inputs as pipeline_prepare_inputs
+from nircls.processing.io import _extract_targets_and_groups, prepare_inputs
+from nircls.processing.pipeline import prepare_inputs as pipeline_prepare_inputs
 from nircls.utils.errors import DataError
 
 
