@@ -5,6 +5,7 @@ from importlib.metadata import entry_points
 from typing import Any, Dict, List
 
 from .base import BaseModelBuilder
+from ...utils.errors import ConfigError
 
 
 def _apply_random_state(estimator: Any, random_state: int | None) -> Any:
@@ -85,6 +86,8 @@ TASK_MODEL_DESCRIPTIONS: Dict[str, Dict[str, str]] = {
 }
 
 TASK_SUFFIXES = {"classification": "_CLS", "regression": "_REG"}
+
+_PLS_REGRESSION_KEYS = {"PLSREGRESSION", "PLSR", "PLS_REG"}
 
 
 _EP_LOADED = False
@@ -221,6 +224,8 @@ def make_models_from_config(
         resolved_key = upper
         builder = builders.get(resolved_key)
 
+        params = m.get("params") or {}
+
         def _attempt(candidate_key: str) -> tuple[str, Any] | tuple[None, None]:
             candidate_builder = builders.get(candidate_key)
             if candidate_builder is None:
@@ -251,11 +256,17 @@ def make_models_from_config(
         for k, v in default_grid.items():
             grid.setdefault(k, v)
 
+        if resolved_key in _PLS_REGRESSION_KEYS:
+            if "n_components" not in params:
+                raise ConfigError(
+                    "For PLS_REG, 'n_components' must be set by the user in model params."
+                )
+            grid["n_components"] = [params["n_components"]]
+
         est = builder(grid)
         est = _apply_random_state(est, random_state)
         est = _apply_n_jobs(est, n_jobs)
 
-        params = m.get("params", {})
         if params:
             # Coerce any quoted numeric values to their Python equivalents
             for k, v in list(params.items()):
