@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import gc
 import hashlib
-import inspect
 import json
 import os
 import re
@@ -55,7 +54,7 @@ from sklearn.model_selection import (
     train_test_split,
 )
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder
 from scipy import stats
 
 from ..config_schema import ConfigModel, ValidationError
@@ -75,16 +74,34 @@ from ..results.metrics.regression import (
     compute_rmse,
     rmse_with_ci,
 )
-from .models.factory import make_models_from_config
-from .preprocessors.spectro import (
-    EMSC,
-    EPO,
-    MSC,
-    SNV,
-    AdaptiveQuantileSegmentNormalizer,
-    Detrend,
-    SavitzkyGolayTransformer,
+from .hyperparameter_search import (
+    LoggingGridSearchCV,
+    _get_n_components,
+    _sanitize_n_jobs,
 )
+from .model_factory import (
+    _call_build_pipeline,
+    _coerce_param_value,
+    _format_model_and_method_labels,
+    _format_model_label,
+    _format_preprocess_step,
+    _format_preprocess_steps,
+    _get_model_step_name,
+    _get_plsda_method_details,
+    _get_preprocess_steps_from_pipeline,
+    _infer_task_type,
+    _make_preprocess,
+    _normalize_preprocess_value,
+    _sanitize_metrics_row,
+    _update_row_with_best_params,
+)
+from .metrics_utils import (
+    _compute_ci95,
+    _rmse,
+    _summarize_metric_values,
+    _summarize_scores,
+)
+from .models.factory import make_models_from_config
 from ..results.report import generate_scientific_report
 from ..utils.compliance import check_astm_classification
 from ..utils.email import enviar_email
@@ -116,10 +133,6 @@ warnings.filterwarnings(
 logger = logging.getLogger(__name__)
 
 
-_WINDOWS_WAIT_HANDLE_LIMIT = 63
-_WINDOWS_MAX_LOKY_WORKERS = max(1, (_WINDOWS_WAIT_HANDLE_LIMIT - 1) // 2)
-
-
 @lru_cache(maxsize=8)
 def _prepare_inputs_cache_key(cfg_json: str) -> str:
     """Return an opaque cache key for prepared inputs.
@@ -135,42 +148,6 @@ def _prepare_inputs_cache_key(cfg_json: str) -> str:
     return digest.hexdigest()
 
 
-def _sanitize_n_jobs(n_jobs: Optional[int]) -> int:
-    """Return a safe ``n_jobs`` value for ``GridSearchCV`` workers.
-
-    The default ``loky`` backend used by scikit-learn relies on Windows
-    handles for inter-process communication. Windows can wait on at most 63
-    handles at a time, which effectively limits the number of parallel workers
-    that can be used. When this limit is exceeded, ``loky`` raises the error::
-
-        ValueError: need at most 63 handles
-
-    This helper bounds ``n_jobs`` so that we never request more workers than
-    the platform can support, preventing the cross-validation routine from
-    crashing on large multi-core Windows machines.
-    """
-
-    if not n_jobs:
-        return 1
-
-    if n_jobs < 0:
-        cpu_count = os.cpu_count() or 1
-        # Replicate joblib semantics: -1 uses all CPUs, -2 uses all but one, etc.
-        n_jobs = max(1, cpu_count + n_jobs + 1)
-
-    n_jobs = max(1, n_jobs)
-
-    if sys.platform.startswith("win") and n_jobs > _WINDOWS_MAX_LOKY_WORKERS:
-        logger.warning(
-            "Reducing n_jobs from %d to %d to avoid Windows handle limits",
-            n_jobs,
-            _WINDOWS_MAX_LOKY_WORKERS,
-        )
-        return _WINDOWS_MAX_LOKY_WORKERS
-
-    return n_jobs
-
-
 def _relative_to_out_dir(path: Path, out_dir: Path) -> str:
     """Return a POSIX path relative to ``out_dir`` when possible."""
 
@@ -178,80 +155,6 @@ def _relative_to_out_dir(path: Path, out_dir: Path) -> str:
         return path.relative_to(out_dir).as_posix()
     except ValueError:
         return path.as_posix()
-
-
-def _rmse(
-    y_true: Sequence[float] | np.ndarray,
-    y_pred: Sequence[float] | np.ndarray,
-) -> float:
-    """Compute root mean squared error compatible with older sklearn versions."""
-
-    return float(compute_rmse(y_true, y_pred))
-
-
-def _compute_ci95(mean: float, std: float, n: int) -> Optional[Tuple[float, float]]:
-    """Return 95% confidence interval bounds for ``mean`` when ``n`` >= 2."""
-
-    if n < 2:
-        return None
-    if not np.isfinite(mean) or not np.isfinite(std):
-        return None
-    se = std / np.sqrt(n)
-    if not np.isfinite(se):
-        return None
-    try:
-        t_multiplier = stats.t.ppf(0.975, df=n - 1)
-    except Exception:  # pragma: no cover - defensive
-        return None
-    if not np.isfinite(t_multiplier):
-        return None
-    margin = t_multiplier * se
-    if not np.isfinite(margin):
-        return None
-    return mean - margin, mean + margin
-
-
-def _summarize_metric_values(values: Sequence[float]) -> Optional[Dict[str, float]]:
-    """Compute mean, std and 95% CI summary statistics for ``values``."""
-
-    arr = np.asarray(values, dtype=float)
-    if arr.size == 0:
-        return None
-    mask = np.isfinite(arr)
-    if not np.any(mask):
-        return None
-    arr = arr[mask]
-    mean_val = float(np.mean(arr))
-    summary: Dict[str, float] = {"mean": mean_val}
-    if arr.size > 1:
-        std_val = float(np.std(arr, ddof=1))
-        summary["std"] = std_val
-        ci_bounds = _compute_ci95(mean_val, std_val, arr.size)
-        if ci_bounds is not None:
-            low, high = ci_bounds
-            summary["ci95_low"] = float(low)
-            summary["ci95_high"] = float(high)
-    return summary
-
-
-def _summarize_scores(
-    scores: Mapping[str, Sequence[float]], *, prefix: str = ""
-) -> Dict[str, float]:
-    """Return flattened summary statistics for a metric mapping."""
-
-    summary: Dict[str, float] = {}
-    for metric, values in scores.items():
-        stats_dict = _summarize_metric_values(values)
-        if not stats_dict:
-            continue
-        base = f"{prefix}{metric}"
-        summary[f"{base}_mean"] = stats_dict["mean"]
-        if "std" in stats_dict:
-            summary[f"{base}_std"] = stats_dict["std"]
-        if "ci95_low" in stats_dict and "ci95_high" in stats_dict:
-            summary[f"{base}_ci95_low"] = stats_dict["ci95_low"]
-            summary[f"{base}_ci95_high"] = stats_dict["ci95_high"]
-    return summary
 
 
 def _validate_split_capacity(allowed: int, *, kind: str) -> None:
@@ -268,18 +171,6 @@ def _validate_split_capacity(allowed: int, *, kind: str) -> None:
         "Número insuficiente de amostras para validação cruzada. "
         "Forneça pelo menos duas amostras no conjunto de treino."
     )
-
-
-class LoggingGridSearchCV(GridSearchCV):
-    """GridSearchCV with optional debug logging for progress."""
-
-    def _run_search(self, evaluate_candidates):  # type: ignore[override]
-        grid = list(ParameterGrid(self.param_grid))
-        total = len(grid)
-        for i, params in enumerate(grid, 1):
-            if self.verbose < 1:
-                logger.debug("Grid search progress: %d/%d parameters", i, total)
-            evaluate_candidates([params])
 
 
 def _validate_cfg(
@@ -526,445 +417,6 @@ def prepare_inputs(
             out.append(ds)
     _set_cached_prepared_inputs(cache_key, out)
     return out
-
-
-def _make_preprocess(
-    steps_cfg: Optional[Sequence[str]], cfg: Dict[str, Any]
-) -> Tuple[List[Tuple[str, Any]], Dict[str, Any]]:
-    """Create preprocessing steps and optional parameter grid.
-
-    For the Savitzky-Golay (SG) step it is possible to provide a list of
-    parameter values (e.g. window length) which will be added to the grid for
-    hyper-parameter search.  This allows testing multiple window sizes during
-    cross-validation while keeping the feature optional – supplying a single
-    value keeps the behaviour unchanged.
-    """
-
-    steps = []
-    grid = {}
-    for name in steps_cfg or []:
-        if name is None:
-            continue
-        if isinstance(name, str):
-            cleaned = name.strip()
-            if not cleaned:
-                continue
-            if cleaned.lower() in {"none", "raw"}:
-                continue
-            n = cleaned.upper()
-        else:
-            n = str(name).upper()
-        if n == "SNV":
-            steps.append(("snv", SNV()))
-        elif n == "MSC":
-            steps.append(("msc", MSC()))
-        elif n == "DETREND":
-            steps.append(("detrend", Detrend()))
-        elif n == "SG":
-            sg = cfg.get("sg", {"window": 15, "polyorder": 2, "deriv": 1})
-            wl = sg.get("window", 15)
-            po = sg.get("polyorder", 2)
-            dv = sg.get("deriv", 1)
-            # allow lists/tuples to trigger grid search over SG parameters
-            if isinstance(wl, (list, tuple)):
-                grid["sg__window_length"] = [int(w) for w in wl]
-                wl = wl[0]
-            if isinstance(po, (list, tuple)):
-                grid["sg__polyorder"] = [int(p) for p in po]
-                po = po[0]
-            if isinstance(dv, (list, tuple)):
-                grid["sg__deriv"] = [int(d) for d in dv]
-                dv = dv[0]
-            steps.append(("sg", SavitzkyGolayTransformer(wl, po, dv)))
-        elif n == "EMSC":
-            steps.append(("emsc", EMSC()))
-        elif n == "EPO":
-            steps.append(("epo", EPO()))
-        elif n == "AQS":
-            aqs_cfg = cfg.get("aqs", {})
-            min_seg = aqs_cfg.get("min_segment_size", 25)
-            blend_strength = aqs_cfg.get("blend_strength", 4.0)
-            if isinstance(min_seg, (list, tuple)):
-                grid["aqs__min_segment_size"] = [int(v) for v in min_seg]
-                min_seg = min_seg[0]
-            if isinstance(blend_strength, (list, tuple)):
-                grid["aqs__blend_strength"] = [float(v) for v in blend_strength]
-                blend_strength = blend_strength[0]
-            steps.append(
-                (
-                    "aqs",
-                    AdaptiveQuantileSegmentNormalizer(
-                        min_segment_size=int(min_seg),
-                        blend_strength=float(blend_strength),
-                    ),
-                )
-            )
-        elif n == "SCALE":
-            steps.append(("scaler", StandardScaler()))
-        else:
-            raise ModelError(
-                f"Pré-processo desconhecido: {name}. Verifique a lista de etapas suportadas."
-            )
-    return steps, grid
-
-
-def _infer_task_type(cfg: Mapping[str, Any]) -> str:
-    """Infer the task type (classification or regression) from ``cfg``."""
-
-    task_type = cfg.get("task_type")
-    if not task_type:
-        data_cfg = cfg.get("data") if isinstance(cfg, Mapping) else None
-        if isinstance(data_cfg, Mapping):
-            task_type = data_cfg.get("task_type")
-        if not task_type and isinstance(data_cfg, Mapping):
-            task_type = data_cfg.get("target_type")
-    normalized = str(task_type or "classification").lower()
-    if normalized not in {"classification", "regression"}:
-        raise DataError(f"Tipo de tarefa inválido: {task_type}")
-    return normalized
-
-
-def _get_model_step_name(pipe: Pipeline) -> str:
-    """Return the name of the final estimator step in ``pipe``."""
-
-    if hasattr(pipe, "named_steps") and pipe.named_steps:
-        for candidate in ("clf", "reg"):
-            if candidate in pipe.named_steps:
-                return candidate
-        # fall back to the last named step if available
-        try:
-            return next(reversed(pipe.named_steps))  # type: ignore[arg-type]
-        except StopIteration:  # pragma: no cover - empty pipeline
-            pass
-    if getattr(pipe, "steps", None):
-        return pipe.steps[-1][0]
-    return "clf"
-
-
-def _get_preprocess_steps_from_pipeline(pipe: Pipeline) -> List[Any]:
-    """Return preprocessing steps stored in ``pipe`` excluding the estimator."""
-
-    if not hasattr(pipe, "named_steps"):
-        return []
-    final_name = _get_model_step_name(pipe)
-    return [v for k, v in pipe.named_steps.items() if k != final_name]
-
-
-def build_pipeline_from_config(
-    cfg: Dict[str, Any],
-    *,
-    random_state: int | None = None,
-    n_jobs: int | None = None,
-) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
-    _validate_cfg(cfg, need_models=True)
-    task_type = _infer_task_type(cfg)
-    final_step_name = "clf" if task_type == "classification" else "reg"
-    pre_cfg = cfg.get("preprocess", {})
-    steps_cfg = pre_cfg.get("steps", [])
-    evaluate_flag = pre_cfg.get("evaluate_individual")
-    if evaluate_flag is None:
-        evaluate_ind = len(steps_cfg) > 1
-    else:
-        evaluate_ind = bool(evaluate_flag)
-    out: List[Tuple[str, Pipeline, Dict[str, Any]]] = []
-
-    def _build_models(
-        pre_steps: List[Tuple[str, Any]], pre_grid: Dict[str, Any], suffix: str = ""
-    ) -> None:
-        params: Dict[str, Any] = {}
-        try:
-            signature = inspect.signature(make_models_from_config)
-        except (TypeError, ValueError):  # pragma: no cover - fallback for C extensions
-            signature = None
-        if signature is None:
-            models = make_models_from_config(cfg["models"])
-        else:
-            if "task_type" in signature.parameters:
-                params["task_type"] = task_type
-            if "random_state" in signature.parameters:
-                params["random_state"] = random_state
-            if "n_jobs" in signature.parameters and n_jobs is not None:
-                params["n_jobs"] = n_jobs
-            models = make_models_from_config(cfg["models"], **params)
-        for m in models:
-            est = m["estimator"]
-            grid = pre_grid.copy()
-            model_grid = m.get("grid", {}) or {}
-            if task_type == "classification" and not hasattr(est, "predict_proba"):
-                calib_cfg = m.get("calibration") or {}
-                method = calib_cfg.get("method", "sigmoid")
-                cv = calib_cfg.get("cv", 5)
-                calib_params = {"estimator": est, "method": method, "cv": cv}
-                if n_jobs is not None:
-                    calib_params["n_jobs"] = n_jobs
-                est = CalibratedClassifierCV(**calib_params)
-                grid.update(
-                    {
-                        f"{final_step_name}__estimator__{k}": v
-                        for k, v in model_grid.items()
-                    }
-                )
-            else:
-                grid.update({f"{final_step_name}__{k}": v for k, v in model_grid.items()})
-            name = m["name"] + suffix
-            pipe = Pipeline(pre_steps + [(final_step_name, est)])
-            out.append((name, pipe, grid))
-
-    if evaluate_ind and len(steps_cfg) > 1:
-        for step in steps_cfg:
-            pre_steps, pre_grid = _make_preprocess([step], pre_cfg)
-            _build_models(pre_steps, pre_grid, suffix=f"__{step.lower()}")
-    else:
-        pre_steps, pre_grid = _make_preprocess(steps_cfg, pre_cfg)
-        _build_models(pre_steps, pre_grid)
-
-    return out
-
-
-def _call_build_pipeline(
-    cfg: Dict[str, Any],
-    *,
-    random_state: int | None = None,
-    n_jobs: int | None = None,
-) -> List[Tuple[str, Pipeline, Dict[str, Any]]]:
-    """Invoke ``build_pipeline_from_config`` respecting its signature."""
-
-    try:
-        signature = inspect.signature(build_pipeline_from_config)
-    except (TypeError, ValueError):  # pragma: no cover - defensive fallback
-        return build_pipeline_from_config(cfg)
-    kwargs: Dict[str, Any] = {}
-    if "random_state" in signature.parameters:
-        kwargs["random_state"] = random_state
-    if "n_jobs" in signature.parameters and n_jobs is not None:
-        kwargs["n_jobs"] = n_jobs
-    return build_pipeline_from_config(cfg, **kwargs)
-
-
-def _format_preprocess_step(step: Any) -> str:
-    """Return a concise string representation for a preprocessing ``step``."""
-
-    if step is None:
-        return "None"
-    if isinstance(step, str):
-        cleaned = step.strip()
-        if not cleaned:
-            return ""
-        if cleaned.endswith("()"):
-            cleaned = cleaned[:-2]
-        upper = cleaned.upper()
-        mapping = {
-            "SNV": "SNV",
-            "MSC": "MSC",
-            "SG": "SG",
-            "EMSC": "EMSC",
-            "EPO": "EPO",
-            "SCALE": "SCALE",
-        }
-        if upper in mapping:
-            return mapping[upper]
-        if cleaned.lower().startswith("detrend"):
-            suffix = cleaned[len("Detrend") :]
-            return f"DETREND{suffix}"
-        if cleaned.startswith("SavitzkyGolayTransformer") or cleaned.startswith("SG("):
-            cleaned = cleaned.replace("SavitzkyGolayTransformer", "SG")
-            cleaned = cleaned.replace("window_length", "window")
-            cleaned = cleaned.replace("polyorder", "poly")
-            return cleaned
-        if cleaned.lower().startswith("standardscaler"):
-            return "SCALE"
-        return cleaned
-
-    if isinstance(step, SNV):
-        return "SNV"
-    if isinstance(step, MSC):
-        return "MSC"
-    if isinstance(step, SavitzkyGolayTransformer):
-        return (
-            f"SG(window={step.window_length},poly={step.polyorder},deriv={step.deriv})"
-        )
-    if isinstance(step, Detrend):
-        return f"DETREND(order={step.order})"
-    if isinstance(step, EMSC):
-        return f"EMSC(degree={step.degree})"
-    if isinstance(step, EPO):
-        return "EPO"
-    if isinstance(step, StandardScaler):
-        return "SCALE"
-    return step.__class__.__name__
-
-
-def _format_preprocess_steps(steps: Iterable[Any]) -> str:
-    """Format a sequence of preprocessing ``steps`` into a readable string."""
-
-    formatted: List[str] = []
-    for step in steps:
-        desc = _format_preprocess_step(step)
-        if desc:
-            formatted.append(desc)
-    result = ", ".join(formatted)
-    return result if result else "None"
-
-
-def _normalize_preprocess_value(value: Any) -> str:
-    """Normalize any representation of preprocessing steps to a string."""
-
-    if value is None:
-        return "None"
-    if isinstance(value, str):
-        formatted = _format_preprocess_step(value)
-        return formatted if formatted else "None"
-    if isinstance(value, (list, tuple)):
-        return _format_preprocess_steps(value)
-    if isinstance(value, Iterable) and not isinstance(value, (str, bytes, Mapping)):
-        return _format_preprocess_steps(list(value))
-    if value:
-        return str(value)
-    return "None"
-
-
-def _coerce_param_value(value: Any) -> Any:
-    """Convert parameter ``value`` to a JSON-friendly representation."""
-
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, (list, tuple)):
-        return tuple(_coerce_param_value(v) for v in value)
-    if isinstance(value, dict):
-        return {k: _coerce_param_value(v) for k, v in value.items()}
-    if isinstance(value, Path):
-        return value.as_posix()
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
-
-
-def _sanitize_metrics_row(row: Mapping[str, Any]) -> Dict[str, Any]:
-    """Return ``row`` with parameter values coerced for metrics persistence."""
-
-    return {key: _coerce_param_value(value) for key, value in row.items()}
-
-
-def _update_row_with_best_params(
-    row: Dict[str, Any], best_params: Optional[Mapping[str, Any]]
-) -> None:
-    """Add ``best_params`` entries to ``row`` using ``best_<param>`` keys."""
-
-    if not best_params:
-        return
-    for key, value in best_params.items():
-        row[f"best_{key}"] = _coerce_param_value(value)
-
-
-def _extract_plsda_method_from_params(
-    best_params: Optional[Mapping[str, Any]]
-) -> Optional[str]:
-    """Return the PLS-DA classifier method recorded in ``best_params`` if any."""
-
-    if not best_params:
-        return None
-    for key in ("clf__method", "clf__estimator__method"):
-        value = best_params.get(key)
-        if value is not None:
-            return str(value)
-    return None
-
-
-def _resolve_plsda_estimator(estimator: Any) -> Any:
-    """Unwrap nested estimators and return the underlying PLS-DA instance."""
-
-    current = estimator
-    while isinstance(current, CalibratedClassifierCV):
-        current = current.estimator
-    if isinstance(current, Pipeline):
-        step_name = _get_model_step_name(current)
-        clf = current.named_steps.get(step_name)
-        if clf is None:
-            return current
-        return _resolve_plsda_estimator(clf)
-    return current
-
-
-def _get_plsda_method_details(
-    name: str, estimator: Any, best_params: Optional[Mapping[str, Any]]
-) -> Optional[Tuple[str, str]]:
-    """Return normalized slug and display label for a PLS-DA classifier method."""
-
-    if not name:
-        return None
-    normalized = re.sub(r"[^A-Za-z]", "", name).upper()
-    if "PLSDA" not in normalized:
-        return None
-    method = _extract_plsda_method_from_params(best_params)
-    if method is None:
-        core = _resolve_plsda_estimator(estimator)
-        method = getattr(core, "method", None)
-    if not method:
-        return None
-    method_str = str(method).strip()
-    if not method_str:
-        return None
-    method_slug = re.sub(r"[^0-9A-Za-z]+", "_", method_str.upper()).strip("_")
-    if not method_slug:
-        return None
-    display_core = method_slug.replace("_", "-")
-    if display_core.startswith("PLS"):
-        display_label = display_core
-    else:
-        display_label = f"PLS-{display_core}"
-    return method_slug, display_label
-
-
-def _format_model_label(
-    name: str,
-    estimator: Any,
-    best_params: Optional[Mapping[str, Any]],
-    *,
-    method_details: Optional[Tuple[str, str]] = None,
-) -> str:
-    """Include the PLS-DA classifier method in the model label when available."""
-
-    if not name:
-        return name
-    parts = name.split("__", 1)
-    base = parts[0]
-    suffix = f"__{parts[1]}" if len(parts) > 1 else ""
-    normalized = re.sub(r"[^A-Za-z]", "", base).upper()
-    if "PLSDA" not in normalized:
-        return name
-    if method_details is None:
-        method_details = _get_plsda_method_details(name, estimator, best_params)
-    if not method_details:
-        return name
-    method_slug, display_label = method_details
-    base_clean = base.rstrip("_")
-    pattern = re.compile(r"pls\s*[-_]*da", re.IGNORECASE)
-    if display_label.upper() in base_clean.upper():
-        new_base = base_clean
-    else:
-        replaced = pattern.sub(display_label, base_clean, count=1)
-        if replaced != base_clean:
-            new_base = replaced
-        elif base_clean.upper().endswith(f"_{method_slug}"):
-            new_base = base_clean
-        else:
-            new_base = f"{display_label}{('_' + base_clean) if base_clean else ''}".rstrip("_")
-    return f"{new_base}{suffix}"
-
-
-def _format_model_and_method_labels(
-    name: str, estimator: Any, best_params: Optional[Mapping[str, Any]]
-) -> Tuple[str, Optional[str]]:
-    """Return the model label and human-readable classifier method label."""
-
-    method_details = _get_plsda_method_details(name, estimator, best_params)
-    model_label = _format_model_label(
-        name, estimator, best_params, method_details=method_details
-    )
-    method_label = method_details[1] if method_details else None
-    return model_label, method_label
 
 
 def _save_metrics(
@@ -1590,18 +1042,6 @@ def _save_pls_diagnostics(
                 artifacts[key] = _rel(html_path)
 
     return artifacts
-
-
-def _get_n_components(best_params: Dict[str, Any]) -> Optional[int]:
-    """Return the best ``n_components`` value from GridSearchCV parameters."""
-
-    for k, v in best_params.items():
-        if k.endswith("n_components"):
-            try:
-                return int(v)
-            except (TypeError, ValueError):
-                return None
-    return None
 
 
 def _run_cv_classification(
