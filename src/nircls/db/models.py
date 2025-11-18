@@ -142,6 +142,7 @@ class ModelRegistry(Base):
     status = Column(String, nullable=False, default="candidate")
     created_at = Column(DateTime, server_default=sa.func.now())
     updated_at = Column(DateTime, server_default=sa.func.now(), onupdate=sa.func.now())
+    eval_history = Column(JSON, nullable=True)
 
     run = relationship("Run", back_populates="models")
     dataset = relationship("Dataset")
