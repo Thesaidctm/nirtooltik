@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from nircls.db import crud
 from nircls.db.models import Run
 from nircls import i18n
+from nircls.processing.pipeline.runs_train import run_pipeline
 from nircls.utils.errors import DatabaseError
 
 
@@ -110,3 +111,53 @@ def mark_run_failed(
         error_message=error_message,
     )
     return _require_run(run, run_id)
+
+
+def execute_run(
+    db: Session,
+    run: Run,
+) -> Run:
+    """
+    Executa a pipeline correspondente a este Run de forma síncrona.
+
+    A função atualiza o status para ``running`` antes da execução, chama a
+    pipeline apropriada e, ao final, atualiza o status para ``completed`` ou
+    ``failed`` e registra ``artifacts``/``metrics``/``error_message`` quando
+    disponível.
+    """
+
+    run_id = getattr(run, "run_id", None)
+    run = _require_run(run, run_id)
+
+    run.status = "running"
+    run.error_message = None
+    db.commit()
+    db.refresh(run)
+
+    cfg: Dict[str, Any] = run.config or {}
+
+    # Tenta inferir o diretório de saída a partir da configuração, mantendo um
+    # padrão sensato caso não esteja presente.
+    out_dir: str | Path = (
+        cfg.get("out_dir")
+        or (cfg.get("data") or {}).get("out_dir")  # type: ignore[union-attr]
+        or "results"
+    )
+
+    try:
+        return run_pipeline(
+            cfg=cfg,
+            out_dir=Path(out_dir),
+            db=db,
+            run_id=run.run_id,
+            run_uid=run.run_uid,
+            user_id=run.user_id,
+            dataset_id=run.dataset.dataset_id if run.dataset else None,
+            project_id=run.project.project_id if run.project else None,
+        )
+    except Exception as exc:  # pragma: no cover - error handling glue
+        run.status = "failed"
+        run.error_message = str(exc)
+        db.commit()
+        db.refresh(run)
+        raise

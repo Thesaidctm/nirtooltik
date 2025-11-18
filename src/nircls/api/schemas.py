@@ -53,6 +53,7 @@ class RunCreate(RunBase):
     dataset_id: Optional[int] = None
     config: Dict[str, Any]
     artifacts: Optional[Dict[str, Any]] = None
+    auto_execute: bool = False
 
 
 class RunRead(RunBase):
