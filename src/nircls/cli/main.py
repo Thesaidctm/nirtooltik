@@ -25,6 +25,8 @@ from . import (
 from . import common
 from .common import __version__, set_language, t
 
+logger = logging.getLogger(__name__)
+
 
 def _build_parser() -> argparse.ArgumentParser:
     default_lang = common.LANG
@@ -110,7 +112,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             import mlflow
         except Exception:
-            print(t("mlflow_not_installed"), file=sys.stderr)
+            logger.error(t("mlflow_not_installed"), exc_info=True)
             return 1
         mlflow.set_tracking_uri(args.mlflow_uri)
 

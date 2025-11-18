@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import gc
 import hashlib
 import inspect
@@ -84,7 +85,7 @@ from ..results.report import generate_scientific_report
 from ..utils.compliance import check_astm_classification
 from ..utils.email import enviar_email
 from ..utils.errors import DataError, ModelError
-from ..utils.logging import log_versions, logger
+from ..utils.logging import log_versions
 from ..utils.misc import RESULTS_DIR, file_hash, get_git_commit
 from ..utils.palettes import Palette
 from ..utils.plots import (
@@ -107,6 +108,8 @@ warnings.filterwarnings(
     message="This Pipeline instance is not fitted yet",
     category=FutureWarning,
 )
+
+logger = logging.getLogger(__name__)
 
 
 _WINDOWS_WAIT_HANDLE_LIMIT = 63

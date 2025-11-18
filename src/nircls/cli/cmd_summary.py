@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import pandas as pd
 
 from ..utils.summarize import summarize_runs
 from .common import _prepare_summary_display, t
+
+logger = logging.getLogger(__name__)
 
 
 def register_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -27,5 +30,5 @@ def run_summary(args: argparse.Namespace) -> int:
         ]
         df = _prepare_summary_display(df, ordered_cols=ordered_cols)
         with pd.option_context("display.max_columns", None, "display.max_colwidth", None):
-            print(df.to_string(index=False))
+            logger.info(df.to_string(index=False))
     return 0

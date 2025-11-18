@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 
 from .common import t
+
+logger = logging.getLogger(__name__)
 
 
 def register_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -18,12 +20,12 @@ def run_dashboard_cmd(args: argparse.Namespace) -> int:
         from ..dashboard import run_dashboard
     except ModuleNotFoundError as exc:  # pragma: no cover - import-time dependency guard
         missing = getattr(exc, "name", None) or "streamlit"
-        print(t("dashboard_dep_missing", package=missing), file=sys.stderr)
+        logger.error(t("dashboard_dep_missing", package=missing), exc_info=True)
         return 1
     try:
         run_dashboard(Path(args.results))
     except ModuleNotFoundError as exc:  # pragma: no cover - runtime dependency guard
         missing = getattr(exc, "name", None) or str(exc)
-        print(t("dashboard_dep_missing", package=missing), file=sys.stderr)
+        logger.error(t("dashboard_dep_missing", package=missing), exc_info=True)
         return 1
     return 0

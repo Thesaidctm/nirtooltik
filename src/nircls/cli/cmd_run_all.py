@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import shutil
 import sys
 from pathlib import Path
@@ -28,6 +29,8 @@ from .common import (
     setup_run_logging,
     t,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def register_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -70,7 +73,7 @@ def run_run_all(args: argparse.Namespace) -> int:
             with open(args.config) as f:
                 user_cfg = cast(Dict[str, Any], yaml.safe_load(f) or {})
         except FileNotFoundError:
-            print(t("config_not_found"), file=sys.stderr)
+            logger.error(t("config_not_found"))
             return 1
         _deep_update(default_cfg, user_cfg)
     if args.target_type:
@@ -83,14 +86,14 @@ def run_run_all(args: argparse.Namespace) -> int:
             try:
                 builder({})
             except ImportError as e:
-                print(t("model_dep_missing", name=name, err=e), file=sys.stderr)
+                logger.error(t("model_dep_missing", name=name, err=e), exc_info=True)
                 continue
             models_cfg.append({"name": name})
         default_cfg["models"] = models_cfg
     if args.notification_email:
         default_cfg["notification_email"] = args.notification_email
     if args.resume and not args.run_id:
-        print(t("resume_requires_run_id"), file=sys.stderr)
+        logger.error(t("resume_requires_run_id"))
         return 1
 
     run_id = args.run_id or now_ts()
@@ -103,17 +106,17 @@ def run_run_all(args: argparse.Namespace) -> int:
     if args.output_name:
         desired_name = _sanitize_output_name(args.output_name)
         if not desired_name:
-            print(t("run_all_invalid_output_name"), file=sys.stderr)
+            logger.error(t("run_all_invalid_output_name"))
             return 1
         rename_target = base_out_dir / desired_name
         if rename_target.exists() and rename_target != base_dir:
-            print(t("run_all_output_exists", path=rename_target), file=sys.stderr)
+            logger.error(t("run_all_output_exists", path=rename_target))
             return 1
     if args.resume and not base_dir.exists():
-        print(t("resume_dir_missing", path=base_dir), file=sys.stderr)
+        logger.error(t("resume_dir_missing", path=base_dir))
         return 1
     if args.resume:
-        print(t("resume_from", path=base_dir))
+        logger.info(t("resume_from", path=base_dir))
     ensure_dirs(base_dir)
 
     state = _load_run_state(base_dir) or {
@@ -134,7 +137,7 @@ def run_run_all(args: argparse.Namespace) -> int:
         state["status"] = "data_failed"
         state["last_error"] = str(e)
         _write_run_state(base_dir, state)
-        print(t("invalid_data", err=e), file=sys.stderr)
+        logger.error(t("invalid_data", err=e), exc_info=True)
         return 1
 
     summary = summarize_dataset(ds_list)
@@ -163,8 +166,8 @@ def run_run_all(args: argparse.Namespace) -> int:
         state["status"] = "train_failed"
         state["last_error"] = str(e)
         _write_run_state(base_dir, state)
-        print(t("run_all_train_failed", err=e), file=sys.stderr)
-        print(t("run_all_resume_hint", run_id=run_id), file=sys.stderr)
+        logger.error(t("run_all_train_failed", err=e), exc_info=True)
+        logger.warning(t("run_all_resume_hint", run_id=run_id))
         return 1
 
     state["train_completed"] = True
@@ -190,8 +193,8 @@ def run_run_all(args: argparse.Namespace) -> int:
         state["status"] = "cv_failed"
         state["last_error"] = str(e)
         _write_run_state(base_dir, state)
-        print(t("run_all_cv_failed", err=e), file=sys.stderr)
-        print(t("run_all_resume_hint", run_id=run_id), file=sys.stderr)
+        logger.error(t("run_all_cv_failed", err=e), exc_info=True)
+        logger.warning(t("run_all_resume_hint", run_id=run_id))
         return 1
 
     state["cv_completed"] = True
@@ -205,12 +208,12 @@ def run_run_all(args: argparse.Namespace) -> int:
             header = f"== {cv_metrics.parent.name} ({', '.join(step_descs)}) =="
         else:
             header = f"== {cv_metrics.parent.name} =="
-        print(header)
+        logger.info(header)
         _print_metrics_table(cv_metrics)
         _print_confusion_paths(cv_figs)
         rpt = cv_metrics.parent / "report.md"
         if rpt.exists():
-            print(t("full_report", path=rpt))
+            logger.info(t("full_report", path=rpt))
 
     if train_metrics:
         steps_list = _load_preprocess_steps(train_metrics)
@@ -218,13 +221,13 @@ def run_run_all(args: argparse.Namespace) -> int:
         step_descs = _describe_preprocess_steps(steps_list)
         if step_descs:
             suffix = f" ({', '.join(step_descs)})"
-        print(t("final_model", steps=suffix))
+        logger.info(t("final_model", steps=suffix))
         _print_metrics_table(train_metrics)
         _print_confusion_paths(train_figs)
         if report_path.exists():
-            print(t("full_report", path=report_path))
+            logger.info(t("full_report", path=report_path))
         if model_path.exists():
-            print(t("model_saved", path=model_path))
+            logger.info(t("model_saved", path=model_path))
 
     if desired_name and rename_target and rename_target != base_dir:
         shutil.move(str(base_dir), str(rename_target))
@@ -232,9 +235,9 @@ def run_run_all(args: argparse.Namespace) -> int:
         run_id = desired_name
         state["run_id"] = run_id
         _write_run_state(base_dir, state)
-        print(t("run_all_results_renamed", path=base_dir))
+        logger.info(t("run_all_results_renamed", path=base_dir))
 
     summary_dir_path = base_dir / "summary"
-    print(f"Summary saved in {summary_dir_path}")
-    print(t("results_in", path=base_dir))
+    logger.info("Summary saved in %s", summary_dir_path)
+    logger.info(t("results_in", path=base_dir))
     return 0

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -18,6 +19,8 @@ from .common import (
     setup_run_logging,
     t,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def register_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -52,28 +55,28 @@ def run_train(args: argparse.Namespace) -> int:
     if cfg is None:
         return 1
     if cfg.data is None or not cfg.models:
-        print(t("config_invalid_data_models_sections"), file=sys.stderr)
+        logger.error(t("config_invalid_data_models_sections"))
         return 1
 
     cfg.astm = args.astm
     if args.resume and not args.run_id:
-        print(t("resume_requires_run_id"), file=sys.stderr)
+        logger.error(t("resume_requires_run_id"))
         return 1
 
     run_id = args.run_id or make_run_id("train")
     setup_run_logging(run_id, args.log_level_value, args.log_file)
     out_dir = Path(cfg.data.out_dir or common.RESULTS_DIR) / run_id
     if args.resume and not out_dir.exists():
-        print(t("resume_dir_missing", path=out_dir), file=sys.stderr)
+        logger.error(t("resume_dir_missing", path=out_dir))
         return 1
     if args.resume:
-        print(t("resume_from", path=out_dir))
+        logger.info(t("resume_from", path=out_dir))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
     except DataError as e:
-        print(t("invalid_data", err=e), file=sys.stderr)
+        logger.error(t("invalid_data", err=e), exc_info=True)
         return 1
 
     summary = summarize_dataset(ds_list)
@@ -92,10 +95,10 @@ def run_train(args: argparse.Namespace) -> int:
             resume=args.resume,
         )
     except DataError as e:
-        print(t("invalid_data", err=e), file=sys.stderr)
+        logger.error(t("invalid_data", err=e), exc_info=True)
         return 1
     except ModelError as e:
-        print(t("invalid_model", err=e), file=sys.stderr)
+        logger.error(t("invalid_model", err=e), exc_info=True)
         return 1
 
     if metrics_path:
@@ -104,8 +107,8 @@ def run_train(args: argparse.Namespace) -> int:
         _print_confusion_paths(figs_dir)
     report_path = out_dir / "report.md"
     if report_path.exists():
-        print(t("full_report", path=report_path))
+        logger.info(t("full_report", path=report_path))
     if args.astm:
         _print_astm_report(out_dir / "astm_classification.json")
-    print(t("results_in", path=out_dir))
+    logger.info(t("results_in", path=out_dir))
     return 0

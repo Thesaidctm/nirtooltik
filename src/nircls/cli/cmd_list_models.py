@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import logging
 
 from ..processing.models.factory import get_model_builders, get_model_descriptions
 from .common import t
+
+logger = logging.getLogger(__name__)
 
 
 def register_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -22,5 +25,5 @@ def run_list_models(args: argparse.Namespace) -> int:
     builders = get_model_builders(target_type)
     descs = get_model_descriptions(target_type)
     for name in sorted(builders.keys()):
-        print(f"{name}: {descs.get(name, name)}")
+        logger.info("%s: %s", name, descs.get(name, name))
     return 0

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 from typing import Any, Union
@@ -22,6 +23,8 @@ from .common import (
     t,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def register_subparser(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser("wizard")
@@ -33,7 +36,7 @@ def run_wizard(args: argparse.Namespace) -> int:
         import questionary
         from questionary import Choice
     except Exception:  # pragma: no cover - missing optional dependency
-        print(t("questionary_not_installed"), file=sys.stderr)
+        logger.error(t("questionary_not_installed"), exc_info=True)
         return 1
 
     def _validate_path(p: str) -> Union[bool, str]:
@@ -90,7 +93,7 @@ def run_wizard(args: argparse.Namespace) -> int:
     cfg_file = out_path / "config.yaml"
     with open(cfg_file, "w") as f:
         yaml.safe_dump(cfg_dict, f)
-    print(t("wizard_config_saved", file=cfg_file))
+    logger.info(t("wizard_config_saved", file=cfg_file))
     run_now = questionary.confirm(t("wizard_run_now")).ask()
     if run_now:
         cfg_obj = ConfigModel(**cfg_dict)
@@ -115,7 +118,7 @@ def run_wizard(args: argparse.Namespace) -> int:
                 _print_metrics_table(metrics_path)
             if figs_dir:
                 _print_confusion_paths(figs_dir)
-            print(t("wizard_train_in", path=train_dir))
+            logger.info(t("wizard_train_in", path=train_dir))
             cv_dir = base_dir / "cv"
             ensure_dirs(cv_dir)
             outputs, summary_dir = run_multiple_eval(
@@ -129,10 +132,10 @@ def run_wizard(args: argparse.Namespace) -> int:
             for metrics_path, figs_dir in outputs:
                 _print_metrics_table(metrics_path)
                 _print_confusion_paths(figs_dir)
-            print(t("wizard_eval_in", path=cv_dir))
-            print(f"Summary saved in {summary_dir}")
+            logger.info(t("wizard_eval_in", path=cv_dir))
+            logger.info("Summary saved in %s", summary_dir)
         except DataError as e:
-            print(t("invalid_data", err=e), file=sys.stderr)
+            logger.error(t("invalid_data", err=e), exc_info=True)
         except ModelError as e:
-            print(t("invalid_model", err=e), file=sys.stderr)
+            logger.error(t("invalid_model", err=e), exc_info=True)
     return 0

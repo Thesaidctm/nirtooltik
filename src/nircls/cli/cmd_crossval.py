@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from .common import (
     setup_run_logging,
     t,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def register_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -54,13 +57,13 @@ def run_crossval(args: argparse.Namespace) -> int:
     if cfg is None:
         return 1
     if cfg.data is None or not cfg.models or cfg.cv is None:
-        print(t("config_invalid_data_models_cv_sections"), file=sys.stderr)
+        logger.error(t("config_invalid_data_models_cv_sections"))
         return 1
 
     try:
         ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
     except DataError as e:
-        print(t("invalid_data", err=e), file=sys.stderr)
+        logger.error(t("invalid_data", err=e), exc_info=True)
         return 1
 
     summary = summarize_dataset(ds_list)
@@ -68,17 +71,17 @@ def run_crossval(args: argparse.Namespace) -> int:
     if args.run == "one" and ds_list:
         cfg.data.target_cols = ds_list[0]["target"]
     if args.resume and not args.run_id:
-        print(t("resume_requires_run_id"), file=sys.stderr)
+        logger.error(t("resume_requires_run_id"))
         return 1
 
     run_id = args.run_id or make_run_id("cv")
     setup_run_logging(run_id, args.log_level_value, args.log_file)
     out_dir = Path(cfg.data.out_dir or common.RESULTS_DIR) / run_id
     if args.resume and not out_dir.exists():
-        print(t("resume_dir_missing", path=out_dir), file=sys.stderr)
+        logger.error(t("resume_dir_missing", path=out_dir))
         return 1
     if args.resume:
-        print(t("resume_from", path=out_dir))
+        logger.info(t("resume_from", path=out_dir))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     cfg.astm = args.astm
@@ -94,10 +97,10 @@ def run_crossval(args: argparse.Namespace) -> int:
             resume=args.resume,
         )
     except DataError as e:
-        print(t("invalid_data", err=e), file=sys.stderr)
+        logger.error(t("invalid_data", err=e), exc_info=True)
         return 1
     except ModelError as e:
-        print(t("invalid_model", err=e), file=sys.stderr)
+        logger.error(t("invalid_model", err=e), exc_info=True)
         return 1
 
     for metrics_path, figs_dir in outputs:
@@ -106,14 +109,14 @@ def run_crossval(args: argparse.Namespace) -> int:
             header = f"== {metrics_path.parent.name} ({', '.join(step_descs)}) =="
         else:
             header = f"== {metrics_path.parent.name} =="
-        print(header)
+        logger.info(header)
         _print_metrics_table(metrics_path)
         _print_confusion_paths(figs_dir)
         rpt = metrics_path.parent / "report.md"
         if rpt.exists():
-            print(t("full_report", path=rpt))
+            logger.info(t("full_report", path=rpt))
         if args.astm:
             _print_astm_report(metrics_path.parent / "astm_classification.json")
-    print(t("results_in", path=out_dir))
-    print(f"Summary saved in {summary_dir}")
+    logger.info(t("results_in", path=out_dir))
+    logger.info("Summary saved in %s", summary_dir)
     return 0
