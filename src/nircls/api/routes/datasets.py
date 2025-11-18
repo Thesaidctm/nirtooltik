@@ -5,6 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from ... import i18n
 from ..deps import get_current_user, get_db
 from ..schemas import DatasetCreate, DatasetRead
 from ...db import crud
@@ -21,7 +22,10 @@ def list_all_datasets(db: Session = Depends(get_db)) -> List[Dataset]:
 def get_dataset_detail(dataset_id: int, db: Session = Depends(get_db)) -> Dataset:
     dataset = crud.get_dataset(db, dataset_id)
     if dataset is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=i18n.t("datasets.not_found_by_id").format(dataset_id=dataset_id),
+        )
     return dataset
 
 

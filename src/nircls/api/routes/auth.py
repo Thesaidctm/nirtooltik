@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ... import i18n
 from ...db.models import User
 from ..deps import get_db
 from ..security import ACCESS_TOKEN_EXPIRE_SECONDS, SESSION_COOKIE_NAME, create_access_token, verify_password
@@ -26,7 +27,7 @@ def login(data: LoginData, response: Response, db: Session = Depends(get_db)):
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
+            detail=i18n.t("auth.invalid_credentials"),
         )
 
     token = create_access_token(subject=str(user.user_id))

@@ -34,6 +34,7 @@ from sklearn.model_selection import (
 )
 from sklearn.preprocessing import LabelEncoder
 
+from ... import i18n
 from .data_loading import prepare_inputs
 from .evaluation import _maybe_run_qc, _save_metrics, _save_plots, _save_pls_diagnostics
 from .hyperparameter_search import _get_n_components, _sanitize_n_jobs
@@ -2518,12 +2519,16 @@ def run_pipeline(
         if run_id is not None:
             run = db.get(Run, run_id)
             if run is None:
-                raise ValueError(f"Run with id {run_id} not found")
+                raise ValueError(
+                    i18n.t("runs.not_found_by_id").format(run_id=run_id)
+                )
             run_uid = run.run_uid or run_uid
         elif run_uid is not None:
             run = crud.get_run_by_uid(db, run_uid)
             if run is None:
-                raise ValueError(f"Run with uid {run_uid} not found")
+                raise ValueError(
+                    i18n.t("runs.not_found_by_uid").format(run_uid=run_uid)
+                )
         if run is None:
             run = run_services.create_run(
                 db,
