@@ -10,8 +10,13 @@ from .users import create_user, delete_user, get_user, update_user
 from .projects import create_project, get_project, list_projects
 from .runs import create_run, get_run, list_runs, update_run_status
 from .variables import get_variavel, set_variavel
+from .models import create_model, get_model, list_models, update_model_status
 
 __all__ = [
+    "create_model",
+    "get_model",
+    "list_models",
+    "update_model_status",
     "create_user",
     "get_user",
     "update_user",
