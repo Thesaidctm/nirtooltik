@@ -1,40 +1,23 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_user, get_db
+from ..schemas import DatasetCreate, DatasetRead
 from ...db import crud
 from ...db.models import Dataset, User
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
-
-class DatasetCreate(BaseModel):
-    name: str
-    version: Optional[str] = None
-    description: Optional[str] = None
-    project_id: Optional[int] = None
-    storage_path: Optional[str] = None
-
-
-class DatasetResponse(DatasetCreate):
-    dataset_id: int
-    created_by_id: Optional[int] = None
-
-    class Config:
-        orm_mode = True
-
-
-@router.get("", response_model=List[DatasetResponse])
+@router.get("", response_model=List[DatasetRead])
 def list_all_datasets(db: Session = Depends(get_db)) -> List[Dataset]:
     return crud.list_datasets(db)
 
 
-@router.get("/{dataset_id}", response_model=DatasetResponse)
+@router.get("/{dataset_id}", response_model=DatasetRead)
 def get_dataset_detail(dataset_id: int, db: Session = Depends(get_db)) -> Dataset:
     dataset = crud.get_dataset(db, dataset_id)
     if dataset is None:
@@ -42,7 +25,7 @@ def get_dataset_detail(dataset_id: int, db: Session = Depends(get_db)) -> Datase
     return dataset
 
 
-@router.post("", response_model=DatasetResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=DatasetRead, status_code=status.HTTP_201_CREATED)
 def create_new_dataset(
     payload: DatasetCreate,
     db: Session = Depends(get_db),
