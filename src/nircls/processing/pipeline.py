@@ -58,7 +58,7 @@ from .feature_selection.vip import compute_vip
 from .io import export_xy_xlsx
 from .io import prepare_inputs as _prepare_inputs
 from .io import read_tabular, read_xlsx_xy, summarize_dataset
-from ..results.metrics.calibration import expected_calibration_error
+from ..results.metrics.classification import expected_calibration_error
 from ..results.metrics.regression import (
     compute_mae_percent,
     compute_rpd,

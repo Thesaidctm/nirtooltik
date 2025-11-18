@@ -4,24 +4,6 @@ import ast
 from importlib.metadata import entry_points
 from typing import Any, Dict, List
 
-from sklearn.cross_decomposition import PLSRegression
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
-from sklearn.ensemble import (
-    AdaBoostClassifier,
-    AdaBoostRegressor,
-    ExtraTreesRegressor,
-    GradientBoostingClassifier,
-    GradientBoostingRegressor,
-    RandomForestClassifier,
-    RandomForestRegressor,
-)
-from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
-from sklearn.naive_bayes import BernoulliNB, GaussianNB, MultinomialNB
-from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-from sklearn.neural_network import MLPClassifier, MLPRegressor
-from sklearn.svm import SVR
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
-
 from .base import BaseModelBuilder
 
 
@@ -68,278 +50,24 @@ def _apply_n_jobs(estimator: Any, n_jobs: int | None) -> Any:
         return estimator
     return estimator
 
-# Helpers for model construction with optional class weighting
-from .builders import _build_etc, _build_logreg, _build_rf, _build_svm
-from .plsda import PLSDA
-from .plslocal import PLSLocalRegressor
+from .classification import (
+    CLASSIFICATION_DEFAULT_GRIDS,
+    CLASSIFICATION_MODEL_BUILDERS,
+    CLASSIFICATION_MODEL_DESCRIPTIONS,
+)
+from .regression import (
+    REGRESSION_DEFAULT_GRIDS,
+    REGRESSION_MODEL_BUILDERS,
+    REGRESSION_MODEL_DESCRIPTIONS,
+)
 
-# Optional third-party estimators
-try:  # pragma: no cover - optional dependency
-    from xgboost import XGBClassifier
-except Exception:  # pragma: no cover - handle any import error
-    XGBClassifier = None
-
-try:  # pragma: no cover
-    from lightgbm import LGBMClassifier
-except Exception:  # pragma: no cover
-    LGBMClassifier = None
-
-try:  # pragma: no cover
-    from catboost import CatBoostClassifier
-except Exception:  # pragma: no cover
-    CatBoostClassifier = None
-
-
-def _xgb_builder():
-    if XGBClassifier is None:
-        raise ImportError(
-            "xgboost is not installed. Install with `pip install xgboost` to use XGBOOST."
-        )
-    return XGBClassifier(use_label_encoder=False, eval_metric="logloss")
-
-
-def _lgbm_builder():
-    if LGBMClassifier is None:
-        raise ImportError(
-            "lightgbm is not installed. Install with `pip install lightgbm` to use LGBM."
-        )
-    return LGBMClassifier()
-
-
-def _catboost_builder():
-    if CatBoostClassifier is None:
-        raise ImportError(
-            "catboost is not installed. Install with `pip install catboost` to use CATBOOST."
-        )
-    return CatBoostClassifier(verbose=False)
-
-
-def _cnn_builder():  # pragma: no cover - lazy import
-    from .neural import SpectralCNN
-
-    return SpectralCNN()
-
-
-def _lstm_builder():  # pragma: no cover - lazy import
-    from .neural import SpectralLSTM
-
-    return SpectralLSTM()
-
-
-# Mapping from model identifier to human readable description. This dictionary
-# is also populated by third-party plugins registered via entry points.
-CLASSIFICATION_MODEL_DESCRIPTIONS: Dict[str, str] = {
-    "PLSDA": "Partial Least Squares Discriminant Analysis",
-    "SVM_RBF": "Support Vector Machine (RBF)",
-    "SVM_LINEAR": "Support Vector Machine (Linear)",
-    "RF": "Random Forest",
-    "GB": "Gradient Boosting",
-    "ET": "Extra Trees",
-    "ADABOOST": "AdaBoost",
-    "LOGREG": "Logistic Regression",
-    "QDA": "Quadratic Discriminant Analysis",
-    "XGBOOST": "XGBoost",
-    "LGBM": "LightGBM",
-    "CATBOOST": "CatBoost",
-    "MLP": "Multilayer Perceptron",
-    "DT": "Decision Tree",
-    "KNN": "k-Nearest Neighbors",
-    "CNN1D": "1D Convolutional Neural Network",
-    "LSTM1D": "1D LSTM Network",
-    "GAUSSIANNB": "Gaussian Naive Bayes",
-    "NB": "Gaussian Naive Bayes",
-    "MULTINB": "Multinomial Naive Bayes",
-    "BERNOULLINB": "Bernoulli Naive Bayes",
-}
-
-REGRESSION_MODEL_DESCRIPTIONS: Dict[str, str] = {
-    "PLSREGRESSION": "Partial Least Squares Regression",
-    "PLSR": "Partial Least Squares Regression",
-    "PLS_REG": "Partial Least Squares Regression",
-    "PLSLOCALREGRESSOR": "Partial Least Squares with local regression",
-    "PLSLOCAL_REG": "Partial Least Squares with local regression",
-    "PLS_LOCAL_REG": "Partial Least Squares with local regression",
-    "RANDOMFORESTREGRESSOR": "Random Forest Regressor",
-    "RFR": "Random Forest Regressor",
-    "RF_REG": "Random Forest Regressor",
-    "GRADIENTBOOSTINGREGRESSOR": "Gradient Boosting Regressor",
-    "GB_REG": "Gradient Boosting Regressor",
-    "EXTRATREESREGRESSOR": "Extra Trees Regressor",
-    "ETR": "Extra Trees Regressor",
-    "ET_REG": "Extra Trees Regressor",
-    "ADABOOSTREGRESSOR": "AdaBoost Regressor",
-    "ADABOOST_REG": "AdaBoost Regressor",
-    "SVR": "Support Vector Regressor",
-    "SVR_REG": "Support Vector Regressor",
-    "SVR_LINEAR_REG": "Support Vector Regressor (Linear)",
-    "SVR_RBF_REG": "Support Vector Regressor (RBF)",
-    "RIDGE": "Ridge Regression",
-    "LINEARREGRESSION": "Linear Regression",
-    "LINEAR_REG": "Linear Regression",
-    "KNNR": "k-Nearest Neighbors Regressor",
-    "KNEIGHBORSREGRESSOR": "k-Nearest Neighbors Regressor",
-    "KNN_REG": "k-Nearest Neighbors Regressor",
-    "MLPREGRESSOR": "Multilayer Perceptron Regressor",
-    "MLP_REG": "Multilayer Perceptron Regressor",
-    "DECISIONTREEREGRESSOR": "Decision Tree Regressor",
-    "DT_REG": "Decision Tree Regressor",
-}
 
 MODEL_DESCRIPTIONS: Dict[str, str] = CLASSIFICATION_MODEL_DESCRIPTIONS
 
 _ENTRYPOINT_GROUP = "nircls.model_builders"
 
-
-CLASSIFICATION_MODEL_BUILDERS = {
-    "PLSDA": lambda grid: PLSDA(),
-    "SVM_RBF": lambda grid: _build_svm(grid, kernel="rbf"),
-    "SVM_LINEAR": lambda grid: _build_svm(grid, kernel="linear"),
-    "RF": _build_rf,
-    "GB": lambda grid: GradientBoostingClassifier(),
-    "ET": _build_etc,
-    "EXTRATREES": _build_etc,
-    "ADABOOST": lambda grid: AdaBoostClassifier(),
-    "LOGREG": _build_logreg,
-    "QDA": lambda grid: QuadraticDiscriminantAnalysis(),
-    "XGBOOST": lambda grid: _xgb_builder(),
-    "LGBM": lambda grid: _lgbm_builder(),
-    "CATBOOST": lambda grid: _catboost_builder(),
-    "MLP": lambda grid: MLPClassifier(),
-    "DT": lambda grid: DecisionTreeClassifier(),
-    "KNN": lambda grid: KNeighborsClassifier(),
-    "CNN1D": lambda grid: _cnn_builder(),
-    "LSTM1D": lambda grid: _lstm_builder(),
-    "GAUSSIANNB": lambda grid: GaussianNB(),
-    "NB": lambda grid: GaussianNB(),
-    "MULTINB": lambda grid: MultinomialNB(),
-    "BERNOULLINB": lambda grid: BernoulliNB(),
-}
-
-REGRESSION_MODEL_BUILDERS = {
-    "PLSREGRESSION": lambda grid: PLSRegression(),
-    "PLSR": lambda grid: PLSRegression(),
-    "PLS_REG": lambda grid: PLSRegression(),
-    "PLSLOCALREGRESSOR": lambda grid: PLSLocalRegressor(),
-    "PLSLOCAL_REG": lambda grid: PLSLocalRegressor(),
-    "PLS_LOCAL_REG": lambda grid: PLSLocalRegressor(),
-    "RANDOMFORESTREGRESSOR": lambda grid: RandomForestRegressor(),
-    "RFR": lambda grid: RandomForestRegressor(),
-    "RF_REG": lambda grid: RandomForestRegressor(),
-    "GRADIENTBOOSTINGREGRESSOR": lambda grid: GradientBoostingRegressor(),
-    "GB_REG": lambda grid: GradientBoostingRegressor(),
-    "EXTRATREESREGRESSOR": lambda grid: ExtraTreesRegressor(),
-    "ETR": lambda grid: ExtraTreesRegressor(),
-    "ET_REG": lambda grid: ExtraTreesRegressor(),
-    "ADABOOSTREGRESSOR": lambda grid: AdaBoostRegressor(),
-    "ADABOOST_REG": lambda grid: AdaBoostRegressor(),
-    "SVR": lambda grid: SVR(),
-    "SVR_REG": lambda grid: SVR(),
-    "SVR_LINEAR_REG": lambda grid: SVR(kernel="linear"),
-    "SVR_RBF_REG": lambda grid: SVR(kernel="rbf"),
-    "RIDGE": lambda grid: Ridge(),
-    "LINEARREGRESSION": lambda grid: LinearRegression(),
-    "LINEAR_REG": lambda grid: LinearRegression(),
-    "KNNR": lambda grid: KNeighborsRegressor(),
-    "KNEIGHBORSREGRESSOR": lambda grid: KNeighborsRegressor(),
-    "KNN_REG": lambda grid: KNeighborsRegressor(),
-    "MLPREGRESSOR": lambda grid: MLPRegressor(),
-    "MLP_REG": lambda grid: MLPRegressor(),
-    "DECISIONTREEREGRESSOR": lambda grid: DecisionTreeRegressor(),
-    "DT_REG": lambda grid: DecisionTreeRegressor(),
-}
-
 MODEL_BUILDERS = CLASSIFICATION_MODEL_BUILDERS
-
-
-DEFAULT_GRIDS = {
-    "PLSDA": {
-        "n_components": [10],
-        "method": ["logreg"],
-        "C": [1.0],
-        "reg_param": [0.0],
-        "n_neighbors": [5],
-    },
-    "LOGREG": {"C": [1.0]},
-    "MLP": {"max_iter": [500, 1000], "early_stopping": [True]},
-    "ADABOOST": {"n_estimators": [50], "learning_rate": [1.0]},
-    "XGBOOST": {"n_estimators": [100], "max_depth": [3], "learning_rate": [0.1]},
-    "LGBM": {"n_estimators": [100], "num_leaves": [31], "learning_rate": [0.1]},
-    "CATBOOST": {"iterations": [100], "depth": [6], "learning_rate": [0.1]},
-    "CNN1D": {
-        "n_filters": [32],
-        "kernel_size": [3],
-        "n_epochs": [10],
-        "patience": [0],
-        "device": [None],
-    },
-    "LSTM1D": {
-        "hidden_dim": [64],
-        "num_layers": [1],
-        "n_epochs": [10],
-        "patience": [0],
-        "device": [None],
-    },
-    # Include a positive regularization parameter to handle rank-deficient
-    # covariance matrices that frequently arise in high dimensional settings.
-    # A value of 0.1 provides mild shrinkage while preserving the ability to
-    # search for an unregularized solution (0.0).
-    "QDA": {"reg_param": [0.0, 0.1]},
-    "GAUSSIANNB": {"var_smoothing": [1e-09]},
-    "NB": {"var_smoothing": [1e-09]},
-    "MULTINB": {"alpha": [1.0]},
-    "BERNOULLINB": {"alpha": [1.0]},
-}
-
-REGRESSION_DEFAULT_GRIDS = {
-    "PLSREGRESSION": {"n_components": [2]},
-    "PLSR": {"n_components": [2]},
-    "PLS_REG": {"n_components": [2]},
-    "PLSLOCALREGRESSOR": {
-        "n_components": [2],
-        "method": ["knn"],
-        "n_neighbors": [5],
-    },
-    "PLSLOCAL_REG": {
-        "n_components": [2],
-        "method": ["knn"],
-        "n_neighbors": [5],
-    },
-    "PLS_LOCAL_REG": {
-        "n_components": [2],
-        "method": ["knn"],
-        "n_neighbors": [5],
-    },
-    "RANDOMFORESTREGRESSOR": {"n_estimators": [100], "max_depth": [None]},
-    "RFR": {"n_estimators": [100], "max_depth": [None]},
-    "RF_REG": {"n_estimators": [100], "max_depth": [None]},
-    "GRADIENTBOOSTINGREGRESSOR": {
-        "n_estimators": [100],
-        "learning_rate": [0.1],
-        "max_depth": [3],
-    },
-    "GB_REG": {"n_estimators": [100], "learning_rate": [0.1], "max_depth": [3]},
-    "EXTRATREESREGRESSOR": {"n_estimators": [100], "max_depth": [None]},
-    "ETR": {"n_estimators": [100], "max_depth": [None]},
-    "ET_REG": {"n_estimators": [100], "max_depth": [None]},
-    "ADABOOSTREGRESSOR": {"n_estimators": [50], "learning_rate": [1.0]},
-    "ADABOOST_REG": {"n_estimators": [50], "learning_rate": [1.0]},
-    "SVR": {"kernel": ["rbf"], "C": [1.0]},
-    "SVR_REG": {"kernel": ["rbf"], "C": [1.0]},
-    "SVR_LINEAR_REG": {"kernel": ["linear"], "C": [1.0]},
-    "SVR_RBF_REG": {"kernel": ["rbf"], "C": [1.0]},
-    "RIDGE": {"alpha": [1.0]},
-    "LINEARREGRESSION": {},
-    "LINEAR_REG": {},
-    "KNNR": {"n_neighbors": [5]},
-    "KNEIGHBORSREGRESSOR": {"n_neighbors": [5]},
-    "KNN_REG": {"n_neighbors": [5]},
-    "MLPREGRESSOR": {"max_iter": [500], "early_stopping": [True]},
-    "MLP_REG": {"max_iter": [500], "early_stopping": [True]},
-    "DECISIONTREEREGRESSOR": {"max_depth": [None]},
-    "DT_REG": {"max_depth": [None]},
-}
-
-CLASSIFICATION_DEFAULT_GRIDS = DEFAULT_GRIDS
+DEFAULT_GRIDS = CLASSIFICATION_DEFAULT_GRIDS
 
 TASK_MODEL_BUILDERS: Dict[str, Dict[str, Any]] = {
     "classification": CLASSIFICATION_MODEL_BUILDERS,

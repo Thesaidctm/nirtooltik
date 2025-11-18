@@ -747,6 +747,19 @@ podem ser adicionados implementando classes compatíveis com `scikit-learn` e
 registrando‑as nos módulos apropriados. Contribuições são bem‑vindas via pull
 requests.
 
+Para facilitar a colaboração entre times diferentes, o código foi dividido por
+responsabilidade e tipo de tarefa:
+
+* **Classificação**: construtores e grades padrão vivem em
+  `src/nircls/processing/models/classification.py`, com métricas expostas por
+  `src/nircls/results/classification/`.
+* **Regressão**: contrapartes de regressão estão em
+  `src/nircls/processing/models/regression.py` e em
+  `src/nircls/results/regression/`.
+
+Esse particionamento mantém as bases de classificação e regressão isoladas sem
+quebrar a API compartilhada pelo pipeline.
+
 ### Plugins de modelos
 
 Desde a versão atual, modelos podem ser fornecidos por pacotes externos usando

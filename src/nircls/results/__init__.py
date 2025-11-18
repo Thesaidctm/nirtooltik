@@ -1,8 +1,7 @@
 """Reporting and evaluation helpers for nircls results."""
 
-from .report import generate_scientific_report
-from .metrics.calibration import expected_calibration_error
-from .metrics.regression import (
+from .classification import expected_calibration_error
+from .regression import (
     compute_mae_percent,
     compute_rpd,
     compute_rmsecv,
@@ -10,6 +9,7 @@ from .metrics.regression import (
     compute_rmse,
     rmse_with_ci,
 )
+from .report import generate_scientific_report
 
 __all__ = [
     "compute_mae_percent",

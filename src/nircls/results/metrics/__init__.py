@@ -1,6 +1,6 @@
 """Metrics utilities for classification and regression outputs."""
 
-from .calibration import expected_calibration_error
+from .classification import expected_calibration_error
 from .regression import (
     compute_mae_percent,
     compute_rpd,
