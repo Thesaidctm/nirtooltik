@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_user, get_db
-from ..schemas import ModelCreate, ModelRead
+from ..schemas import ModelCreate, ModelRead, PredictRequest, PredictResponse
+from ...core import services
 from ...db import crud
 from ...db.models import ModelRegistry, User
 
@@ -58,3 +59,14 @@ def deprecate_model(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")
 
     return crud.update_model_status(db, model, status="deprecated")
+
+
+@router.post("/{model_id}/predict", response_model=PredictResponse)
+def predict_with_registered_model(
+    model_id: int,
+    req: PredictRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    y_hat = services.models.predict_with_model(db, model_id=model_id, spectra=req.spectra)
+    return PredictResponse(y_hat=y_hat)
