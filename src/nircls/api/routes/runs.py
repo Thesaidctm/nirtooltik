@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from ... import i18n
 from ..deps import get_current_user, get_db
 from ..schemas import RunCreate, RunRead
 from ...core.services import runs as run_service
@@ -22,7 +23,10 @@ def list_all_runs(db: Session = Depends(get_db)) -> List[Run]:
 def get_run_detail(run_id: int, db: Session = Depends(get_db)) -> Run:
     run = crud.get_run(db, run_id)
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=i18n.t("runs.not_found_by_id").format(run_id=run_id),
+        )
     return run
 
 
@@ -48,5 +52,8 @@ def create_new_run(
 def get_run_artifacts(run_id: int, db: Session = Depends(get_db)) -> Dict[str, Any]:
     run = crud.get_run(db, run_id)
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=i18n.t("runs.not_found_by_id").format(run_id=run_id),
+        )
     return run.artifacts or {}

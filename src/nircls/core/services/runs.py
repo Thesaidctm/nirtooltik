@@ -8,12 +8,15 @@ from sqlalchemy.orm import Session
 
 from nircls.db import crud
 from nircls.db.models import Run
+from nircls import i18n
 from nircls.utils.errors import DatabaseError
 
 
 def _require_run(run: Optional[Run], run_id: int) -> Run:
     if run is None:
-        raise DatabaseError(f"Run with id {run_id} not found")
+        raise DatabaseError(
+            i18n.t("runs.not_found_by_id").format(run_id=run_id)
+        )
     return run
 
 

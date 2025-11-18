@@ -1,5 +1,7 @@
 """Custom exception types for NirCLS components."""
 
+from nircls import i18n
+
 
 class DataError(Exception):
     """Exception raised when input data is missing or invalid."""

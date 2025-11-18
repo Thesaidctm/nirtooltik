@@ -83,5 +83,18 @@
   "Figura QC: {path}": "Figura QC: {path}",
   "Figura QC ausente: {path}": "Figura QC ausente: {path}",
   "Planilha QC: {path}": "Planilha QC: {path}",
-  "Planilha QC ausente: {path}": "Planilha QC ausente: {path}"
+  "Planilha QC ausente: {path}": "Planilha QC ausente: {path}",
+  "runs": {
+    "not_found_by_id": "Execução com id {run_id} não encontrada",
+    "not_found_by_uid": "Execução com uid {run_uid} não encontrada"
+  },
+  "datasets": {
+    "not_found_by_id": "Conjunto de dados com id {dataset_id} não encontrado"
+  },
+  "projects": {
+    "not_found_by_id": "Projeto com id {project_id} não encontrado"
+  },
+  "auth": {
+    "invalid_credentials": "Credenciais inválidas"
+  }
 }

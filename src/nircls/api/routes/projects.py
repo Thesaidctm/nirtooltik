@@ -5,6 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from ... import i18n
 from ..deps import get_current_user, get_db, require_role
 from ..schemas import ProjectCreate, ProjectRead
 from ...db import crud
@@ -21,7 +22,10 @@ def list_all_projects(db: Session = Depends(get_db)) -> List[Project]:
 def get_project_detail(project_id: int, db: Session = Depends(get_db)) -> Project:
     project = crud.get_project(db, project_id)
     if project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=i18n.t("projects.not_found_by_id").format(project_id=project_id),
+        )
     return project
 
 
