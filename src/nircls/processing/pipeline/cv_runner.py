@@ -51,6 +51,7 @@ from .io import summarize_dataset
 from ...core.services import runs as run_services
 from ...db import crud
 from ...db.models import Dataset, Run
+from ...utils.logging import RunLoggerAdapter
 from ..utils.compliance import check_astm_classification
 from ..results.metrics.classification import expected_calibration_error
 from ..results.metrics.regression import (
@@ -85,7 +86,7 @@ class _RunContextFilter(logging.Filter):
 
 def _get_run_logger(run_id: int | None, run_uid: str | None) -> logging.LoggerAdapter:
     extra = {k: v for k, v in {"run_id": run_id, "run_uid": run_uid}.items() if v is not None}
-    return logging.LoggerAdapter(logger, extra)
+    return RunLoggerAdapter(logger, extra)
 
 __all__ = [
     "_run_cv",

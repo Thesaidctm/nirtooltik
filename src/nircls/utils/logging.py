@@ -2,6 +2,13 @@ import logging
 from pathlib import Path
 
 
+class RunLoggerAdapter(logging.LoggerAdapter):
+    def process(self, msg, kwargs):
+        extra = kwargs.setdefault("extra", {})
+        extra.setdefault("run_uid", self.extra.get("run_uid"))
+        return msg, kwargs
+
+
 def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> None:
     """Configure logging with a standard format including module names."""
 
@@ -11,7 +18,7 @@ def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> No
 
     logging.basicConfig(
         level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        format="%(asctime)s [%(levelname)s] %(name)s [run=%(run_uid)s]: %(message)s",
         handlers=handlers,
         force=True,
     )
