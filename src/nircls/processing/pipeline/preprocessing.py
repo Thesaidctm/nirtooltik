@@ -20,7 +20,7 @@ from ..preprocessors.spectro import (
     SavitzkyGolayTransformer,
 )
 from ...utils.errors import DataError, ModelError
-from ..config_schema import ConfigModel, ValidationError
+from ...config_schema import ConfigModel, ValidationError
 
 logger = logging.getLogger(__name__)
 

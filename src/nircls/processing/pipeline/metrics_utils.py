@@ -7,7 +7,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 import numpy as np
 from scipy import stats
 
-from ..results.metrics.regression import compute_rmse
+from ...results.metrics.regression import compute_rmse
 
 
 def _rmse(

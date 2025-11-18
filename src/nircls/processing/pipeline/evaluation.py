@@ -57,13 +57,13 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from scipy import stats
 
-from ..config_schema import ConfigModel, ValidationError
-from .feature_selection.vip import compute_vip
-from .io import export_xy_xlsx
-from .io import prepare_inputs as _prepare_inputs
-from .io import read_tabular, read_xlsx_xy, summarize_dataset
-from ..results.metrics.classification import expected_calibration_error
-from ..results.metrics.regression import (
+from ...config_schema import ConfigModel, ValidationError
+from ..feature_selection.vip import compute_vip
+from ..io import export_xy_xlsx
+from ..io import prepare_inputs as _prepare_inputs
+from ..io import read_tabular, read_xlsx_xy, summarize_dataset
+from ...results.metrics.classification import expected_calibration_error
+from ...results.metrics.regression import (
     compute_mae_percent,
     compute_rpd,
     compute_rmsecv,
@@ -71,8 +71,9 @@ from ..results.metrics.regression import (
     compute_rmse,
     rmse_with_ci,
 )
-from .models.factory import make_models_from_config
-from .preprocessors.spectro import (
+from ..models.factory import make_models_from_config
+from .model_factory import _coerce_param_value
+from ..preprocessors.spectro import (
     EMSC,
     EPO,
     MSC,
@@ -81,14 +82,15 @@ from .preprocessors.spectro import (
     Detrend,
     SavitzkyGolayTransformer,
 )
-from ..results.report import generate_scientific_report
-from ..utils.compliance import check_astm_classification
-from ..utils.email import enviar_email
-from ..utils.errors import DataError, ModelError
-from ..utils.logging import log_versions
-from ..utils.misc import file_hash, get_git_commit
-from ..utils.palettes import Palette
-from ..utils.plots import (
+from .preprocessing import _get_model_step_name, _normalize_preprocess_value
+from ...results.report import generate_scientific_report
+from ...utils.compliance import check_astm_classification
+from ...utils.email import enviar_email
+from ...utils.errors import DataError, ModelError
+from ...utils.logging import log_versions
+from ...utils.misc import file_hash, get_git_commit
+from ...utils.palettes import Palette
+from ...utils.plots import (
     plot_confusion,
     plot_pls_loadings,
     plot_pls_weights,
@@ -97,11 +99,11 @@ from ..utils.plots import (
     plot_roc_ovr,
     plot_vip,
 )
-from ..utils.plots import plot_confusion, plot_pca_scores, plot_reliability, plot_roc_ovr
-from ..utils.qc import detect_identical_spectra, find_duplicates, pca_outliers
-from ..utils.summarize import summarize_runs
-from ..utils.split import spxy_split
-from ..utils.y_scramble import y_scramble_scores
+from ...utils.plots import plot_confusion, plot_pca_scores, plot_reliability, plot_roc_ovr
+from ...utils.qc import detect_identical_spectra, find_duplicates, pca_outliers
+from ...utils.summarize import summarize_runs
+from ...utils.split import spxy_split
+from ...utils.y_scramble import y_scramble_scores
 
 warnings.filterwarnings(
     "ignore",

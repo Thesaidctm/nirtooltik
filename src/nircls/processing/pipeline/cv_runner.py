@@ -5,13 +5,19 @@ from __future__ import annotations
 import gc
 import json
 import logging
+import sys
+from contextlib import nullcontext
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 import psutil
+import sklearn
+from joblib import dump
 from sqlalchemy.orm import Session
+from rich.console import Console
 from rich.progress import Progress
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
@@ -37,7 +43,7 @@ from sklearn.preprocessing import LabelEncoder
 from ... import i18n
 from .data_loading import prepare_inputs
 from .evaluation import _maybe_run_qc, _save_metrics, _save_plots, _save_pls_diagnostics
-from .hyperparameter_search import _get_n_components, _sanitize_n_jobs
+from .hyperparameter_search import _get_n_components, _sanitize_n_jobs, LoggingGridSearchCV
 from .metrics_utils import _rmse, _summarize_scores
 from .model_factory import (
     _call_build_pipeline,
@@ -47,24 +53,28 @@ from .model_factory import (
     _infer_task_type,
     _update_row_with_best_params,
 )
+from .persistence import save_run_metadata
+from .preprocessing import _validate_cfg
 from .splitting import CVConfig, _validate_split_capacity
-from .io import summarize_dataset
+from ..io import export_xy_xlsx, summarize_dataset
 from ...core.services import runs as run_services
 from ...db import crud
 from ...db.models import Dataset, Run
 from ...utils.logging import RunLoggerAdapter
-from ..utils.compliance import check_astm_classification
-from ..results.metrics.classification import expected_calibration_error
-from ..results.metrics.regression import (
+from ...utils.compliance import check_astm_classification
+from ...utils.misc import file_hash, get_git_commit
+from ...results.metrics.classification import expected_calibration_error
+from ...results.metrics.regression import (
     compute_mae_percent,
     compute_rpd,
     compute_rmsep,
     rmse_with_ci,
 )
-from ..utils.errors import DataError, ModelError
-from ..utils.palettes import Palette
-from ..utils.split import spxy_split
-from ..utils.y_scramble import y_scramble_scores
+from ...results.report import generate_scientific_report
+from ...utils.errors import DataError, ModelError
+from ...utils.palettes import Palette
+from ...utils.split import spxy_split
+from ...utils.y_scramble import y_scramble_scores
 
 logger = logging.getLogger(__name__)
 

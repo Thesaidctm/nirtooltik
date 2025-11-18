@@ -253,7 +253,7 @@ def _print_metrics_table(metrics_json: Path) -> None:
         else:
             df[base] = df[col].map(lambda x: f"{x:.3f}")
     display_cols = id_cols + [c[:-5] for c in metrics_cols]
-        logger.info(df[display_cols].to_string(index=False))
+    logger.info(df[display_cols].to_string(index=False))
 
 
 def _format_summary_steps(value: Any) -> str:
