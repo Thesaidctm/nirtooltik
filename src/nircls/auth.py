@@ -230,6 +230,14 @@ async def database_error_handler(request: Request, exc: DatabaseError) -> JSONRe
     return _format_error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal database error")
 
 
+# Routers de domínio
+from .api.routes import datasets, projects, runs as run_routes  # noqa: E402
+
+app.include_router(projects.router)
+app.include_router(datasets.router)
+app.include_router(run_routes.router)
+
+
 __all__ = [
     "app",
     "hash_password",

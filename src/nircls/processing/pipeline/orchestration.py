@@ -29,6 +29,7 @@ import yaml  # type: ignore[import-untyped]
 from joblib import dump, load
 from rich.console import Console
 from rich.progress import Progress
+from sqlalchemy.orm import Session
 from sklearn.base import clone
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
@@ -63,6 +64,8 @@ from .io import export_xy_xlsx
 from .io import prepare_inputs as _prepare_inputs
 from .io import read_tabular, read_xlsx_xy, summarize_dataset
 from ...core.settings import settings
+from ...db.crud import create_run, update_run_status
+from ...db.models import Dataset, Run
 from ..results.metrics.classification import expected_calibration_error
 from ..results.metrics.regression import (
     compute_mae_percent,
@@ -3979,6 +3982,98 @@ def train_and_save(
         log_memory=log_memory,
         resume=resume,
     )
+
+
+def run_pipeline(
+    cfg: Dict[str, Any],
+    out_dir: Path,
+    *,
+    db: Session,
+    user_id: int | None = None,
+    dataset_id: int | None = None,
+    project_id: int | None = None,
+    interactive: bool = False,
+    random_state: int = 42,
+    n_jobs: int = -1,
+    mlflow_uri: Optional[str] = None,
+    gs_verbose: int = 0,
+    show_progress: bool = True,
+    log_memory: bool = False,
+    resume: bool = False,
+) -> Run:
+    """Execute a full pipeline run and register progress in the database."""
+
+    resolved_project_id = project_id
+    if resolved_project_id is None and dataset_id is not None:
+        dataset = db.get(Dataset, dataset_id)
+        if dataset:
+            resolved_project_id = dataset.project_id
+
+    run = create_run(
+        db,
+        project_id=resolved_project_id,
+        dataset_id=dataset_id,
+        user_id=user_id,
+        config=cfg,
+        status="running",
+        artifacts={"base_dir": str(out_dir)},
+    )
+
+    train_dir = out_dir / "train"
+    cv_dir = out_dir / "cv"
+    train_dir.mkdir(parents=True, exist_ok=True)
+    cv_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        _validate_cfg(cfg, need_data=True, need_models=True, need_cv=True)
+        prepare_inputs(cfg["data"], use_cache=cfg.get("use_cache", True))
+
+        train_and_save(
+            cfg,
+            train_dir,
+            random_state=random_state,
+            interactive=interactive,
+            n_jobs=n_jobs,
+            mlflow_uri=mlflow_uri,
+            gs_verbose=gs_verbose,
+            show_progress=show_progress,
+            log_memory=log_memory,
+            resume=resume,
+        )
+        _outputs, summary_dir = run_multiple_eval(
+            cfg,
+            cv_dir,
+            random_state=random_state,
+            interactive=interactive,
+            n_jobs=n_jobs,
+            mlflow_uri=mlflow_uri,
+            log_memory=log_memory,
+            resume=resume,
+        )
+        artifacts = {
+            "base_dir": str(out_dir),
+            "train_dir": str(train_dir),
+            "cv_dir": str(cv_dir),
+            "cv_summary_dir": str(summary_dir),
+        }
+        updated_run = update_run_status(
+            db, run.run_id, status="completed", artifacts=artifacts, error_message=None
+        )
+        return updated_run or run
+    except Exception as exc:
+        artifacts = {
+            "base_dir": str(out_dir),
+            "train_dir": str(train_dir),
+            "cv_dir": str(cv_dir),
+        }
+        update_run_status(
+            db,
+            run.run_id,
+            status="failed",
+            artifacts=artifacts,
+            error_message=str(exc),
+        )
+        raise
 
 
 def run_experiment(
