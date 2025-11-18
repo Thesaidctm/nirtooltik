@@ -13,8 +13,8 @@ from joblib import load
 
 from ..io import prepare_inputs as _prepare_inputs
 from ..io import read_tabular, read_xlsx_xy
+from ...core.settings import settings
 from ...utils.errors import DataError
-from ...utils.misc import RESULTS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ def prepare_inputs(
     files.sort()
     sp = cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
-    out_dir = Path(cfg.get("out_dir", RESULTS_DIR))
+    out_dir = Path(cfg.get("out_dir", settings.RESULTS_DIR))
     cache_dir = out_dir / "cache"
     drop_nans = bool(cfg.get("drop_nans", True))
     tgt = cfg.get("target_cols")

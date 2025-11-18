@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 from joblib import dump, load
 
+from ..core.settings import settings
 from ..utils.errors import DataError
-from ..utils.misc import RESULTS_DIR
 
 _MISSING_OPENPYXL_MSG = (
     "Dependência opcional 'openpyxl' ausente. Instale com `pip install "
@@ -338,7 +338,7 @@ def prepare_inputs(
         raise DataError(f"Caminho(s) inválido(s): {invalid_str}")
     sp = data_cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
-    out_dir = Path(data_cfg.get("out_dir", RESULTS_DIR))
+    out_dir = Path(data_cfg.get("out_dir", settings.RESULTS_DIR))
     cache_dir = out_dir / "cache"
     drop_nans = bool(data_cfg.get("drop_nans", True))
     tgt = data_cfg.get("target_cols")

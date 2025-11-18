@@ -4,7 +4,6 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Generator
@@ -69,6 +68,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from .core.settings import settings
 from .db.database import SessionLocal
 from .db.models import User
 from .utils.errors import AuthError, ConfigError, DataError, DatabaseError, ModelError, PipelineError
@@ -84,9 +84,9 @@ async def _configure_logging() -> None:
     setup_logging()
     logger.info("FastAPI application initialized")
 
-_SECRET_KEY = os.environ.get("SESSION_SECRET", "nircls-secret")
-_JWT_ALGORITHM = os.environ.get("SESSION_ALGORITHM", "HS256")
-_ACCESS_TOKEN_EXPIRE_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "3600"))
+_SECRET_KEY = settings.JWT_SECRET_KEY
+_JWT_ALGORITHM = settings.JWT_ALGORITHM
+_ACCESS_TOKEN_EXPIRE_SECONDS = settings.ACCESS_TOKEN_EXPIRE_SECONDS
 SESSION_COOKIE_NAME = "nircls_session"
 
 

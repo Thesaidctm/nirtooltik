@@ -62,6 +62,7 @@ from .feature_selection.vip import compute_vip
 from .io import export_xy_xlsx
 from .io import prepare_inputs as _prepare_inputs
 from .io import read_tabular, read_xlsx_xy, summarize_dataset
+from ...core.settings import settings
 from ..results.metrics.classification import expected_calibration_error
 from ..results.metrics.regression import (
     compute_mae_percent,
@@ -86,7 +87,7 @@ from ..utils.compliance import check_astm_classification
 from ..utils.email import enviar_email
 from ..utils.errors import DataError, ModelError
 from ..utils.logging import log_versions
-from ..utils.misc import RESULTS_DIR, file_hash, get_git_commit
+from ..utils.misc import file_hash, get_git_commit
 from ..utils.palettes import Palette
 from ..utils.plots import (
     plot_confusion,
@@ -425,7 +426,7 @@ def prepare_inputs(
     files.sort()
     sp = cfg.get("spectral_range", None)
     sp = (float(sp[0]), float(sp[1])) if sp else None
-    out_dir = Path(cfg.get("out_dir", RESULTS_DIR))
+    out_dir = Path(cfg.get("out_dir", settings.RESULTS_DIR))
     cache_dir = out_dir / "cache"
     drop_nans = bool(cfg.get("drop_nans", True))
     tgt = cfg.get("target_cols")

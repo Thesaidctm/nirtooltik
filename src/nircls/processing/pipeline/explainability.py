@@ -86,7 +86,7 @@ from ..utils.compliance import check_astm_classification
 from ..utils.email import enviar_email
 from ..utils.errors import DataError, ModelError
 from ..utils.logging import log_versions
-from ..utils.misc import RESULTS_DIR, file_hash, get_git_commit
+from ..utils.misc import file_hash, get_git_commit
 from ..utils.palettes import Palette
 from ..utils.plots import (
     plot_confusion,

@@ -9,11 +9,12 @@ from typing import Any, Dict, Optional, cast
 
 import yaml  # type: ignore[import-untyped]
 
+from ..core.settings import settings
 from ..processing.io import summarize_dataset
 from ..processing.models.factory import get_model_builders
 from ..processing.pipeline import prepare_inputs, run_multiple_eval, train_and_save
 from ..utils.errors import DataError, ModelError
-from ..utils.misc import RAW_DIR, ensure_dirs, now_ts
+from ..utils.misc import ensure_dirs, now_ts
 from . import common
 from .common import (
     PREPROCESS_DESCRIPTIONS,
@@ -64,7 +65,10 @@ def register_subparser(subparsers: argparse._SubParsersAction) -> None:
 def run_run_all(args: argparse.Namespace) -> int:
     builders = get_model_builders()
     default_cfg: Dict[str, Any] = {
-        "data": {"input_path": str(RAW_DIR), "out_dir": str(common.RESULTS_DIR)},
+        "data": {
+            "input_path": str(settings.RAW_DIR),
+            "out_dir": str(settings.RESULTS_DIR),
+        },
         "models": [{"name": "PLSDA"}],
         "cv": {"strategies": [{"type": "kfold", "n_splits": 5}]},
     }
@@ -99,7 +103,7 @@ def run_run_all(args: argparse.Namespace) -> int:
     run_id = args.run_id or now_ts()
     setup_run_logging(run_id, args.log_level_value, args.log_file)
     data_cfg = cast(Dict[str, Any], default_cfg["data"])
-    base_out_dir = Path(data_cfg.get("out_dir", common.RESULTS_DIR))
+    base_out_dir = Path(data_cfg.get("out_dir", settings.RESULTS_DIR))
     base_dir = base_out_dir / run_id
     rename_target: Optional[Path] = None
     desired_name = None

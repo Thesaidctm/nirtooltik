@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-import os
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DEFAULT_DATABASE_URL = "sqlite:///nircls.db"
-DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+from ..core.settings import settings
 
 
 def _create_engine(database_url: str):
@@ -19,7 +17,7 @@ def _create_engine(database_url: str):
     return create_engine(url, future=True, connect_args=connect_args)
 
 
-engine = _create_engine(DATABASE_URL)
+engine = _create_engine(settings.DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
@@ -40,5 +38,5 @@ def init_db() -> None:
         ) from exc
 
     alembic_cfg = Config(str(_alembic_config_path()))
-    alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
     command.upgrade(alembic_cfg, "head")

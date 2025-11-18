@@ -4,7 +4,6 @@ import argparse
 import importlib
 import inspect
 import json
-import os
 import pkgutil
 import shutil
 import subprocess
@@ -21,6 +20,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 import nircls.processing.preprocessors as preprocessors
+from nircls.core.settings import settings
 from nircls.config_schema import ConfigModel, ValidationError
 from nircls.i18n import tr
 from nircls.processing.io import prepare_inputs, summarize_dataset
@@ -29,7 +29,6 @@ from nircls.processing.pipeline import run_multiple_eval, train_and_save
 from nircls.utils.email import _load_config as _load_email_config
 from nircls.utils.email import _save_config as _save_email_config
 from nircls.utils.email import enviar_email
-from nircls.utils.misc import RESULTS_DIR
 from nircls.utils.palettes import Palette
 from nircls.utils.plots import _export
 from nircls.utils.qc import pca_outliers
@@ -95,10 +94,10 @@ def run_dashboard(results_dir: str | Path | None = None) -> int:
     results_dir : str | Path | None, optional
         Root directory where run artefacts will be stored. If ``None``, the
         value is read from the email configuration file or defaults to
-        :data:`nircls.utils.misc.RESULTS_DIR`.
+        :data:`nircls.core.settings.settings.RESULTS_DIR`.
     """
     if results_dir is None:
-        results_dir = _load_email_config().get("results_dir", RESULTS_DIR)
+        results_dir = _load_email_config().get("results_dir", settings.RESULTS_DIR)
     module_path = Path(__file__).resolve()
     cmd = [
         sys.executable,
@@ -112,8 +111,7 @@ def run_dashboard(results_dir: str | Path | None = None) -> int:
     ]
     proc = subprocess.Popen(cmd)
     try:
-        port = os.environ.get("STREAMLIT_SERVER_PORT", "8501")
-        webbrowser.open(f"http://localhost:{port}")
+        webbrowser.open(f"http://localhost:{settings.STREAMLIT_SERVER_PORT}")
     except Exception:
         pass
     return proc.wait()

@@ -5,6 +5,7 @@ import logging
 import sys
 from pathlib import Path
 
+from ..core.settings import settings
 from ..processing.io import summarize_dataset
 from ..processing.pipeline import prepare_inputs, train_and_save
 from ..utils.errors import DataError, ModelError
@@ -65,7 +66,7 @@ def run_train(args: argparse.Namespace) -> int:
 
     run_id = args.run_id or make_run_id("train")
     setup_run_logging(run_id, args.log_level_value, args.log_file)
-    out_dir = Path(cfg.data.out_dir or common.RESULTS_DIR) / run_id
+    out_dir = Path(cfg.data.out_dir or settings.RESULTS_DIR) / run_id
     if args.resume and not out_dir.exists():
         logger.error(t("resume_dir_missing", path=out_dir))
         return 1

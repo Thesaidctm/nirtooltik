@@ -2,11 +2,13 @@ import logging
 
 import nircls.cli.common as cli_common
 from nircls import cli
+from nircls.core.settings import settings
 from nircls.utils.logging import logger
 
 
 def test_log_file_created(tmp_path):
-    cli_common.RESULTS_DIR = tmp_path / "results"
+    settings.RESULTS_DIR = tmp_path / "results"
+    cli_common.RESULTS_DIR = settings.RESULTS_DIR
     log_file = tmp_path / "nircls.log"
     ret = cli.main(["--log-file", str(log_file), "demo"])
     assert ret == 0
