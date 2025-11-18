@@ -15,12 +15,17 @@ def get_run(session: Session, run_id: int) -> Optional[Run]:
     return session.get(Run, run_id)
 
 
+def get_run_by_uid(session: Session, run_uid: str) -> Optional[Run]:
+    return session.query(Run).filter(Run.run_uid == run_uid).one_or_none()
+
+
 def create_run(
     session: Session,
     *,
     project_id: int | None,
     dataset_id: int | None,
     user_id: int | None,
+    run_uid: str | None,
     config: Dict[str, Any],
     status: str = "running",
     artifacts: Dict[str, Any] | None = None,
@@ -30,6 +35,7 @@ def create_run(
         project_id=project_id,
         dataset_id=dataset_id,
         user_id=user_id,
+        run_uid=run_uid,
         config=config,
         status=status,
         artifacts=artifacts,
