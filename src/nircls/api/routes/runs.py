@@ -53,6 +53,8 @@ def create_new_run(
         user_id=current_user.user_id,
         organization_id=current_user.organization_id,
         config=payload.config,
+        target_cols=payload.target_cols,
+        model_names=payload.model_names,
         status=payload.status,
         artifacts=payload.artifacts,
         run_uid=payload.run_uid,

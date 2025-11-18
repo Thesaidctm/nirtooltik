@@ -53,7 +53,10 @@ class RunBase(BaseModel):
 class RunCreate(RunBase):
     project_id: Optional[int] = None
     dataset_id: Optional[int] = None
-    config: Dict[str, Any]
+    name: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    target_cols: Optional[List[str]] = None
+    model_names: Optional[List[str]] = None
     artifacts: Optional[Dict[str, Any]] = None
     auto_execute: bool = False
 
