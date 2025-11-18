@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ... import i18n
 from ..deps import get_current_user, get_db
 from ..schemas import DatasetCreate, DatasetRead
+from ...core.services.datasets import save_dataset_file
 from ...db import crud
 from ...db.models import Dataset, User
 
@@ -47,12 +48,20 @@ def create_new_dataset(
     )
 
 
-@router.post("/{dataset_id}/upload")
+@router.post("/{dataset_id}/upload", response_model=DatasetRead)
 async def upload_dataset_file(
     dataset_id: int,
     file: UploadFile = File(...),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    dataset = crud.get_dataset(db, dataset_id)
+    if dataset is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=i18n.t("datasets.not_found_by_id").format(dataset_id=dataset_id),
+        )
+
     # Validação simples de extensão
     allowed_extensions = {".csv", ".xlsx"}
     _, ext = os.path.splitext(file.filename or "")
@@ -71,6 +80,4 @@ async def upload_dataset_file(
             detail="Empty file",
         )
 
-    # TODO: salvar em storage e agendar parsing
-    # Por enquanto, apenas retorne um ack simples
-    return {"dataset_id": dataset_id, "filename": file.filename, "size": len(content)}
+    return save_dataset_file(db, dataset, file.filename or "dataset", content)
