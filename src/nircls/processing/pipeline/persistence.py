@@ -136,9 +136,20 @@ def build_model_spec(estimator: Any) -> Dict[str, Any]:
     else:
         params = None
 
+    n_components = None
+    if isinstance(params, dict):
+        for key, value in params.items():
+            if key.endswith("n_components"):
+                try:
+                    n_components = int(value)
+                except (TypeError, ValueError):
+                    n_components = value
+                break
+
     return {
         "class_path": class_path,
         "params": params,
+        "n_components": n_components,
     }
 
 

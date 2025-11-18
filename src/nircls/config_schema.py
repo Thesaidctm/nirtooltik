@@ -127,8 +127,21 @@ class CalibConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
+    """
+    Model configuration for training.
+
+    For PLS models (e.g., ``PLS_REG``), ``params['n_components']`` **must** be
+    provided to explicitly set the number of latent variables, for example::
+
+        models:
+          - name: "PLS_REG"
+            params:
+              n_components: 8
+            compute_lv_curve: true
+    """
+
     name: str
-    params: Optional[Dict[str, Any]] = None
+    params: Dict[str, Any] = Field(default_factory=dict)
     grid: Optional[Dict[str, Any]] = None
     calibration: Optional[CalibConfig] = None
     overfit_check: bool = True
