@@ -4,6 +4,7 @@ from .explainability import explain_model
 from .orchestration import (
     evaluate_saved_model,
     predict_with_model,
+    run_pipeline,
     run_experiment,
     run_multiple_eval,
     train_and_save,
@@ -15,6 +16,7 @@ __all__ = [
     "explain_model",
     "predict_with_model",
     "prepare_inputs",
+    "run_pipeline",
     "run_experiment",
     "run_multiple_eval",
     "train_and_save",
