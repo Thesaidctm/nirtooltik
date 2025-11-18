@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ...auth import get_current_user, get_db
-from ...db.crud import create_dataset, get_dataset, list_datasets
+from ...db import crud
 from ...db.models import Dataset, User
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -31,12 +31,12 @@ class DatasetResponse(DatasetCreate):
 
 @router.get("", response_model=List[DatasetResponse])
 def list_all_datasets(db: Session = Depends(get_db)) -> List[Dataset]:
-    return list_datasets(db)
+    return crud.list_datasets(db)
 
 
 @router.get("/{dataset_id}", response_model=DatasetResponse)
 def get_dataset_detail(dataset_id: int, db: Session = Depends(get_db)) -> Dataset:
-    dataset = get_dataset(db, dataset_id)
+    dataset = crud.get_dataset(db, dataset_id)
     if dataset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
     return dataset
@@ -48,7 +48,7 @@ def create_new_dataset(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Dataset:
-    return create_dataset(
+    return crud.create_dataset(
         db,
         name=payload.name,
         version=payload.version,
