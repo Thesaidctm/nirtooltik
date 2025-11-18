@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from ..utils.errors import AuthError, ConfigError, DataError, DatabaseError, ModelError, PipelineError
 from ..utils.logging import log_versions, setup_logging
 from ..utils.misc import ensure_dirs, set_seed
 from . import (
@@ -117,7 +118,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         mlflow.set_tracking_uri(args.mlflow_uri)
 
     if hasattr(args, "func"):
-        return args.func(args)
+        try:
+            return args.func(args)
+        except (DataError, ConfigError) as exc:
+            logger.error("Input configuration error: %s", exc)
+        except AuthError as exc:
+            logger.error("Authentication failed: %s", exc)
+        except (ModelError, PipelineError) as exc:
+            logger.error("Pipeline execution failed: %s", exc)
+        except DatabaseError as exc:
+            logger.error("Database interaction failed: %s", exc)
+        except Exception:
+            logger.exception("Unexpected error during execution")
+        return 1
     return 0
 
 
