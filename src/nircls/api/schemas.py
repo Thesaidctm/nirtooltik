@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -96,3 +96,11 @@ class ModelRead(ModelBase):
 
     class Config:
         orm_mode = True
+
+
+class PredictRequest(BaseModel):
+    spectra: List[List[float]]
+
+
+class PredictResponse(BaseModel):
+    y_hat: List[float]
