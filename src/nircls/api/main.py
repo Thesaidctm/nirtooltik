@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from ..utils.errors import AuthError, ConfigError, DataError, DatabaseError, ModelError, PipelineError
 from ..utils.logging import setup_logging
-from .routes import auth, datasets, projects, runs
+from .routes import auth, datasets, models, projects, runs
 
 logger = logging.getLogger(__name__)
 
@@ -55,3 +55,4 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(datasets.router)
 app.include_router(runs.router)
+app.include_router(models.router, prefix="/models", tags=["models"])

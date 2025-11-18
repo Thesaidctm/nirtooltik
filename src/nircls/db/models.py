@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlalchemy as sa
 from sqlalchemy import (
     JSON,
     Column,
@@ -104,6 +105,25 @@ class Run(Base):
     project = relationship("Project", back_populates="runs")
     dataset = relationship("Dataset", back_populates="runs")
     user = relationship("User", back_populates="runs")
+    models = relationship("ModelRegistry", back_populates="run")
+
+
+class ModelRegistry(Base):
+    __tablename__ = "model_registry"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+
+    run_id = Column(Integer, ForeignKey("runs.run_id"), nullable=False)
+    dataset_id = Column(Integer, ForeignKey("datasets.dataset_id"), nullable=True)
+    target = Column(String, nullable=True)
+
+    status = Column(String, nullable=False, default="candidate")
+    created_at = Column(DateTime, server_default=sa.func.now())
+    updated_at = Column(DateTime, server_default=sa.func.now(), onupdate=sa.func.now())
+
+    run = relationship("Run", back_populates="models")
+    dataset = relationship("Dataset")
 
 
 class SampleMetadata(Base):

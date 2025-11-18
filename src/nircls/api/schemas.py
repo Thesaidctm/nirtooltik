@@ -76,3 +76,23 @@ class UserRead(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class ModelBase(BaseModel):
+    name: str
+    target: Optional[str] = None
+    status: Literal["candidate", "production", "deprecated"] = "candidate"
+
+
+class ModelCreate(ModelBase):
+    run_id: int
+    dataset_id: Optional[int] = None
+
+
+class ModelRead(ModelBase):
+    id: int
+    run_id: int
+    dataset_id: Optional[int]
+
+    class Config:
+        orm_mode = True
