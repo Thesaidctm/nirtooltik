@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 import psutil
+from sqlalchemy.orm import Session
 from rich.progress import Progress
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
@@ -47,6 +48,8 @@ from .model_factory import (
 )
 from .splitting import _validate_split_capacity
 from .io import summarize_dataset
+from ...core.services import runs as run_services
+from ...db.models import Dataset, Run
 from ..utils.compliance import check_astm_classification
 from ..results.metrics.classification import expected_calibration_error
 from ..results.metrics.regression import (
@@ -2461,6 +2464,7 @@ def run_pipeline(
     out_dir: Path,
     *,
     db: Session,
+    run_id: int | None = None,
     user_id: int | None = None,
     dataset_id: int | None = None,
     project_id: int | None = None,
@@ -2481,15 +2485,20 @@ def run_pipeline(
         if dataset:
             resolved_project_id = dataset.project_id
 
-    run = crud.create_run(
-        db,
-        project_id=resolved_project_id,
-        dataset_id=dataset_id,
-        user_id=user_id,
-        config=cfg,
-        status="running",
-        artifacts={"base_dir": str(out_dir)},
-    )
+    if run_id is not None:
+        run = db.get(Run, run_id)
+        if run is None:
+            raise ValueError(f"Run with id {run_id} not found")
+    else:
+        run = run_services.create_run(
+            db,
+            project_id=resolved_project_id,
+            dataset_id=dataset_id,
+            user_id=user_id,
+            config=cfg,
+            status="running",
+            artifacts={"base_dir": str(out_dir)},
+        )
 
     train_dir = out_dir / "train"
     cv_dir = out_dir / "cv"
@@ -2528,23 +2537,20 @@ def run_pipeline(
             "cv_dir": str(cv_dir),
             "cv_summary_dir": str(summary_dir),
         }
-        updated_run = crud.update_run_status(
-            db, run.run_id, status="completed", artifacts=artifacts, error_message=None
+        metrics = {
+            "summary_csv": str(summary_dir / "metrics_summary.csv"),
+            "summary_xlsx": str(summary_dir / "metrics_summary.xlsx"),
+        }
+        return run_services.mark_run_completed(
+            db, run.run_id, artifacts=artifacts, metrics=metrics
         )
-        return updated_run or run
     except Exception as exc:
         artifacts = {
             "base_dir": str(out_dir),
             "train_dir": str(train_dir),
             "cv_dir": str(cv_dir),
         }
-        crud.update_run_status(
-            db,
-            run.run_id,
-            status="failed",
-            artifacts=artifacts,
-            error_message=str(exc),
-        )
+        run_services.mark_run_failed(db, run.run_id, str(exc), artifacts=artifacts)
         raise
 
 

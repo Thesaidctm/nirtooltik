@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_user, get_db
+from ...core.services import runs as run_service
 from ...db import crud
 from ...db.models import Run, User
 
@@ -49,7 +50,7 @@ def create_new_run(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Run:
-    return crud.create_run(
+    return run_service.create_run(
         db,
         project_id=payload.project_id,
         dataset_id=payload.dataset_id,
