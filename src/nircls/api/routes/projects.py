@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_user, get_db
+from ..deps import get_current_user, get_db, require_role
 from ..schemas import ProjectCreate, ProjectRead
 from ...db import crud
 from ...db.models import Project, User
@@ -25,7 +25,12 @@ def get_project_detail(project_id: int, db: Session = Depends(get_db)) -> Projec
     return project
 
 
-@router.post("", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ProjectRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("admin", "researcher"))],
+)
 def create_new_project(
     payload: ProjectCreate,
     db: Session = Depends(get_db),

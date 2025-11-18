@@ -49,4 +49,18 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     return user
 
 
-__all__ = ["get_db", "get_current_user"]
+def require_role(*roles: str):
+    def _dep(user: User = Depends(get_current_user)) -> User:
+        user_role = getattr(user, "role", None)
+        role_name = getattr(user_role, "name", None)
+        if role_name not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return user
+
+    return _dep
+
+
+__all__ = ["get_db", "get_current_user", "require_role"]
