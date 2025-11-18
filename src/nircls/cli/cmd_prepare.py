@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from .common import (
     setup_run_logging,
     t,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def register_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -33,7 +36,7 @@ def run_prepare_data(args: argparse.Namespace) -> int:
     if cfg is None:
         return 1
     if cfg.data is None:
-        print(t("config_invalid_data_section"), file=sys.stderr)
+        logger.error(t("config_invalid_data_section"))
         return 1
 
     run_id = make_run_id("prepare")
@@ -44,7 +47,7 @@ def run_prepare_data(args: argparse.Namespace) -> int:
     try:
         ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
     except DataError as e:
-        print(t("invalid_data", err=e), file=sys.stderr)
+        logger.error(t("invalid_data", err=e), exc_info=True)
         return 1
 
     summary = summarize_dataset(ds_list)

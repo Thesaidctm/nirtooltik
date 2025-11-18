@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -18,6 +19,8 @@ from .common import (
     setup_run_logging,
     t,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def register_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -37,7 +40,7 @@ def run_demo(args: argparse.Namespace) -> int:
     try:
         cfg = ConfigModel(**raw)
     except ValidationError as e:  # pragma: no cover - user feedback
-        print(t("demo_config_invalid", err=e), file=sys.stderr)
+        logger.error(t("demo_config_invalid", err=e), exc_info=True)
         return 1
 
     run_id = make_run_id("demo")
@@ -49,7 +52,7 @@ def run_demo(args: argparse.Namespace) -> int:
     try:
         ds_list = prepare_inputs(cfg.data.dict(), use_cache=cfg.use_cache)
     except DataError as e:
-        print(t("invalid_data", err=e), file=sys.stderr)
+        logger.error(t("invalid_data", err=e), exc_info=True)
     if ds_list:
         first = ds_list[0]
         prep_file = base_dir / f"prepared_{first['target']}.xlsx"
@@ -60,7 +63,7 @@ def run_demo(args: argparse.Namespace) -> int:
             cfg.data.x_sheet or "X",
             cfg.data.y_sheet or "Y",
         )
-        print(t("data_prepared_in", file=prep_file))
+        logger.info(t("data_prepared_in", file=prep_file))
     train_dir = base_dir / "train"
     ensure_dirs(train_dir)
     try:
@@ -78,11 +81,11 @@ def run_demo(args: argparse.Namespace) -> int:
             _print_metrics_table(metrics_path)
         if figs_dir:
             _print_confusion_paths(figs_dir)
-        print(t("model_trained_in", path=train_dir))
+        logger.info(t("model_trained_in", path=train_dir))
     except DataError as e:
-        print(t("invalid_data", err=e), file=sys.stderr)
+        logger.error(t("invalid_data", err=e), exc_info=True)
     except ModelError as e:
-        print(t("invalid_model", err=e), file=sys.stderr)
+        logger.error(t("invalid_model", err=e), exc_info=True)
     cv_dir = base_dir / "cv"
     ensure_dirs(cv_dir)
     try:
@@ -97,10 +100,10 @@ def run_demo(args: argparse.Namespace) -> int:
         for metrics_path, figs_dir in outputs:
             _print_metrics_table(metrics_path)
             _print_confusion_paths(figs_dir)
-        print(t("cv_results_in", path=cv_dir))
-        print(f"Summary saved in {summary_dir}")
+        logger.info(t("cv_results_in", path=cv_dir))
+        logger.info("Summary saved in %s", summary_dir)
     except DataError as e:
-        print(t("invalid_data", err=e), file=sys.stderr)
+        logger.error(t("invalid_data", err=e), exc_info=True)
     except ModelError as e:
-        print(t("invalid_model", err=e), file=sys.stderr)
+        logger.error(t("invalid_model", err=e), exc_info=True)
     return 0

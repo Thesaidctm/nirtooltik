@@ -17,6 +17,8 @@ from ..utils.logging import setup_logging
 
 LANG = "en"
 
+logger = logging.getLogger(__name__)
+
 
 # Human-friendly names for interactive wizard choices
 PREPROCESS_DESCRIPTIONS: dict[str, dict[str, str]] = {
@@ -247,7 +249,7 @@ def _print_metrics_table(metrics_json: Path) -> None:
         else:
             df[base] = df[col].map(lambda x: f"{x:.3f}")
     display_cols = id_cols + [c[:-5] for c in metrics_cols]
-    print(df[display_cols].to_string(index=False))
+        logger.info(df[display_cols].to_string(index=False))
 
 
 def _format_summary_steps(value: Any) -> str:
@@ -346,7 +348,7 @@ def _print_dataset_summary(summary: pd.DataFrame) -> None:
     ]
     df = _prepare_summary_display(summary, ordered_cols=ordered_cols)
     with pd.option_context("display.max_colwidth", None):
-        print(df.to_string(index=False))
+        logger.info(df.to_string(index=False))
 
 
 def _load_preprocess_steps(metrics_json: Path) -> list[str]:
@@ -416,7 +418,7 @@ def _print_confusion_paths(fig_dir: Path) -> None:
     if not fig_dir or not fig_dir.exists():
         return
     for p in sorted(fig_dir.glob("*confusion.png")):
-        print(t("confusion", path=p))
+        logger.info(t("confusion", path=p))
 
 
 def _print_astm_report(astm_json: Path) -> None:
@@ -436,7 +438,7 @@ def _print_astm_report(astm_json: Path) -> None:
     for key, label in labels.items():
         val = flags.get(key)
         mark = "✔" if val else "✖"
-        print(f"{mark} {label}")
+        logger.info("%s %s", mark, label)
 
 
 def _parse_params(s: str) -> dict[str, Any]:
@@ -508,11 +510,11 @@ def load_config(
         with open(config_path) as f:
             loaded_cfg = yaml.safe_load(f)
     except FileNotFoundError:
-        print(t("config_not_found"), file=sys.stderr)
+        logger.error(t("config_not_found"))
         return None
     raw = cast(Dict[str, Any], loaded_cfg or {})
     if not isinstance(raw, dict):
-        print(t("invalid_config", err="estrutura inválida"), file=sys.stderr)
+        logger.error(t("invalid_config", err="estrutura inválida"))
         return None
     if notification_email:
         raw["notification_email"] = notification_email
@@ -521,7 +523,7 @@ def load_config(
     try:
         return ConfigModel(**raw)
     except ValidationError as e:  # pragma: no cover - user feedback
-        print(t("invalid_config", err=e), file=sys.stderr)
+        logger.error(t("invalid_config", err=e), exc_info=True)
         return None
 
 

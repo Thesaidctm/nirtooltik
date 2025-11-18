@@ -1,48 +1,27 @@
 import logging
 from pathlib import Path
 
-from rich.console import Console
-from rich.logging import RichHandler
-
-logger = logging.getLogger("nircls")
-
 
 def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> None:
-    """Configure logging with separate console and file handlers."""
+    """Configure logging with a standard format including module names."""
 
-    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-    console = Console(stderr=True)
-    file_handler = None
-    handlers: list[logging.Handler] = [
-        RichHandler(console=console, show_path=False, markup=True)
-    ]
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
     if log_file:
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        file_handler.setFormatter(formatter)
-        handlers.append(file_handler)
+        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
 
     logging.basicConfig(
         level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         handlers=handlers,
-        format="%(message)s",
         force=True,
     )
     logging.captureWarnings(True)
-    warnings_logger = logging.getLogger("py.warnings")
-    warnings_logger.handlers.clear()
-    if file_handler:
-        warnings_logger.addHandler(file_handler)
-        warnings_logger.propagate = False
-    else:
-        warnings_logger.propagate = True
-    logging.getLogger("kaleido").setLevel(logging.WARNING)
-    logging.getLogger("choreography").setLevel(logging.WARNING)
-    logging.getLogger("choreographer").setLevel(logging.WARNING)
 
 
 def log_versions() -> None:
     """Log versions of key third-party libraries."""
 
+    logger = logging.getLogger(__name__)
     try:
         import numpy
         import pandas
@@ -54,5 +33,5 @@ def log_versions() -> None:
             pandas.__version__,
             sklearn.__version__,
         )
-    except Exception as exc:
-        logger.warning("Version log failed: %s", exc)
+    except Exception:
+        logger.error("Version log failed", exc_info=True)

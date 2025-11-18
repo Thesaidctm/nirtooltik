@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import base64
 import hashlib
 import hmac
 import json
 import os
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Generator
 
 import bcrypt
@@ -69,8 +70,17 @@ from sqlalchemy.orm import Session
 
 from .db.database import SessionLocal
 from .db.models import User
+from .utils.logging import setup_logging
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def _configure_logging() -> None:
+    setup_logging()
+    logger.info("FastAPI application initialized")
 
 _SECRET_KEY = os.environ.get("SESSION_SECRET", "nircls-secret")
 _JWT_ALGORITHM = os.environ.get("SESSION_ALGORITHM", "HS256")

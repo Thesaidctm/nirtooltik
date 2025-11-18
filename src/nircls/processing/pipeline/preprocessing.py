@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import inspect
 import json
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -19,8 +20,9 @@ from ..preprocessors.spectro import (
     SavitzkyGolayTransformer,
 )
 from ...utils.errors import DataError, ModelError
-from ...utils.logging import logger
 from ..config_schema import ConfigModel, ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 def _infer_task_type(cfg: Mapping[str, Any]) -> str:

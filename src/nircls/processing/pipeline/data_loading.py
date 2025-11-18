@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections import OrderedDict
 from functools import lru_cache
 from glob import glob
@@ -13,8 +14,9 @@ from joblib import load
 from ..io import prepare_inputs as _prepare_inputs
 from ..io import read_tabular, read_xlsx_xy
 from ...utils.errors import DataError
-from ...utils.logging import logger
 from ...utils.misc import RESULTS_DIR
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=8)
