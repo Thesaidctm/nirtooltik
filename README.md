@@ -952,14 +952,19 @@ a pipeline chamará `enviar_email` automaticamente.
 Para persistir os dados ingeridos em uma estrutura compatível com os arquivos
 de importação, o banco foi segmentado em três tabelas principais:
 
-- **L** (`l`): catalogo de amostras com `sample_id` (chave primária),
-  `external_id` (identificador fornecido na coleta), uma descrição opcional e
-  um campo `metadata` em JSON para atributos adicionais.
+- **L** (`l`): catalogo opcional de metadados das amostras com `sample_id`
+  (chave primária), `external_id` (identificador fornecido na coleta, agora
+  opcional), uma descrição opcional e um campo `metadata` em JSON para
+  atributos adicionais. Se você não tiver informações complementares, basta
+  não enviar L: o toolkit cria um registro vazio automaticamente ao salvar X e
+  Y.
 - **X** (`x`): matriz de preditores por amostra. Armazena um JSON em `values`
   com o vetor espectral ou atributos numéricos, referenciando a amostra por
-  `sample_id` (chave estrangeira) e garantindo unicidade por amostra.
-- **Y** (`y`): valores alvo. Permite múltiplos alvos por amostra via pares
-  `target_name`/`target_value`, associados a `sample_id`.
+  `sample_id` (chave estrangeira) e garantindo unicidade por amostra. Foi
+  testado com bases largas (≈2.300 colunas) através do armazenamento em JSON.
+- **Y** (`y`): valores alvo paralelos à matriz X. Permite múltiplos alvos por
+  amostra via pares `target_name`/`target_value`, associados ao mesmo
+  `sample_id` que X. Tanto X quanto Y devem ter a mesma quantidade de linhas.
 
 Utilize as funções utilitárias em `nircls.db` para manipular os registros:
 
@@ -974,6 +979,14 @@ from nircls.db import (
 sample = create_sample(session, external_id="amostra_001", metadata={"site": "A1"})
 set_sample_features(session, sample.sample_id, values={"1100.5": 0.123, "1200.0": 0.456})
 replace_sample_targets(session, sample.sample_id, targets=[("especie", "Eucalipto"), ("densidade", "0.88")])
+```
+
+Caso não haja metadados de L, é possível gravar apenas X e Y usando as
+helpers que criam um stub de L em branco automaticamente:
+
+```python
+features = set_sample_features(session, None, values={"1100.5": 0.123})
+replace_sample_targets(session, features.sample_id, targets=[("classe", "A")])
 ```
 
 Os scripts de migração Alembic em `src/nircls/db/alembic/versions/` incluem a

@@ -44,7 +44,7 @@ class SampleMetadata(Base):
     __tablename__ = "l"
 
     sample_id = Column(Integer, primary_key=True, autoincrement=True)
-    external_id = Column(String(100), nullable=False)
+    external_id = Column(String(100), nullable=True)
     description = Column(String(255), nullable=True)
     metadata_json = Column("metadata", JSON, nullable=True)
 

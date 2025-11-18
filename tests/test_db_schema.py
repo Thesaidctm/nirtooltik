@@ -62,3 +62,28 @@ def test_crud_roundtrip_for_xy_l_tables() -> None:
 
         target_names = {t.target_name for t in persisted.targets}
         assert target_names == {"especie", "densidade"}
+
+
+def test_optional_l_metadata_stub_is_created_on_demand() -> None:
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    with SessionLocal() as session:
+        features = set_sample_features(
+            session,
+            sample_id=None,
+            values={"1100.0": 0.12, "2200.0": 0.98},
+        )
+
+        replace_sample_targets(
+            session,
+            features.sample_id,
+            targets=[("especie", "Eucalipto")],
+        )
+
+        reloaded = get_sample(session, features.sample_id)
+        assert reloaded is not None
+        assert reloaded.external_id is None
+        assert reloaded.features is not None
+        assert set(reloaded.features.values.keys()) == {"1100.0", "2200.0"}
