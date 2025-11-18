@@ -142,6 +142,16 @@ def build_model_spec(estimator: Any) -> Dict[str, Any]:
     }
 
 
+def save_pls_lv_curve(
+    rmsecv_map: Dict[int, float],
+    out_dir: Path,
+) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "pls_lv_curve.json"
+    out_path.write_text(json.dumps(rmsecv_map, indent=2), encoding="utf-8")
+    return out_path
+
+
 def save_run_metadata(cfg: Dict[str, Any], out_dir: Path) -> None:
     """Persist experiment configuration and environment details."""
 

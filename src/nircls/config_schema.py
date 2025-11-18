@@ -133,6 +133,7 @@ class ModelConfig(BaseModel):
     calibration: Optional[CalibConfig] = None
     overfit_check: bool = True
     y_scramble_n_iter: int = 20
+    compute_lv_curve: bool = False
 
     class Config:
         extra = "forbid"
