@@ -124,6 +124,18 @@ def _relative_to_out_dir(path: Path, out_dir: Path) -> str:
         return path.as_posix()
 
 
+def _relpath_or_abs(path: Path, base: Path) -> str:
+    """Return ``path`` relative to ``base`` when possible.
+
+    Falls back to the absolute POSIX path if ``path`` is outside ``base``.
+    """
+
+    try:
+        return path.relative_to(base).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def _is_pls_regression_model(name: str) -> bool:
     base = (name or "").split("__", 1)[0].upper()
     return base in {"PLSREGRESSION", "PLSR", "PLS_REG"}
@@ -845,6 +857,7 @@ def _run_cv_regression(
             n_comp_list: List[int] = []
             results_dir = out_dir / "results"
             results_dir.mkdir(parents=True, exist_ok=True)
+            pls_curve_rel_path = None
             pls_curve_path = _maybe_compute_pls_lv_curve(
                 model_name=name,
                 model_cfg=model_cfg,
@@ -855,6 +868,10 @@ def _run_cv_regression(
                 groups=groups,
                 out_dir=results_dir,
             )
+            if pls_curve_path is not None:
+                pls_curve_rel_path = _relpath_or_abs(
+                    pls_curve_path, results_dir
+                )
 
             def _export_residuals_csv() -> Optional[Path]:
                 if not fold_predictions:
@@ -955,10 +972,8 @@ def _run_cv_regression(
                 "model": model_label,
                 "calibrated": False,
             }
-            if pls_curve_path is not None:
-                row["pls_lv_curve"] = _relative_to_out_dir(
-                    pls_curve_path, out_dir
-                )
+            if pls_curve_rel_path is not None:
+                row["pls_lv_curve"] = pls_curve_rel_path
             residuals_path = _export_residuals_csv()
             if residuals_path is not None:
                 row["cv_residuals_csv"] = _relative_to_out_dir(
@@ -2690,7 +2705,9 @@ def run_pipeline(
             }
             curve_path = train_dir / "results" / "pls_lv_curve.json"
             if curve_path.exists():
-                metrics_manifest["pls_lv_curve"] = str(curve_path)
+                metrics_manifest["pls_lv_curve"] = _relpath_or_abs(
+                    curve_path, out_dir
+                )
             extras = {
                 "prepared_data": str(train_dir / "prepared_XY.xlsx"),
             }
