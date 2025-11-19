@@ -41,7 +41,7 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
     setError(null)
 
     try {
-      const createdResponse = await api.post<DatasetApiResponse>('/datasets', {
+      const createdResponse = await api.post<DatasetApiResponse>('/datasets/', {
         name: name.trim(),
       })
       const createdDataset = normalizeDataset(createdResponse)
