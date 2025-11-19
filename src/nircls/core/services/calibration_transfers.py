@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from nircls.db import crud
 from nircls.db.models import CalibrationTransfer, Dataset, ModelRegistry
 from nircls.processing.io import load_dataset_xy
+from nircls.results.metrics.regression import compute_mae_percent, compute_rpd, compute_rmsep
 from nircls.processing.transfer.calibration_transfer import fit_direct_standardization
 from nircls.core.settings import settings
 from nircls.core.services.models import predict_with_model
@@ -61,6 +63,23 @@ def _get_dataset_X(
 
     X, _ = load_dataset_xy(data_path, target_cols=target_cols)
     return X.values
+
+
+def _get_dataset_xy(
+    dataset: Dataset,
+    *,
+    target_cols=None,
+) -> Tuple[np.ndarray, List[Tuple[str, Any]]]:
+    """Return X and list of (target_name, Series) for a dataset file."""
+
+    if not dataset.storage_path:
+        raise DataError("Dataset has no storage_path")
+
+    storage_dir = Path(dataset.storage_path)
+    data_path = _resolve_dataset_data_path(storage_dir)
+
+    X, y_list = load_dataset_xy(data_path, target_cols=target_cols)
+    return X.values, y_list
 
 
 def create_calibration_transfer(
@@ -175,6 +194,12 @@ def fit_ds_for_transfer(
             "base_dir": str(base_dir),
             "F_ds": str(F_path),
             "method": "ds",
+            "ds_summary": {
+                "n_samples": int(X_master.shape[0]),
+                "n_features": int(X_master.shape[1]),
+                "master_dataset_id": transfer.standard_dataset_master_id,
+                "slave_dataset_id": transfer.standard_dataset_slave_id,
+            },
         }
     )
     transfer.artifacts = artifacts
@@ -246,3 +271,75 @@ def predict_with_transfer(
         spectra=X_master.tolist(),
     )
     return y_hat
+
+
+def evaluate_transfer_on_dataset(
+    db: Session,
+    *,
+    transfer_id: int,
+    dataset_id: int,
+    target_index: int = 0,
+) -> Dict[str, Any]:
+    """Evaluate a calibration transfer on a dataset with ground-truth targets."""
+
+    transfer: CalibrationTransfer | None = crud.get_calibration_transfer(
+        db, transfer_id=transfer_id
+    )
+    if transfer is None:
+        raise DataError(f"CalibrationTransfer {transfer_id} not found")
+
+    dataset: Dataset | None = crud.get_dataset(db, dataset_id)
+    if dataset is None:
+        raise DataError(f"Dataset {dataset_id} not found")
+
+    if dataset.instrument_id and dataset.instrument_id != transfer.slave_instrument_id:
+        raise DataError(
+            "Dataset instrument does not match CalibrationTransfer slave instrument"
+        )
+
+    X, y_list = _get_dataset_xy(dataset)
+    if not y_list:
+        raise DataError("Dataset must contain at least one target column for evaluation")
+
+    if target_index < 0 or target_index >= len(y_list):
+        raise DataError(
+            f"target_index {target_index} out of range for {len(y_list)} target columns"
+        )
+
+    target_name, y_series = y_list[target_index]
+    y_true = np.asarray(y_series, dtype=float)
+
+    y_pred = predict_with_transfer(
+        db,
+        transfer_id=transfer_id,
+        spectra=X.tolist(),
+    )
+
+    metrics = {
+        "rmsep": compute_rmsep(y_true, y_pred),
+        "rpd": compute_rpd(y_true, y_pred),
+        "mae_percent": compute_mae_percent(y_true, y_pred),
+        "n_samples": int(X.shape[0]),
+        "target_name": target_name,
+        "dataset_id": dataset_id,
+    }
+
+    metadata = transfer.metadata_json or {}
+    eval_history: list[dict[str, Any]] = metadata.get("eval_history") or []
+    eval_history.append(
+        {
+            "dataset_id": dataset_id,
+            "target_index": target_index,
+            "target_name": target_name,
+            "metrics": metrics,
+            "evaluated_at": datetime.utcnow().isoformat() + "Z",
+        }
+    )
+    metadata["eval_history"] = eval_history
+    transfer.metadata_json = metadata
+
+    db.add(transfer)
+    db.commit()
+    db.refresh(transfer)
+
+    return metrics
