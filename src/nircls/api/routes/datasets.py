@@ -54,6 +54,7 @@ def create_new_dataset(
         created_by_id=current_user.user_id,
         storage_path=payload.storage_path,
         organization_id=current_user.organization_id,
+        instrument_id=payload.instrument_id,
     )
 
 

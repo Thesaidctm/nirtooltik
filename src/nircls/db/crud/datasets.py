@@ -33,6 +33,7 @@ def create_dataset(
     created_by_id: int | None = None,
     storage_path: str | None = None,
     organization_id: int | None = None,
+    instrument_id: int | None = None,
 ) -> Dataset:
     dataset = Dataset(
         name=name,
@@ -42,6 +43,7 @@ def create_dataset(
         created_by_id=created_by_id,
         storage_path=storage_path,
         organization_id=organization_id,
+        instrument_id=instrument_id,
     )
     session.add(dataset)
     session.commit()
