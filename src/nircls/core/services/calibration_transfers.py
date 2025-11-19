@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from nircls.db.models import CalibrationTransfer, Dataset
 from nircls.processing.io import load_dataset_xy
 from nircls.processing.transfer.calibration_transfer import fit_direct_standardization
 from nircls.core.settings import settings
+from nircls.core.services.models import predict_with_model
 from nircls.utils.errors import DataError
 
 
@@ -96,3 +97,66 @@ def fit_ds_for_transfer(
     db.commit()
     db.refresh(transfer)
     return transfer
+
+
+def predict_with_transfer(
+    db: Session,
+    transfer_id: int,
+    spectra: List[List[float]],
+) -> List[float]:
+    """
+    Aplica a transferência de calibração (por enquanto DS) a espectros do instrumento escravo
+    e, em seguida, usa o modelo mestre associado para prever os valores-alvo.
+    """
+    transfer: CalibrationTransfer | None = crud.get_calibration_transfer(
+        db, transfer_id=transfer_id
+    )
+    if transfer is None:
+        raise DataError(f"CalibrationTransfer {transfer_id} not found")
+
+    artifacts = transfer.artifacts or {}
+    method = artifacts.get("method") or transfer.method
+    if method != "ds":
+        raise DataError(
+            f"Only DS method is supported for predict_with_transfer, got {method!r}"
+        )
+
+    base_dir = artifacts.get("base_dir")
+    F_rel = artifacts.get("F_ds")
+    if not base_dir or not F_rel:
+        raise DataError("CalibrationTransfer artifacts must contain 'base_dir' and 'F_ds'")
+
+    base_dir_path = Path(base_dir)
+    F_path = Path(F_rel)
+    if not F_path.is_absolute():
+        F_path = base_dir_path / F_path
+
+    if not F_path.exists():
+        raise DataError(f"DS matrix file not found at {F_path}")
+
+    F = np.load(F_path)
+
+    X_slave = np.asarray(spectra, dtype=float)
+    if X_slave.ndim != 2:
+        raise DataError("Input 'spectra' must be a 2D array (n_samples x n_features)")
+
+    if X_slave.shape[1] != F.shape[0]:
+        raise DataError(
+            f"Spectra have {X_slave.shape[1]} features but DS matrix has shape {F.shape}"
+        )
+
+    # Aplica transferência: X_mestre ≈ X_escravo @ F
+    X_master = X_slave @ F
+
+    # Usa o modelo mestre associado
+    master_model_id = transfer.master_model_id
+    if master_model_id is None:
+        raise DataError("CalibrationTransfer has no master_model_id configured")
+
+    # predict_with_model já sabe carregar o modelo treinado do mestre
+    y_hat = predict_with_model(
+        db,
+        model_id=master_model_id,
+        spectra=X_master.tolist(),
+    )
+    return y_hat

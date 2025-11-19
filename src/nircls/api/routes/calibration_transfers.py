@@ -7,10 +7,16 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_user, get_db
-from ..schemas import CalibrationTransferCreate, CalibrationTransferRead
+from ..schemas import (
+    CalibrationTransferCreate,
+    CalibrationTransferRead,
+    PredictRequest,
+    PredictResponse,
+)
 from ...core import services
 from ...db import crud
 from ...db.models import CalibrationTransfer, User
+from ...utils.errors import DataError
 
 router = APIRouter()
 
@@ -60,3 +66,30 @@ def fit_calibration_transfer_ds(
     # Opcional: checar se current_user pertence à mesma organização dos datasets/modelo
     transfer = services.calibration_transfers.fit_ds_for_transfer(db, transfer_id)
     return CalibrationTransferFitResponse(id=transfer.id, artifacts=transfer.artifacts or {})
+
+
+@router.post("/{transfer_id}/predict", response_model=PredictResponse)
+def predict_with_calibration_transfer(
+    transfer_id: int,
+    req: PredictRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Recebe espectros medidos no instrumento escravo, aplica a transferência de calibração
+    (por enquanto DS) para o espaço do instrumento mestre e, em seguida,
+    usa o modelo mestre associado para prever os valores-alvo.
+    """
+    try:
+        y_hat = services.calibration_transfers.predict_with_transfer(
+            db=db,
+            transfer_id=transfer_id,
+            spectra=req.spectra,
+        )
+    except DataError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    return PredictResponse(y_hat=y_hat)
