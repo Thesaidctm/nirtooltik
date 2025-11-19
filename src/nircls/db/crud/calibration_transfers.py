@@ -27,7 +27,7 @@ def create_transfer(
         slave_instrument_id=slave_instrument_id,
         method=method,
         artifacts=artifacts,
-        metadata=metadata,
+        metadata_json=metadata,
         standard_dataset_master_id=standard_dataset_master_id,
         standard_dataset_slave_id=standard_dataset_slave_id,
     )

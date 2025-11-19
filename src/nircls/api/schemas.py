@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ProjectBase(BaseModel):
@@ -171,7 +171,10 @@ class CalibrationTransferCreate(CalibrationTransferBase):
 class CalibrationTransferRead(CalibrationTransferBase):
     id: int
     artifacts: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None, alias="metadata_json"
+    )
 
     class Config:
         orm_mode = True
+        allow_population_by_field_name = True
