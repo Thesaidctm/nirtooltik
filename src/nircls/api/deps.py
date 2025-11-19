@@ -62,8 +62,9 @@ def get_current_organization(
 
 def require_role(*roles: str):
     def _dep(user: User = Depends(get_current_user)) -> User:
-        user_roles = getattr(user, "roles", []) or []
-        if not any(getattr(role, "name", None) in roles for role in user_roles):
+        user_role = getattr(user, "role", None)
+        role_name = getattr(user_role, "name", None)
+        if role_name not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions",
