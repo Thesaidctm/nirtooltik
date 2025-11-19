@@ -18,7 +18,7 @@ const Datasets = () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await api.get<DatasetApiResponse[]>('/datasets')
+      const response = await api.get<DatasetApiResponse[]>('/datasets/')
       setDatasets(response.map(normalizeDataset))
     } catch (err) {
       console.error(err)
