@@ -41,5 +41,9 @@ def get_transfer(db: Session, transfer_id: int) -> CalibrationTransfer | None:
     return db.get(CalibrationTransfer, transfer_id)
 
 
+def get_calibration_transfer(db: Session, transfer_id: int) -> CalibrationTransfer | None:
+    return get_transfer(db, transfer_id)
+
+
 def list_transfers(db: Session) -> List[CalibrationTransfer]:
     return db.query(CalibrationTransfer).all()

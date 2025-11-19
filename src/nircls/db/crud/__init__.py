@@ -13,7 +13,12 @@ from .variables import get_variavel, set_variavel
 from .models import create_model, get_model, list_models, update_model_status
 from .organizations import create_organization, get_organization, list_organizations
 from .instruments import create_instrument, get_instrument, list_instruments
-from .calibration_transfers import create_transfer, get_transfer, list_transfers
+from .calibration_transfers import (
+    create_transfer,
+    get_calibration_transfer,
+    get_transfer,
+    list_transfers,
+)
 
 __all__ = [
     "create_model",
@@ -51,6 +56,7 @@ __all__ = [
     "get_instrument",
     "list_instruments",
     "create_transfer",
+    "get_calibration_transfer",
     "get_transfer",
     "list_transfers",
 ]
