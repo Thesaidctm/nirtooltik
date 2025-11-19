@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import List
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ... import i18n
@@ -61,6 +61,7 @@ def create_new_dataset(
 async def upload_dataset_file(
     dataset_id: int,
     file: UploadFile = File(...),
+    target_cols: List[str] | None = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -90,4 +91,10 @@ async def upload_dataset_file(
             detail="Empty file",
         )
 
-    return save_dataset_file(db, dataset, file.filename or "dataset", content)
+    return save_dataset_file(
+        db,
+        dataset,
+        file.filename or "dataset",
+        content,
+        target_cols=target_cols,
+    )
