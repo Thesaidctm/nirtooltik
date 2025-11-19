@@ -2739,7 +2739,7 @@ def run_pipeline(
                 }
             )
             if log_file is not None:
-                extras.setdefault("log_file", _relpath_or_abs(log_file, out_dir))
+                extras.setdefault("log_file", str(log_file))
             run_logger.info("Pipeline completed successfully")
             return run_services.mark_run_completed(
                 db,
@@ -2763,7 +2763,7 @@ def run_pipeline(
                 },
             }
             if log_file is not None:
-                artifacts["extras"] = {"log_file": _relpath_or_abs(log_file, out_dir)}
+                artifacts["extras"] = {"log_file": str(log_file)}
             (run_logger or logger).exception("Pipeline failed: %s", exc)
             run_services.mark_run_failed(db, run.run_id, str(exc), artifacts=artifacts)
             raise
