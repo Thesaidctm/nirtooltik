@@ -27,6 +27,7 @@ class DatasetBase(BaseModel):
     name: str
     version: Optional[str] = None
     description: Optional[str] = None
+    instrument_id: Optional[int] = None
 
 
 class DatasetCreate(DatasetBase):
@@ -89,6 +90,7 @@ class ModelBase(BaseModel):
     name: str
     target: Optional[str] = None
     status: Literal["candidate", "production", "deprecated"] = "candidate"
+    instrument_id: Optional[int] = None
 
 
 class ModelCreate(ModelBase):

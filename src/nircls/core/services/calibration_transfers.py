@@ -8,7 +8,7 @@ import numpy as np
 from sqlalchemy.orm import Session
 
 from nircls.db import crud
-from nircls.db.models import CalibrationTransfer, Dataset
+from nircls.db.models import CalibrationTransfer, Dataset, ModelRegistry
 from nircls.processing.io import load_dataset_xy
 from nircls.processing.transfer.calibration_transfer import fit_direct_standardization
 from nircls.core.settings import settings
@@ -59,6 +59,70 @@ def _get_dataset_X(
 
     X, _ = load_dataset_xy(data_path, target_cols=target_cols)
     return X.values
+
+
+def create_calibration_transfer(
+    db: Session,
+    *,
+    name: str,
+    master_model_id: int,
+    master_instrument_id: int,
+    slave_instrument_id: int,
+    standard_dataset_master_id: int | None = None,
+    standard_dataset_slave_id: int | None = None,
+    method: str = "ds",
+) -> CalibrationTransfer:
+    """
+    Cria um CalibrationTransfer garantindo coerência entre:
+    - modelo mestre e instrumento mestre;
+    - datasets padrão e seus respectivos instrumentos.
+    """
+    model: ModelRegistry | None = crud.get_model(db, model_id=master_model_id)
+    if model is None:
+        raise DataError(f"Master model {master_model_id} not found")
+
+    if model.instrument_id and model.instrument_id != master_instrument_id:
+        raise DataError(
+            f"Master model instrument_id={model.instrument_id} "
+            f"does not match master_instrument_id={master_instrument_id}"
+        )
+
+    ds_master: Dataset | None = None
+    ds_slave: Dataset | None = None
+
+    if standard_dataset_master_id is not None:
+        ds_master = crud.get_dataset(db, standard_dataset_master_id)
+        if ds_master is None:
+            raise DataError(f"Standard master dataset {standard_dataset_master_id} not found")
+        if ds_master.instrument_id and ds_master.instrument_id != master_instrument_id:
+            raise DataError(
+                f"Standard master dataset instrument_id={ds_master.instrument_id} "
+                f"does not match master_instrument_id={master_instrument_id}"
+            )
+
+    if standard_dataset_slave_id is not None:
+        ds_slave = crud.get_dataset(db, standard_dataset_slave_id)
+        if ds_slave is None:
+            raise DataError(f"Standard slave dataset {standard_dataset_slave_id} not found")
+        if ds_slave.instrument_id and ds_slave.instrument_id != slave_instrument_id:
+            raise DataError(
+                f"Standard slave dataset instrument_id={ds_slave.instrument_id} "
+                f"does not match slave_instrument_id={slave_instrument_id}"
+            )
+
+    transfer = CalibrationTransfer(
+        name=name,
+        master_model_id=master_model_id,
+        master_instrument_id=master_instrument_id,
+        slave_instrument_id=slave_instrument_id,
+        standard_dataset_master_id=standard_dataset_master_id,
+        standard_dataset_slave_id=standard_dataset_slave_id,
+        method=method,
+    )
+    db.add(transfer)
+    db.commit()
+    db.refresh(transfer)
+    return transfer
 
 
 def fit_ds_for_transfer(

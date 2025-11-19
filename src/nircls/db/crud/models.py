@@ -14,6 +14,7 @@ def create_model(
     run_id: int,
     dataset_id: int | None = None,
     target: str | None = None,
+    instrument_id: int | None = None,
     status: str = "candidate",
 ) -> ModelRegistry:
     model = ModelRegistry(
@@ -21,6 +22,7 @@ def create_model(
         run_id=run_id,
         dataset_id=dataset_id,
         target=target,
+        instrument_id=instrument_id,
         status=status,
     )
     db.add(model)

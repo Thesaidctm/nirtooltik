@@ -32,16 +32,19 @@ def create_transfer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> CalibrationTransfer:  # noqa: ARG001
-    return crud.create_transfer(
-        db,
-        name=payload.name,
-        master_model_id=payload.master_model_id,
-        master_instrument_id=payload.master_instrument_id,
-        slave_instrument_id=payload.slave_instrument_id,
-        method=payload.method,
-        standard_dataset_master_id=payload.standard_dataset_master_id,
-        standard_dataset_slave_id=payload.standard_dataset_slave_id,
-    )
+    try:
+        return services.calibration_transfers.create_calibration_transfer(
+            db,
+            name=payload.name,
+            master_model_id=payload.master_model_id,
+            master_instrument_id=payload.master_instrument_id,
+            slave_instrument_id=payload.slave_instrument_id,
+            standard_dataset_master_id=payload.standard_dataset_master_id,
+            standard_dataset_slave_id=payload.standard_dataset_slave_id,
+            method=payload.method,
+        )
+    except DataError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.get("", response_model=List[CalibrationTransferRead])

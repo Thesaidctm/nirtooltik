@@ -42,6 +42,7 @@ def create_model_entry(
         run_id=payload.run_id,
         dataset_id=payload.dataset_id,
         target=payload.target,
+        instrument_id=payload.instrument_id,
         status=payload.status,
     )
 
