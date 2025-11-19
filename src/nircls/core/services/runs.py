@@ -15,11 +15,10 @@ from nircls.processing.pipeline.runs_train import run_pipeline
 from nircls.utils.errors import DatabaseError
 
 
-def _require_run(run: Optional[Run], run_id: int) -> Run:
+def _require_run(run: Optional[Run], run_id: int | None) -> Run:
     if run is None:
-        raise DatabaseError(
-            i18n.t("runs.not_found_by_id").format(run_id=run_id)
-        )
+        run_identifier = run_id if run_id is not None else "unknown"
+        raise DatabaseError(f"Run with id {run_identifier} not found")
     return run
 
 
