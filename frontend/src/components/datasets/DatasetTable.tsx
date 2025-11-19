@@ -3,39 +3,23 @@ import type { Dataset } from '../../types/datasets'
 interface DatasetTableProps {
   datasets: Dataset[]
   loading?: boolean
-  onDetails: (dataset: Dataset) => void
+  onSelect?: (dataset: Dataset) => void
 }
 
-const formatDate = (value?: string) => {
+const formatDate = (value?: string | null) => {
   if (!value) return '-'
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString()
+  return parsed.toLocaleDateString()
 }
 
-const resolveTargets = (manifestTargets?: string[] | string) => {
-  if (!manifestTargets) return '-'
-  if (Array.isArray(manifestTargets)) {
-    return manifestTargets.length ? manifestTargets.join(', ') : '-'
-  }
-  return manifestTargets
-}
-
-const DatasetTable = ({ datasets, loading, onDetails }: DatasetTableProps) => {
+const DatasetTable = ({ datasets, loading, onSelect }: DatasetTableProps) => {
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12 text-slate-500">
-        Carregando datasets...
-      </div>
-    )
+    return <div className="flex items-center justify-center py-12 text-slate-500">Carregando datasets...</div>
   }
 
   if (!datasets.length) {
-    return (
-      <div className="flex items-center justify-center py-12 text-slate-500">
-        Nenhum dataset encontrado.
-      </div>
-    )
+    return <div className="flex items-center justify-center py-12 text-slate-500">Nenhum dataset cadastrado ainda.</div>
   }
 
   return (
@@ -43,53 +27,50 @@ const DatasetTable = ({ datasets, loading, onDetails }: DatasetTableProps) => {
       <table className="min-w-full divide-y divide-slate-200">
         <thead className="bg-slate-50">
           <tr>
-            <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-slate-600">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
               Nome
             </th>
-            <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-slate-600">
-              Instrumento
+            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Amostras
             </th>
-            <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-slate-600">
-              #Amostras
+            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Variáveis
             </th>
-            <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-slate-600">
-              #Variáveis
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-slate-600">
-              Targets
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-slate-600">
-              Data de criação
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-slate-600">
-              Ação
+            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Criado em
             </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200 bg-white">
           {datasets.map((dataset) => {
-            const { id, name, instrument_name, instrument_id, manifest, created_at } = dataset
+            const clickable = Boolean(onSelect)
             return (
-              <tr key={id} className="hover:bg-slate-50">
-                <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900">{name}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">
-                  {instrument_name ?? instrument_id ?? '-'}
+              <tr
+                key={dataset.id}
+                onClick={() => onSelect?.(dataset)}
+                onKeyDown={(event) => {
+                  if (!clickable) return
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    onSelect?.(dataset)
+                  }
+                }}
+                tabIndex={clickable ? 0 : -1}
+                className={`transition hover:bg-slate-50 ${clickable ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500' : ''}`}
+              >
+                <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900">
+                  <div className="flex flex-col">
+                    <span>{dataset.name}</span>
+                    {dataset.description ? (
+                      <span className="text-xs font-normal text-slate-500">{dataset.description}</span>
+                    ) : null}
+                  </div>
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{manifest?.n_samples ?? '-'}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{manifest?.n_features ?? '-'}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">
-                  {resolveTargets(manifest?.target_cols)}
+                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{dataset.n_samples ?? dataset.manifest?.n_samples ?? '-'}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{formatDate(created_at)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-sm">
-                  <button
-                    type="button"
-                    onClick={() => onDetails(dataset)}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-indigo-600 transition hover:border-indigo-200 hover:bg-indigo-50"
-                  >
-                    Detalhes
-                  </button>
+                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{dataset.n_features ?? dataset.manifest?.n_features ?? '-'}
                 </td>
+                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{formatDate(dataset.created_at ?? dataset.updated_at)}</td>
               </tr>
             )
           })}

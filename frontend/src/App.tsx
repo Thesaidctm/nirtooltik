@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 
 import AppLayout from './components/AppLayout'
 import Dashboard from './pages/Dashboard'
@@ -15,7 +15,8 @@ const App = () => {
   return (
     <Routes>
       <Route path="/" element={<AppLayout />}>
-        <Route index element={<Dashboard />} />
+        <Route index element={<Navigate to="/datasets" replace />} />
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="datasets" element={<Datasets />} />
         <Route path="runs" element={<Runs />} />
         <Route path="runs/:runId" element={<RunDetails />} />
