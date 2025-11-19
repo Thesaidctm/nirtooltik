@@ -183,7 +183,7 @@ class CalibrationTransfer(Base):
 
     method = Column(String, nullable=False, default="ds")
     artifacts = Column(JSON, nullable=True)
-    metadata = Column(JSON, nullable=True)
+    metadata_json = Column("metadata", JSON, nullable=True)
 
     standard_dataset_master_id = Column(Integer, ForeignKey("datasets.dataset_id"), nullable=True)
     standard_dataset_slave_id = Column(Integer, ForeignKey("datasets.dataset_id"), nullable=True)
