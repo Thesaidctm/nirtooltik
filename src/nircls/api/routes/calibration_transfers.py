@@ -10,6 +10,8 @@ from ..deps import get_current_user, get_db
 from ..schemas import (
     CalibrationTransferCreate,
     CalibrationTransferRead,
+    CalibrationTransferEvaluateRequest,
+    CalibrationTransferEvaluateResponse,
     PredictRequest,
     PredictResponse,
 )
@@ -96,3 +98,29 @@ def predict_with_calibration_transfer(
         )
 
     return PredictResponse(y_hat=y_hat)
+
+
+@router.post(
+    "/{transfer_id}/evaluate",
+    response_model=CalibrationTransferEvaluateResponse,
+)
+def evaluate_calibration_transfer(
+    transfer_id: int,
+    payload: CalibrationTransferEvaluateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        metrics = services.calibration_transfers.evaluate_transfer_on_dataset(
+            db,
+            transfer_id=transfer_id,
+            dataset_id=payload.dataset_id,
+            target_index=payload.target_index,
+        )
+    except DataError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    return CalibrationTransferEvaluateResponse(metrics=metrics)

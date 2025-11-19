@@ -178,3 +178,12 @@ class CalibrationTransferRead(CalibrationTransferBase):
     class Config:
         orm_mode = True
         allow_population_by_field_name = True
+
+
+class CalibrationTransferEvaluateRequest(BaseModel):
+    dataset_id: int
+    target_index: int = 0
+
+
+class CalibrationTransferEvaluateResponse(BaseModel):
+    metrics: Dict[str, Any]
