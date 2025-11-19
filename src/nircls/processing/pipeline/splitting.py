@@ -17,7 +17,19 @@ from copy import deepcopy
 from datetime import datetime
 from glob import glob
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, TypedDict
+from typing import (
+    Any,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypedDict,
+    cast,
+)
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 
@@ -57,7 +69,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from scipy import stats
 
-from ...config_schema import ConfigModel, ValidationError
+from ...config_schema import CVStrategy, ConfigModel, ValidationError
 from ..feature_selection.vip import compute_vip
 from ..io import export_xy_xlsx
 from ..io import prepare_inputs as _prepare_inputs
@@ -115,12 +127,31 @@ logger = logging.getLogger(__name__)
 class CVConfig(TypedDict, total=False):
     """Cross-validation configuration options."""
 
-    cv_method: str
+    cv_method: Literal["stratified", "spxy", "group", "kfold"]
     inner_folds: int
     outer_folds: int
     random_state: int
-    strategies: List[Dict[str, Any]]
+    strategies: List[CVStrategy | Dict[str, Any]]
     train_n_splits: int
+
+
+def normalize_cv_config(config: CVConfig | Mapping[str, Any] | None) -> CVConfig:
+    """Return a ``CVConfig`` instance from mappings or Pydantic models.
+
+    Ensures the returned mapping always contains the keys expected by the
+    cross-validation routines, even when the configuration originates from a
+    Pydantic model or a larger dictionary.
+    """
+
+    if config is None:
+        return {}
+    if hasattr(config, "model_dump"):
+        config = cast(Mapping[str, Any], config.model_dump())
+    if not isinstance(config, Mapping):  # pragma: no cover - defensive fallback
+        return {}
+    normalized = {**config}
+    normalized.setdefault("strategies", [])
+    return cast(CVConfig, normalized)
 
 
 _WINDOWS_WAIT_HANDLE_LIMIT = 63

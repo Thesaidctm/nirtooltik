@@ -61,7 +61,7 @@ from .model_factory import (
 )
 from .persistence import build_model_spec, save_pls_lv_curve, save_run_metadata
 from .preprocessing import _validate_cfg
-from .splitting import CVConfig, _validate_split_capacity
+from .splitting import CVConfig, _validate_split_capacity, normalize_cv_config
 from ..io import export_xy_xlsx, summarize_dataset
 from ..models.regression import default_pls_components
 from ...db import crud
@@ -244,7 +244,7 @@ def _run_cv_classification(
         y_enc = le.transform(y)
         classes = le.classes_
         counts = np.bincount(y_enc)
-        cv_cfg: CVConfig = cfg.get("cv", {}) or {}
+        cv_cfg = normalize_cv_config(cfg.get("cv"))
         outer_folds = int(
             cv_cfg.get(
                 "outer_folds",
@@ -829,7 +829,7 @@ def _run_cv_regression(
         groups = ds.get("groups")
         if groups is not None and not isinstance(groups, pd.Series):
             groups = pd.Series(groups, index=X.index)
-        cv_cfg: CVConfig = cfg.get("cv", {}) or {}
+        cv_cfg: CVConfig = normalize_cv_config(cfg.get("cv"))
         inner_folds_cfg = cv_cfg.get("inner_folds", 3)
         if inner_folds_cfg in (None, False):
             inner_folds_cfg = 3
@@ -1195,7 +1195,7 @@ def _run_holdout_classification(
         le = LabelEncoder().fit(y)
         y_enc = le.transform(y)
         classes = le.classes_
-        cv_cfg: CVConfig = cfg.get("cv", {}) or {}
+        cv_cfg: CVConfig = normalize_cv_config(cfg.get("cv"))
         cv_method = cv_cfg.get("cv_method", "stratified").lower()
         outer_folds = int(cv_cfg.get("outer_folds", cv_cfg.get("inner_folds", 3)))
         model_cfgs = cfg.get("models", [])
@@ -1418,7 +1418,7 @@ def _run_holdout_regression(
         y = pd.to_numeric(y_series, errors="coerce").to_numpy(dtype=float)
         if np.isnan(y).any():
             raise DataError("Valores alvo inválidos ou não numéricos detectados")
-        cv_cfg: CVConfig = cfg.get("cv", {}) or {}
+        cv_cfg: CVConfig = normalize_cv_config(cfg.get("cv"))
         cv_method = cv_cfg.get("cv_method", "kfold").lower()
         if cv_method == "group":
             raise ModelError("cv_method 'group' não suportado com estratégia holdout")
@@ -1659,7 +1659,7 @@ def run_multiple_eval(
     else:
         step_variants.append((None, cfg))
 
-    cv_cfg: CVConfig = cfg.get("cv", {}) or {}
+    cv_cfg: CVConfig = normalize_cv_config(cfg.get("cv"))
     strategies = cv_cfg.get("strategies", [])
     random_state = cv_cfg.get("random_state", random_state)
     cv_method = cv_cfg.get("cv_method", "stratified").lower()
@@ -2383,7 +2383,7 @@ def _train_and_save_regression(
             if log_memory:
                 mem_start = psutil.Process().memory_info().rss / 1e6
                 logger.debug("memory start %.3f MB", mem_start)
-            cv_cfg: CVConfig = cfg.get("cv", {}) or {}
+            cv_cfg: CVConfig = normalize_cv_config(cfg.get("cv"))
             cv_method_raw = cv_cfg.get("cv_method", "kfold").lower()
             cv_method = "kfold" if cv_method_raw == "stratified" else cv_method_raw
             max_splits = int(cv_cfg.get("train_n_splits", 5) or 5)
