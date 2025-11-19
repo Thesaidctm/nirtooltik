@@ -131,9 +131,10 @@ def mark_run_completed(
         directories["summary"] = str(Path(summary_dir))
     manifest["directories"] = directories
 
-    existing_extras = manifest.get("extras") or {}
-    incoming_extras = extras or {}
-    manifest["extras"] = {**existing_extras, **incoming_extras}
+    manifest_extras = manifest.get("extras") or {}
+    if extras:
+        manifest_extras.update(extras)
+    manifest["extras"] = manifest_extras
 
     run = crud.update_run_status(
         db, run_id, status="completed", artifacts=manifest, error_message=None

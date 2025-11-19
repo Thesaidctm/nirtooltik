@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any, Dict, List
@@ -11,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from ... import i18n
 from ..deps import get_current_user, get_db, is_global_admin
-from ..schemas import RunCreate, RunRead
+from ..schemas import (
+    RunCreate,
+    RunMetricsResponse,
+    RunPlotsResponse,
+    RunRead,
+)
 from ...core.services import runs as run_service
 from ...db import crud
 from ...db.models import Run, User
@@ -84,15 +87,66 @@ def get_run_artifacts(
     return run.artifacts or {}
 
 
+@router.get("/{run_id}/metrics", response_model=RunMetricsResponse)
+def get_run_metrics(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    organization_id = None if is_global_admin(current_user) else current_user.organization_id
+    run = crud.get_run(db, run_id, organization_id=organization_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    artifacts = run.artifacts or {}
+    metrics = artifacts.get("metrics") or {}
+    return RunMetricsResponse(metrics=metrics)
+
+
+@router.get("/{run_id}/plots", response_model=RunPlotsResponse)
+def get_run_plots(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    organization_id = None if is_global_admin(current_user) else current_user.organization_id
+    run = crud.get_run(db, run_id, organization_id=organization_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    artifacts = run.artifacts or {}
+    plots = artifacts.get("plots") or []
+    return RunPlotsResponse(plots=plots)
+
+
+@router.get("/{run_id}/log-path")
+def get_run_log_path(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    organization_id = None if is_global_admin(current_user) else current_user.organization_id
+    run = crud.get_run(db, run_id, organization_id=organization_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    artifacts = run.artifacts or {}
+    extras = artifacts.get("extras") or {}
+    log_file = extras.get("log_file")
+    if not log_file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Log file not registered"
+        )
+    return {"log_file": log_file}
+
+
 @router.get("/{run_id}/pls-lv-curve")
 def get_pls_lv_curve(
     run_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    run = crud.get_run_by_id(
-        db, run_id=run_id, organization_id=current_user.organization_id
-    )
+    organization_id = None if is_global_admin(current_user) else current_user.organization_id
+    run = crud.get_run(db, run_id, organization_id=organization_id)
     if run is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

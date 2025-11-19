@@ -123,3 +123,11 @@ class OrganizationRead(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class RunMetricsResponse(BaseModel):
+    metrics: Dict[str, Any]
+
+
+class RunPlotsResponse(BaseModel):
+    plots: List[str]

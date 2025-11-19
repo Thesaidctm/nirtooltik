@@ -66,7 +66,7 @@ from ..models.regression import default_pls_components
 from ...core.services import runs as run_services
 from ...db import crud
 from ...db.models import Dataset, Run
-from ...utils.logging import RunLoggerAdapter
+from ...utils.logging import RunLoggerAdapter, attach_run_file_handler
 from ...utils.compliance import check_astm_classification
 from ...utils.misc import file_hash, get_git_commit
 from ...results.metrics.classification import expected_calibration_error
@@ -2622,7 +2622,10 @@ def run_pipeline(
 
     context_filter = _RunContextFilter(run_id=run_id, run_uid=run_uid)
     logger.addFilter(context_filter)
+    file_handler: logging.Handler | None = None
+    log_file: Path | None = None
     dataset: Dataset | None = None
+    run_logger: RunLoggerAdapter | None = None
 
     try:
         resolved_project_id = project_id
@@ -2661,6 +2664,8 @@ def run_pipeline(
         context_filter.run_id = run.run_id
         context_filter.run_uid = run.run_uid
         run_logger = _get_run_logger(run.run_id, run.run_uid)
+        log_file = Path(out_dir) / "logs" / f"run_{run.run_uid}.log"
+        file_handler = attach_run_file_handler(run_logger.logger, log_file)
         run_logger.info("Starting pipeline execution")
 
         train_dir = out_dir / "train"
@@ -2700,8 +2705,12 @@ def run_pipeline(
             reports = [train_dir / "model_card.md"]
             plots = [cv_dir / "figures"]
             metrics_manifest = {
-                "summary_csv": str(summary_dir / "metrics_summary.csv"),
-                "summary_xlsx": str(summary_dir / "metrics_summary.xlsx"),
+                "summary_csv": _relpath_or_abs(
+                    summary_dir / "metrics_summary.csv", out_dir
+                ),
+                "summary_xlsx": _relpath_or_abs(
+                    summary_dir / "metrics_summary.xlsx", out_dir
+                ),
             }
             curve_path = train_dir / "results" / "pls_lv_curve.json"
             if curve_path.exists():
@@ -2709,7 +2718,9 @@ def run_pipeline(
                     curve_path, out_dir
                 )
             extras = {
-                "prepared_data": str(train_dir / "prepared_XY.xlsx"),
+                "prepared_data": _relpath_or_abs(
+                    train_dir / "prepared_XY.xlsx", out_dir
+                ),
             }
             dataset_manifest = None
             if dataset and dataset.storage_path:
@@ -2727,6 +2738,8 @@ def run_pipeline(
                     else None,
                 }
             )
+            if log_file is not None:
+                extras.setdefault("log_file", _relpath_or_abs(log_file, out_dir))
             run_logger.info("Pipeline completed successfully")
             return run_services.mark_run_completed(
                 db,
@@ -2735,9 +2748,9 @@ def run_pipeline(
                 train_dir=train_dir,
                 cv_dir=cv_dir,
                 summary_dir=summary_dir,
-                models=[model_path],
-                plots=plots,
-                reports=reports,
+                models=[_relpath_or_abs(model_path, out_dir)],
+                plots=[_relpath_or_abs(path, out_dir) for path in plots],
+                reports=[_relpath_or_abs(path, out_dir) for path in reports],
                 metrics=metrics_manifest,
                 extras=extras,
             )
@@ -2749,11 +2762,17 @@ def run_pipeline(
                     "cross_validation": str(cv_dir),
                 },
             }
-            run_logger.exception("Pipeline failed: %s", exc)
+            if log_file is not None:
+                artifacts["extras"] = {"log_file": _relpath_or_abs(log_file, out_dir)}
+            (run_logger or logger).exception("Pipeline failed: %s", exc)
             run_services.mark_run_failed(db, run.run_id, str(exc), artifacts=artifacts)
             raise
     finally:
         logger.removeFilter(context_filter)
+        target_logger = run_logger.logger if run_logger is not None else logger
+        if file_handler is not None:
+            target_logger.removeHandler(file_handler)
+            file_handler.close()
 
 
 def run_experiment(
