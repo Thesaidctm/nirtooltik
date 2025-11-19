@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Datasets from './pages/Datasets'
 import Models from './pages/Models'
 import Predict from './pages/Predict'
+import RunDetails from './pages/RunDetails'
 import Runs from './pages/Runs'
 import Transfers from './pages/Transfers'
 
@@ -15,6 +16,7 @@ const App = () => {
         <Route index element={<Dashboard />} />
         <Route path="datasets" element={<Datasets />} />
         <Route path="runs" element={<Runs />} />
+        <Route path="runs/:runId" element={<RunDetails />} />
         <Route path="models" element={<Models />} />
         <Route path="transfers" element={<Transfers />} />
         <Route path="predict" element={<Predict />} />
