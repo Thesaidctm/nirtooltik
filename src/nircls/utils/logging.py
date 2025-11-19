@@ -11,6 +11,25 @@ class RunLoggerAdapter(logging.LoggerAdapter):
         return msg, kwargs
 
 
+def attach_run_file_handler(
+    logger: logging.Logger,
+    log_path: Path,
+) -> logging.Handler:
+    """
+    Adiciona um FileHandler ao logger apontando para log_path.
+    Retorna o handler criado para permitir remoção posterior.
+    """
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s [run=%(run_uid)s]: %(message)s"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return handler
+
+
 def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> None:
     """Configure logging with a standard format including module names."""
 
