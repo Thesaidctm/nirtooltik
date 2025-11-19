@@ -43,11 +43,11 @@ def save_dataset_file(
         "dataset_id": dataset.dataset_id,
         "version": dataset.version,
         "file": filename,
+        "original_filename": filename,
         "storage_dir": str(storage_dir),
     }
     manifest.update(
         {
-            "original_filename": filename,
             "n_samples": summary["n_samples"],
             "n_features": summary["n_features"],
             "target_cols": summary["target_cols"],

@@ -16,6 +16,33 @@ from nircls.core.services.models import predict_with_model
 from nircls.utils.errors import DataError
 
 
+def _resolve_dataset_data_path(storage_dir: Path) -> Path:
+    """Return the path to the dataset's main data file."""
+
+    manifest_path = storage_dir / "manifest.json"
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            # Se der erro ao ler o manifest, apenas segue para o fallback
+            pass
+        else:
+            original_filename = manifest.get("original_filename")
+            if original_filename:
+                candidate = storage_dir / original_filename
+                if candidate.exists():
+                    return candidate
+
+    for candidate_name in ("data.csv", "data.xlsx"):
+        candidate = storage_dir / candidate_name
+        if candidate.exists():
+            return candidate
+
+    raise DataError(
+        f"No data file found in {storage_dir} (manifest or data.csv/xlsx)"
+    )
+
+
 def _get_dataset_X(
     dataset: Dataset,
     *,
@@ -30,32 +57,7 @@ def _get_dataset_X(
 
     storage_dir = Path(dataset.storage_path)
 
-    manifest_path = storage_dir / "manifest.json"
-    data_path: Path | None = None
-
-    if manifest_path.exists():
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            original_filename = manifest.get("original_filename")
-            if original_filename:
-                candidate = storage_dir / original_filename
-                if candidate.exists():
-                    data_path = candidate
-        except Exception:
-            # Se der erro ao ler o manifest, apenas segue para o fallback
-            pass
-
-    if data_path is None:
-        for candidate_name in ("data.csv", "data.xlsx"):
-            candidate = storage_dir / candidate_name
-            if candidate.exists():
-                data_path = candidate
-                break
-
-    if data_path is None:
-        raise DataError(
-            f"No data file found in {storage_dir} (manifest or data.csv/xlsx)"
-        )
+    data_path = _resolve_dataset_data_path(storage_dir)
 
     X, _ = load_dataset_xy(data_path, target_cols=target_cols)
     return X.values
