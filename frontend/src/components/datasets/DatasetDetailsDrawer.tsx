@@ -9,6 +9,13 @@ interface DatasetDetailsDrawerProps {
   onClose: () => void
 }
 
+const formatDate = (value?: string | null) => {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString()
+}
+
 const DatasetDetailsDrawer = ({ dataset, isOpen, onClose }: DatasetDetailsDrawerProps) => {
   const navigate = useNavigate()
 
@@ -33,6 +40,7 @@ const DatasetDetailsDrawer = ({ dataset, isOpen, onClose }: DatasetDetailsDrawer
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Dataset</p>
             <h3 className="text-xl font-semibold text-slate-900">{dataset.name}</h3>
+            {dataset.description ? <p className="text-sm text-slate-600">{dataset.description}</p> : null}
           </div>
           <button
             type="button"
@@ -46,7 +54,7 @@ const DatasetDetailsDrawer = ({ dataset, isOpen, onClose }: DatasetDetailsDrawer
 
         <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
           <div className="rounded-xl border border-slate-200 p-4">
-            <h4 className="text-sm font-semibold text-slate-800">Informações</h4>
+            <h4 className="text-sm font-semibold text-slate-800">Informações principais</h4>
             <dl className="mt-3 space-y-3 text-sm text-slate-700">
               <div className="flex items-start justify-between gap-4">
                 <dt className="text-slate-500">Instrumento</dt>
@@ -56,22 +64,34 @@ const DatasetDetailsDrawer = ({ dataset, isOpen, onClose }: DatasetDetailsDrawer
               </div>
               <div className="flex items-start justify-between gap-4">
                 <dt className="text-slate-500">Amostras</dt>
-                <dd className="text-right font-medium text-slate-900">{dataset.manifest?.n_samples ?? '-'}</dd>
+                <dd className="text-right font-medium text-slate-900">
+                  {dataset.n_samples ?? dataset.manifest?.n_samples ?? '-'}
+                </dd>
               </div>
               <div className="flex items-start justify-between gap-4">
                 <dt className="text-slate-500">Variáveis</dt>
-                <dd className="text-right font-medium text-slate-900">{dataset.manifest?.n_features ?? '-'}</dd>
+                <dd className="text-right font-medium text-slate-900">
+                  {dataset.n_features ?? dataset.manifest?.n_features ?? '-'}
+                </dd>
               </div>
               <div className="flex items-start justify-between gap-4">
                 <dt className="text-slate-500">Targets</dt>
                 <dd className="text-right font-medium text-slate-900">{targets}</dd>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <dt className="text-slate-500">Criado em</dt>
+                <dd className="text-right font-medium text-slate-900">{formatDate(dataset.created_at)}</dd>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <dt className="text-slate-500">Atualizado em</dt>
+                <dd className="text-right font-medium text-slate-900">{formatDate(dataset.updated_at)}</dd>
               </div>
             </dl>
           </div>
 
           <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
             <h4 className="text-sm font-semibold text-indigo-900">Próximos passos</h4>
-            <p className="mt-1 text-sm text-indigo-800">Crie uma calibração usando este dataset.</p>
+            <p className="mt-1 text-sm text-indigo-800">Inicie uma calibração usando este dataset.</p>
             <button
               type="button"
               onClick={handleCreateRun}

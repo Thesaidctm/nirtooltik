@@ -1,12 +1,11 @@
 import { NavLink } from 'react-router-dom'
 
 const navItems = [
-  { label: 'Dashboard', to: '/' },
+  { label: 'Dashboard', to: '/dashboard' },
   { label: 'Datasets', to: '/datasets' },
-  { label: 'Calibrações', to: '/runs' },
-  { label: 'Modelos', to: '/models' },
-  { label: 'Transferência de Calibração', to: '/transfers' },
-  { label: 'Predição Online', to: '/predict' },
+  { label: 'Runs', to: '/runs' },
+  { label: 'Models', to: '/models' },
+  { label: 'Transfers', to: '/transfers' },
 ]
 
 const Sidebar = () => {
@@ -18,7 +17,7 @@ const Sidebar = () => {
           <NavLink
             key={item.to}
             to={item.to}
-            end={item.to === '/'}
+            end={item.to === '/dashboard'}
             className={({ isActive }) =>
               `rounded-xl px-4 py-3 text-sm font-medium transition-colors duration-150 hover:bg-slate-800/80 hover:text-white ${
                 isActive ? 'bg-slate-800 text-white shadow-inner' : 'text-slate-200'
