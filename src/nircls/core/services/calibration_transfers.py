@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -22,20 +23,39 @@ def _get_dataset_X(
 ) -> np.ndarray:
     """
     Lê o arquivo principal do dataset e retorna apenas X (features).
-    Assume que o arquivo principal é 'data.csv' ou 'data.xlsx' dentro de storage_path.
+    Usa, preferencialmente, o nome de arquivo registrado no manifest (original_filename).
     """
     if not dataset.storage_path:
         raise DataError("Dataset has no storage_path")
 
     storage_dir = Path(dataset.storage_path)
-    data_path = None
-    for candidate in ("data.csv", "data.xlsx"):
-        p = storage_dir / candidate
-        if p.exists():
-            data_path = p
-            break
+
+    manifest_path = storage_dir / "manifest.json"
+    data_path: Path | None = None
+
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            original_filename = manifest.get("original_filename")
+            if original_filename:
+                candidate = storage_dir / original_filename
+                if candidate.exists():
+                    data_path = candidate
+        except Exception:
+            # Se der erro ao ler o manifest, apenas segue para o fallback
+            pass
+
     if data_path is None:
-        raise DataError(f"No data.csv or data.xlsx found in {storage_dir}")
+        for candidate_name in ("data.csv", "data.xlsx"):
+            candidate = storage_dir / candidate_name
+            if candidate.exists():
+                data_path = candidate
+                break
+
+    if data_path is None:
+        raise DataError(
+            f"No data file found in {storage_dir} (manifest or data.csv/xlsx)"
+        )
 
     X, _ = load_dataset_xy(data_path, target_cols=target_cols)
     return X.values
