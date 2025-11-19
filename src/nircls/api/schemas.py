@@ -131,3 +131,45 @@ class RunMetricsResponse(BaseModel):
 
 class RunPlotsResponse(BaseModel):
     plots: List[str]
+
+
+class InstrumentBase(BaseModel):
+    name: str
+    code: str
+    vendor: Optional[str] = None
+    model: Optional[str] = None
+    serial_number: Optional[str] = None
+
+
+class InstrumentCreate(InstrumentBase):
+    pass
+
+
+class InstrumentRead(InstrumentBase):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+
+class CalibrationTransferBase(BaseModel):
+    name: str
+    master_model_id: int
+    master_instrument_id: int
+    slave_instrument_id: int
+    method: Literal["ds", "pds"] = "ds"
+    standard_dataset_master_id: Optional[int] = None
+    standard_dataset_slave_id: Optional[int] = None
+
+
+class CalibrationTransferCreate(CalibrationTransferBase):
+    pass
+
+
+class CalibrationTransferRead(CalibrationTransferBase):
+    id: int
+    artifacts: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+    class Config:
+        orm_mode = True

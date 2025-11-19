@@ -99,11 +99,13 @@ class Dataset(Base):
     created_by_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     storage_path = Column(String(500), nullable=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    instrument_id = Column(Integer, ForeignKey("instruments.id"), nullable=True)
 
     project = relationship("Project", back_populates="datasets")
     created_by = relationship("User", back_populates="datasets")
     runs = relationship("Run", back_populates="dataset")
     organization = relationship("Organization", back_populates="datasets")
+    instrument = relationship("Instrument", back_populates="datasets")
 
 
 class Run(Base):
@@ -137,6 +139,7 @@ class ModelRegistry(Base):
 
     run_id = Column(Integer, ForeignKey("runs.run_id"), nullable=False)
     dataset_id = Column(Integer, ForeignKey("datasets.dataset_id"), nullable=True)
+    instrument_id = Column(Integer, ForeignKey("instruments.id"), nullable=True)
     target = Column(String, nullable=True)
 
     status = Column(String, nullable=False, default="candidate")
@@ -146,6 +149,63 @@ class ModelRegistry(Base):
 
     run = relationship("Run", back_populates="models")
     dataset = relationship("Dataset")
+    instrument = relationship("Instrument", back_populates="models")
+
+
+class Instrument(Base):
+    __tablename__ = "instruments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    code = Column(String, unique=True, nullable=False)
+    vendor = Column(String, nullable=True)
+    model = Column(String, nullable=True)
+    serial_number = Column(String, nullable=True)
+
+    created_at = Column(DateTime, server_default=sa.func.now())
+    updated_at = Column(
+        DateTime, server_default=sa.func.now(), onupdate=sa.func.now()
+    )
+
+    models = relationship("ModelRegistry", back_populates="instrument", lazy="selectin")
+    datasets = relationship("Dataset", back_populates="instrument", lazy="selectin")
+
+
+class CalibrationTransfer(Base):
+    __tablename__ = "calibration_transfers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+
+    master_model_id = Column(Integer, ForeignKey("model_registry.id"), nullable=False)
+    master_instrument_id = Column(Integer, ForeignKey("instruments.id"), nullable=False)
+    slave_instrument_id = Column(Integer, ForeignKey("instruments.id"), nullable=False)
+
+    method = Column(String, nullable=False, default="ds")
+    artifacts = Column(JSON, nullable=True)
+    metadata = Column(JSON, nullable=True)
+
+    standard_dataset_master_id = Column(Integer, ForeignKey("datasets.dataset_id"), nullable=True)
+    standard_dataset_slave_id = Column(Integer, ForeignKey("datasets.dataset_id"), nullable=True)
+
+    created_at = Column(DateTime, server_default=sa.func.now())
+    updated_at = Column(
+        DateTime, server_default=sa.func.now(), onupdate=sa.func.now()
+    )
+
+    master_model = relationship("ModelRegistry")
+    master_instrument = relationship(
+        "Instrument", foreign_keys=[master_instrument_id]
+    )
+    slave_instrument = relationship(
+        "Instrument", foreign_keys=[slave_instrument_id]
+    )
+    standard_dataset_master = relationship(
+        "Dataset", foreign_keys=[standard_dataset_master_id]
+    )
+    standard_dataset_slave = relationship(
+        "Dataset", foreign_keys=[standard_dataset_slave_id]
+    )
 
 
 class SampleMetadata(Base):

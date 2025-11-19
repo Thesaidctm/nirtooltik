@@ -7,7 +7,16 @@ from fastapi.responses import JSONResponse
 
 from ..utils.errors import AuthError, ConfigError, DataError, DatabaseError, ModelError, PipelineError
 from ..utils.logging import setup_logging
-from .routes import auth, datasets, models, organizations, projects, runs
+from .routes import (
+    auth,
+    calibration_transfers,
+    datasets,
+    instruments,
+    models,
+    organizations,
+    projects,
+    runs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,3 +66,9 @@ app.include_router(datasets.router)
 app.include_router(runs.router)
 app.include_router(organizations.router)
 app.include_router(models.router, prefix="/models", tags=["models"])
+app.include_router(instruments.router, prefix="/instruments", tags=["instruments"])
+app.include_router(
+    calibration_transfers.router,
+    prefix="/calibration-transfers",
+    tags=["calibration_transfers"],
+)
