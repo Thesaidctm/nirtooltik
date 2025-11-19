@@ -9,7 +9,8 @@ import sys
 from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -63,7 +64,6 @@ from .preprocessing import _validate_cfg
 from .splitting import CVConfig, _validate_split_capacity
 from ..io import export_xy_xlsx, summarize_dataset
 from ..models.regression import default_pls_components
-from ...core.services import runs as run_services
 from ...db import crud
 from ...db.models import Dataset, Run
 from ...utils.logging import RunLoggerAdapter, attach_run_file_handler
@@ -83,6 +83,22 @@ from ...utils.split import spxy_split
 from ...utils.y_scramble import y_scramble_scores
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
+    from ...core.services import runs as _runs_services_type
+
+_RUN_SERVICES_MODULE: ModuleType | None = None
+
+
+def _get_run_services() -> "_runs_services_type":
+    """Import ``nircls.core.services.runs`` lazily to avoid circular imports."""
+
+    global _RUN_SERVICES_MODULE
+    if _RUN_SERVICES_MODULE is None:
+        from ...core.services import runs as run_services_module
+
+        _RUN_SERVICES_MODULE = run_services_module
+    return _RUN_SERVICES_MODULE
 
 
 class _RunContextFilter(logging.Filter):
@@ -2626,6 +2642,7 @@ def run_pipeline(
     log_file: Path | None = None
     dataset: Dataset | None = None
     run_logger: RunLoggerAdapter | None = None
+    run_services = _get_run_services()
 
     try:
         resolved_project_id = project_id
