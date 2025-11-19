@@ -1,16 +1,23 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_user, get_db
 from ..schemas import CalibrationTransferCreate, CalibrationTransferRead
+from ...core import services
 from ...db import crud
 from ...db.models import CalibrationTransfer, User
 
 router = APIRouter()
+
+
+class CalibrationTransferFitResponse(BaseModel):
+    id: int
+    artifacts: Dict[str, Any]
 
 
 @router.post("", response_model=CalibrationTransferRead, status_code=status.HTTP_201_CREATED)
@@ -42,3 +49,14 @@ def get_transfer(transfer_id: int, db: Session = Depends(get_db)) -> Calibration
     if transfer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transfer not found")
     return transfer
+
+
+@router.post("/{transfer_id}/fit-ds", response_model=CalibrationTransferFitResponse)
+def fit_calibration_transfer_ds(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Opcional: checar se current_user pertence à mesma organização dos datasets/modelo
+    transfer = services.calibration_transfers.fit_ds_for_transfer(db, transfer_id)
+    return CalibrationTransferFitResponse(id=transfer.id, artifacts=transfer.artifacts or {})
