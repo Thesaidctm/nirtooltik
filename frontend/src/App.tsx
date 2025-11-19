@@ -8,6 +8,7 @@ import Models from './pages/Models'
 import Predict from './pages/Predict'
 import RunDetails from './pages/RunDetails'
 import Runs from './pages/Runs'
+import TransferDetails from './pages/TransferDetails'
 import Transfers from './pages/Transfers'
 
 const App = () => {
@@ -21,6 +22,7 @@ const App = () => {
         <Route path="models" element={<Models />} />
         <Route path="models/:modelId" element={<ModelDetails />} />
         <Route path="transfers" element={<Transfers />} />
+        <Route path="transfers/:transferId" element={<TransferDetails />} />
         <Route path="predict" element={<Predict />} />
       </Route>
     </Routes>
