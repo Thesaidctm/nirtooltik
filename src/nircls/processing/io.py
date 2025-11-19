@@ -303,6 +303,41 @@ def read_tabular(
     return X, y_list, groups
 
 
+def load_dataset_xy(
+    path: Path,
+    target_cols: List[str] | None = None,
+) -> Tuple[pd.DataFrame, List[Tuple[str, pd.Series]]]:
+    """
+    Lê um arquivo tabular (CSV/XLSX) e retorna:
+    - X: DataFrame de features espectrais (ou o que for X)
+    - y_list: lista de (nome_da_coluna, Série) com targets
+
+    Se target_cols for None, tenta inferir:
+    - usando convenções já existentes em read_xlsx_xy/read_tabular.
+    """
+    if path.suffix.lower() in {".xlsx", ".xls"}:
+        try:
+            X, y_list, _ = read_xlsx_xy(path)
+        except DataError:
+            X, y_list, _ = read_tabular(path)
+    else:
+        X, y_list, _ = read_tabular(path)
+
+    if target_cols:
+        # Filtra apenas as colunas alvo desejadas
+        y_filtered: List[Tuple[str, pd.Series]] = []
+        for col in target_cols:
+            for (name, series) in y_list:
+                if name == col:
+                    y_filtered.append((name, series))
+                    break
+        if not y_filtered:
+            raise DataError(f"None of the specified target_cols found: {target_cols}")
+        y_list = y_filtered
+
+    return X, y_list
+
+
 def export_xy_xlsx(
     path: Path, X: pd.DataFrame, y: pd.Series, x_sheet: str = "X", y_sheet: str = "Y"
 ) -> None:
