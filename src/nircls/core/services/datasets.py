@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from nircls.core.settings import settings
-from nircls.db.models import Dataset, SampleFeatures, SampleMetadata, SampleTarget
+from nircls.db import crud
+from nircls.db.models import Dataset, SampleFeatures, SampleMetadata, SampleTarget, User
 from nircls.processing.io import load_dataset_xy
 
 
@@ -61,6 +64,53 @@ def save_dataset_file(
     db.commit()
     db.refresh(dataset)
     return dataset
+
+
+async def create_dataset_with_file(
+    *,
+    db: Session,
+    user: User,
+    name: str,
+    upload_file: UploadFile,
+    instrument_id: int | None = None,
+    version: str | None = None,
+    description: str | None = None,
+    project_id: int | None = None,
+    target_cols: List[str] | None = None,
+) -> Dataset:
+    allowed_extensions = {".csv", ".xlsx", ".xls"}
+    _, ext = os.path.splitext(upload_file.filename or "")
+    if ext.lower() not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type. Allowed: .csv, .xlsx, .xls",
+        )
+
+    content = await upload_file.read()
+    if len(content) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty file",
+        )
+
+    dataset = crud.create_dataset(
+        db,
+        name=name,
+        version=version,
+        description=description,
+        project_id=project_id,
+        created_by_id=user.user_id,
+        organization_id=user.organization_id,
+        instrument_id=instrument_id,
+    )
+
+    return save_dataset_file(
+        db,
+        dataset,
+        upload_file.filename or "dataset",
+        content,
+        target_cols=target_cols,
+    )
 
 
 def ingest_dataset_to_xy_l(
@@ -130,5 +180,6 @@ def ingest_dataset_to_xy_l(
 __all__ = [
     "get_dataset_storage_dir",
     "save_dataset_file",
+    "create_dataset_with_file",
     "ingest_dataset_to_xy_l",
 ]

@@ -12,7 +12,12 @@ from .runs import create_run, get_run, list_runs, update_run_status
 from .variables import get_variavel, set_variavel
 from .models import create_model, get_model, list_models, update_model_status
 from .organizations import create_organization, get_organization, list_organizations
-from .instruments import create_instrument, get_instrument, list_instruments
+from .instruments import (
+    create_instrument,
+    get_instrument,
+    get_instrument_by_code,
+    list_instruments,
+)
 from .calibration_transfers import (
     create_transfer,
     get_calibration_transfer,
@@ -54,6 +59,7 @@ __all__ = [
     "list_organizations",
     "create_instrument",
     "get_instrument",
+    "get_instrument_by_code",
     "list_instruments",
     "create_transfer",
     "get_calibration_transfer",

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { API_BASE_URL, api } from '../../api/client'
+import { API_BASE_URL } from '../../api/client'
 import type { DatasetApiResponse, Instrument } from '../../types/datasets'
 import { normalizeDataset } from '../../types/datasets'
 
@@ -18,23 +18,25 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadingInstruments, setLoadingInstruments] = useState(false)
+  const [instrumentsError, setInstrumentsError] = useState<string | null>(null)
 
-  const canSubmit = useMemo(
-    () => Boolean(name.trim() && file && selectedInstrumentId),
-    [file, name, selectedInstrumentId],
-  )
+  const canSubmit = useMemo(() => Boolean(name.trim() && file), [file, name])
 
   const loadInstruments = async () => {
     setLoadingInstruments(true)
+    setInstrumentsError(null)
     try {
-      const response = await api.get<Instrument[]>('/instruments')
-      setInstruments(response)
-      if (!selectedInstrumentId && response.length) {
-        setSelectedInstrumentId(String(response[0].id))
+      const response = await fetch(`${API_BASE_URL}/instruments`)
+      if (!response.ok) {
+        throw new Error(await response.text())
       }
+      const data: Instrument[] = await response.json()
+      setInstruments(data)
     } catch (err) {
       console.error(err)
-      setError('Não foi possível carregar a lista de instrumentos')
+      setInstrumentsError(
+        'Não foi possível carregar a lista de instrumentos. Você ainda pode cadastrar o dataset sem informar o instrumento.',
+      )
     } finally {
       setLoadingInstruments(false)
     }
@@ -72,7 +74,9 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
     try {
       const formData = new FormData()
       formData.append('name', name.trim())
-      formData.append('instrument_id', selectedInstrumentId)
+      if (selectedInstrumentId) {
+        formData.append('instrument_id', selectedInstrumentId)
+      }
       formData.append('file', file)
 
       const response = await fetch(`${API_BASE_URL}/datasets`, {
@@ -121,6 +125,11 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 px-6 py-4">
+          {instrumentsError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {instrumentsError}
+            </div>
+          ) : null}
           {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
 
           <div className="space-y-2">
@@ -148,10 +157,9 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
               onChange={(event) => setSelectedInstrumentId(event.target.value)}
               disabled={loadingInstruments}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100"
-              required
             >
-              <option value="" disabled>
-                {loadingInstruments ? 'Carregando instrumentos...' : 'Selecione um instrumento'}
+              <option value="">
+                {loadingInstruments ? 'Carregando instrumentos...' : 'Selecione um instrumento (opcional)'}
               </option>
               {instruments.map((instrument) => (
                 <option key={instrument.id} value={instrument.id}>
@@ -159,7 +167,7 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
                 </option>
               ))}
             </select>
-            <p className="text-xs text-slate-500">Selecione o espectrômetro associado a este dataset.</p>
+            <p className="text-xs text-slate-500">Selecione o espectrômetro associado a este dataset (opcional).</p>
           </div>
 
           <div className="space-y-2">

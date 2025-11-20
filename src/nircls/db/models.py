@@ -27,6 +27,7 @@ class Organization(Base):
     projects = relationship("Project", back_populates="organization")
     datasets = relationship("Dataset", back_populates="organization")
     runs = relationship("Run", back_populates="organization")
+    instruments = relationship("Instrument", back_populates="organization")
 
 
 class Role(Base):
@@ -161,6 +162,7 @@ class Instrument(Base):
     vendor = Column(String, nullable=True)
     model = Column(String, nullable=True)
     serial_number = Column(String, nullable=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
 
     created_at = Column(DateTime, server_default=sa.func.now())
     updated_at = Column(
@@ -169,6 +171,7 @@ class Instrument(Base):
 
     models = relationship("ModelRegistry", back_populates="instrument", lazy="selectin")
     datasets = relationship("Dataset", back_populates="instrument", lazy="selectin")
+    organization = relationship("Organization", back_populates="instruments")
 
 
 class CalibrationTransfer(Base):
