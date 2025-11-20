@@ -739,6 +739,10 @@ coluna `y_true`.
   crie o ambiente virtual antes de tentar ativá-lo (`py -m venv .venv`) e
   execute a ativação a partir da pasta do projeto com `.\.venv\Scripts\activate`.
   Se a pasta `.venv` não existir, repita o comando de criação do ambiente.
+* **Falha no login do usuário admin** – certifique-se de que o usuário exista no
+  banco SQLite com a senha correta. Rode `python scripts/create_admin_user.py`
+  (ou ajuste `--username`, `--password` e `--email`) para criar ou atualizar o
+  registro com o hash correto antes de testar o login.
 
 ## Extensões e contribuições
 
