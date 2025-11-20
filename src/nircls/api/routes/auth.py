@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ... import i18n
+from ...core.services.users import ensure_dev_admin_user
+from ...core.settings import settings
 from ...db.models import User
 from ..deps import get_db
 from ..security import ACCESS_TOKEN_EXPIRE_SECONDS, SESSION_COOKIE_NAME, create_access_token, verify_password
@@ -22,6 +24,22 @@ class LoginData(BaseModel):
 
 def _authenticate(username: str, password: str, db: Session) -> User:
     user = db.query(User).filter_by(username=username).first()
+
+    if not user and settings.ENVIRONMENT.lower() == "dev" and username == "admin":
+        user = ensure_dev_admin_user(db)
+
+    if user and verify_password(password, user.hashed_password):
+        return user
+
+    if (
+        settings.ENVIRONMENT.lower() == "dev"
+        and username == "admin"
+        and password == "admin"
+    ):
+        user = ensure_dev_admin_user(db)
+        if verify_password(password, user.hashed_password):
+            return user
+
     if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
