@@ -5,6 +5,7 @@ from . import (
     config_builder,
     datasets,
     instruments,
+    pls_outliers,
     models,
     runs,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "config_builder",
     "datasets",
     "instruments",
+    "pls_outliers",
     "models",
     "runs",
 ]
