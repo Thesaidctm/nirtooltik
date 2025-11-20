@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api } from '../api/client'
-import type { Dataset, DatasetApiResponse } from '../types/datasets'
-import { normalizeDataset } from '../types/datasets'
+import { API_BASE_URL } from '../api/client'
+import type { Dataset } from '../types/datasets'
 import type { ModelDetail, ModelEvaluationRecord, ModelMetrics, ModelSpec } from '../types/models'
 
 const resolveModelSpec = (model: ModelDetail | null): ModelSpec | undefined => {
@@ -102,7 +101,11 @@ const ModelDetails = () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await api.get<ModelDetail>(`/models/${modelId}`)
+      const response = await fetch(`${API_BASE_URL}/models/${modelId}`)
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar os detalhes do modelo')
+      }
+      const data: ModelDetail = await response.json()
       setModel(data)
     } catch (err) {
       console.error(err)
@@ -114,8 +117,12 @@ const ModelDetails = () => {
 
   const fetchDatasets = useCallback(async () => {
     try {
-      const data = await api.get<DatasetApiResponse[]>(`/datasets`)
-      setDatasets(data.map(normalizeDataset))
+      const response = await fetch(`${API_BASE_URL}/datasets`)
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar os datasets')
+      }
+      const data: Dataset[] = await response.json()
+      setDatasets(data)
     } catch (err) {
       console.error(err)
     }
@@ -127,10 +134,17 @@ const ModelDetails = () => {
     setEvaluationError(null)
     setEvaluationResult(null)
     try {
-      const data = await api.post<{ metrics: ModelMetrics }>(`/models/${modelId}/evaluate`, {
-        dataset_id: Number(evaluationDatasetId),
-        target_index: 0,
+      const response = await fetch(`${API_BASE_URL}/models/${modelId}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataset_id: Number(evaluationDatasetId), target_index: 0 }),
       })
+
+      if (!response.ok) {
+        throw new Error('Falha ao avaliar o modelo no dataset selecionado')
+      }
+
+      const data: { metrics: ModelMetrics } = await response.json()
       setEvaluationResult(data.metrics)
     } catch (err) {
       console.error(err)

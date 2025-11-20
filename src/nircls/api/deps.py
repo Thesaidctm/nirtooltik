@@ -26,12 +26,6 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
 
     token = request.cookies.get(SESSION_COOKIE_NAME)
     if not token:
-        auth_header = request.headers.get("Authorization", "")
-        scheme, _, credentials = auth_header.partition(" ")
-        if scheme.lower() == "bearer" and credentials:
-            token = credentials
-
-    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     try:

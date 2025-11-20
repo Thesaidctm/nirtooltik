@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { api } from '../api/client'
+import { API_BASE_URL } from '../api/client'
 import type { ModelSummary } from '../types/models'
 import type { CalibrationTransfer } from '../types/transfers'
 import { parseSpectraFile, parseSpectraFromText } from '../utils/spectraParsers'
@@ -25,7 +25,11 @@ const Predict = () => {
 
   const fetchModels = async () => {
     try {
-      const data = await api.get<ModelSummary[]>('/models')
+      const response = await fetch(`${API_BASE_URL}/models`)
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar modelos')
+      }
+      const data: ModelSummary[] = await response.json()
       setModels(data)
     } catch (err) {
       console.error(err)
@@ -34,7 +38,11 @@ const Predict = () => {
 
   const fetchTransfers = async () => {
     try {
-      const data = await api.get<CalibrationTransfer[]>('/calibration-transfers')
+      const response = await fetch(`${API_BASE_URL}/calibration-transfers`)
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar transferências')
+      }
+      const data: CalibrationTransfer[] = await response.json()
       setTransfers(data)
     } catch (err) {
       console.error(err)
@@ -72,9 +80,17 @@ const Predict = () => {
         throw new Error('Nenhuma linha válida de espectros foi encontrada')
       }
 
-      const data = await api.post<{ y_hat: number[] }>(`/models/${selectedModelId}/predict`, {
-        spectra,
+      const response = await fetch(`${API_BASE_URL}/models/${selectedModelId}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spectra }),
       })
+
+      if (!response.ok) {
+        throw new Error('Falha ao executar predição com modelo')
+      }
+
+      const data: { y_hat: number[] } = await response.json()
       setModelPredictions(data.y_hat ?? [])
     } catch (err) {
       console.error(err)
@@ -100,12 +116,17 @@ const Predict = () => {
         throw new Error('Nenhuma linha válida de espectros foi encontrada')
       }
 
-      const data = await api.post<{ y_hat: number[] }>(
-        `/calibration-transfers/${selectedTransferId}/predict`,
-        {
-          spectra,
-        },
-      )
+      const response = await fetch(`${API_BASE_URL}/calibration-transfers/${selectedTransferId}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spectra }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Falha ao executar predição com transferência')
+      }
+
+      const data: { y_hat: number[] } = await response.json()
       setTransferPredictions(data.y_hat ?? [])
     } catch (err) {
       console.error(err)
