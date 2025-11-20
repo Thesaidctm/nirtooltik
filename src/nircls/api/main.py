@@ -6,9 +6,6 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from ..core.services.users import ensure_dev_admin_user
-from ..core.settings import settings
-from ..db.database import SessionLocal
 from ..utils.errors import AuthError, ConfigError, DataError, DatabaseError, ModelError, PipelineError
 from ..utils.logging import setup_logging
 from .routes import (
@@ -44,18 +41,6 @@ app.add_middleware(
 async def _configure_logging() -> None:
     setup_logging()
     logger.info("FastAPI application initialized")
-
-
-@app.on_event("startup")
-async def _ensure_dev_user() -> None:
-    if settings.ENVIRONMENT.lower() != "dev":
-        return
-
-    db = SessionLocal()
-    try:
-        ensure_dev_admin_user(db)
-    finally:
-        db.close()
 
 
 def _format_error_response(status_code: int, detail: str) -> JSONResponse:

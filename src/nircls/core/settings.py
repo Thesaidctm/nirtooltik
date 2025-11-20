@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_SECONDS: int = Field(
         3600, env=("ACCESS_TOKEN_EXPIRE_SECONDS", "SESSION_TTL_SECONDS")
     )
-    ENVIRONMENT: str = Field("dev", env=("ENVIRONMENT", "NIRCLS_ENV", "APP_ENV"))
     DATA_STORAGE_DIR: Path = Field(Path("storage"), env="DATA_STORAGE_DIR")
     RESULTS_DIR: Path = Field(Path("results"), env="NIRCLS_RESULTS")
     RAW_DIR: Path = Field(Path("data/RAW"), env="NIRCLS_RAW")

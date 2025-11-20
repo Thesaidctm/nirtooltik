@@ -4,11 +4,6 @@ const buildBaseUrl = () => {
 }
 
 export const API_BASE_URL = buildBaseUrl()
-const TOKEN_KEY = 'nircls_token'
-
-export const getAuthToken = () => localStorage.getItem(TOKEN_KEY)
-export const setAuthToken = (token: string) => localStorage.setItem(TOKEN_KEY, token)
-export const clearAuthToken = () => localStorage.removeItem(TOKEN_KEY)
 
 const buildUrl = (path: string) => {
   if (path.startsWith('http://') || path.startsWith('https://')) {
@@ -51,11 +46,6 @@ const request = async <T>(method: string, path: string, body?: BodyInit | Record
   } else if (body !== undefined) {
     headers.set('Content-Type', 'application/json')
     payload = JSON.stringify(body)
-  }
-
-  const token = getAuthToken()
-  if (token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`)
   }
 
   const response = await fetch(buildUrl(path), {

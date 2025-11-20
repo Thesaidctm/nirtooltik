@@ -1,10 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 import AppLayout from './components/AppLayout'
-import RequireAuth from './components/RequireAuth'
 import Dashboard from './pages/Dashboard'
 import Datasets from './pages/Datasets'
-import LoginPage from './pages/LoginPage'
 import ModelDetails from './pages/ModelDetails'
 import Models from './pages/Models'
 import Predict from './pages/Predict'
@@ -16,15 +14,7 @@ import Transfers from './pages/Transfers'
 const App = () => {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route
-        path="/"
-        element={
-          <RequireAuth>
-            <AppLayout />
-          </RequireAuth>
-        }
-      >
+      <Route path="/" element={<AppLayout />}>
         <Route index element={<Navigate to="/datasets" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="datasets" element={<Datasets />} />
