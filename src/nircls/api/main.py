@@ -9,6 +9,7 @@ from sqlalchemy import inspect
 
 from ..core.services.users import ensure_dev_admin_user
 from ..core.settings import settings
+from ..db import init_db
 from ..db.database import SessionLocal
 from ..utils.errors import AuthError, ConfigError, DataError, DatabaseError, ModelError, PipelineError
 from ..utils.logging import setup_logging
@@ -45,6 +46,11 @@ app.add_middleware(
 async def _configure_logging() -> None:
     setup_logging()
     logger.info("FastAPI application initialized")
+
+
+@app.on_event("startup")
+async def _run_migrations() -> None:
+    init_db()
 
 
 @app.on_event("startup")
