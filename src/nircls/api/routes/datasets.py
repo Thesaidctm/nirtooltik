@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional
 
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ... import i18n
@@ -71,37 +71,36 @@ def get_dataset_detail(
 
 
 @router.post("", response_model=DatasetRead, status_code=status.HTTP_201_CREATED)
-async def create_new_dataset(
-    name: Optional[str] = Form(None),
-    instrument_id: Optional[int] = Form(None),
-    file: UploadFile | None = File(None),
+def create_new_dataset(
+    payload: DatasetCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dataset:
+    return crud.create_dataset(
+        db,
+        name=payload.name,
+        version=payload.version,
+        description=payload.description,
+        project_id=payload.project_id,
+        created_by_id=current_user.user_id,
+        storage_path=payload.storage_path,
+        organization_id=current_user.organization_id,
+        instrument_id=payload.instrument_id,
+    )
+
+
+@router.post("/upload", response_model=DatasetRead, status_code=status.HTTP_201_CREATED)
+async def create_new_dataset_with_file(
+    name: str = Form(...),
+    instrument_id: int = Form(...),
+    file: UploadFile = File(...),
     version: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     project_id: Optional[int] = Form(None),
     target_cols: Optional[List[str]] = Form(None),
-    payload: DatasetCreate | None = Body(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Dataset:
-    if payload is not None:
-        return crud.create_dataset(
-            db,
-            name=payload.name,
-            version=payload.version,
-            description=payload.description,
-            project_id=payload.project_id,
-            created_by_id=current_user.user_id,
-            storage_path=payload.storage_path,
-            organization_id=current_user.organization_id,
-            instrument_id=payload.instrument_id,
-        )
-
-    if file is None or name is None or instrument_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing required fields to create dataset with file",
-        )
-
     dataset = crud.create_dataset(
         db,
         name=name,
