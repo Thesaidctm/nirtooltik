@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 
+import { API_BASE_URL } from '../api/client'
 import type { ModelSummary } from '../types/models'
 import type { CalibrationTransfer } from '../types/transfers'
 import { parseSpectraFile, parseSpectraFromText } from '../utils/spectraParsers'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 const Predict = () => {
   const [models, setModels] = useState<ModelSummary[]>([])

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { API_BASE_URL } from '../api/client'
 import type { CalibrationTransfer } from '../types/transfers'
 import { parseSpectraFile, parseSpectraFromText } from '../utils/spectraParsers'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 const TransferDetails = () => {
   const { transferId } = useParams()

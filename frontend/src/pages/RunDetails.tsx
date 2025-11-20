@@ -1,7 +1,6 @@
 import { useParams } from 'react-router-dom'
+import { API_BASE_URL } from '../api/client'
 import RunDetailsPage from '../components/runs/RunDetailsPage'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 const RunDetails = () => {
   const { runId } = useParams<{ runId: string }>()

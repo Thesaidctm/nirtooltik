@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
-import { api } from '../../api/client'
-import type { DatasetApiResponse } from '../../types/datasets'
+import { API_BASE_URL, api } from '../../api/client'
+import type { DatasetApiResponse, Instrument } from '../../types/datasets'
 import { normalizeDataset } from '../../types/datasets'
 
 interface DatasetUploadModalProps {
@@ -13,15 +13,38 @@ interface DatasetUploadModalProps {
 const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalProps) => {
   const [name, setName] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [instruments, setInstruments] = useState<Instrument[]>([])
+  const [selectedInstrumentId, setSelectedInstrumentId] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadingInstruments, setLoadingInstruments] = useState(false)
 
-  const canSubmit = useMemo(() => Boolean(name.trim() && file), [file, name])
+  const canSubmit = useMemo(
+    () => Boolean(name.trim() && file && selectedInstrumentId),
+    [file, name, selectedInstrumentId],
+  )
+
+  const loadInstruments = async () => {
+    setLoadingInstruments(true)
+    try {
+      const response = await api.get<Instrument[]>('/instruments')
+      setInstruments(response)
+      if (!selectedInstrumentId && response.length) {
+        setSelectedInstrumentId(String(response[0].id))
+      }
+    } catch (err) {
+      console.error(err)
+      setError('Não foi possível carregar a lista de instrumentos')
+    } finally {
+      setLoadingInstruments(false)
+    }
+  }
 
   const resetForm = () => {
     setName('')
     setFile(null)
     setError(null)
+    setSelectedInstrumentId('')
   }
 
   const handleClose = () => {
@@ -30,10 +53,16 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
     onClose()
   }
 
+  useEffect(() => {
+    if (isOpen) {
+      loadInstruments()
+    }
+  }, [isOpen])
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!canSubmit || !file) {
-      setError('Informe o nome do dataset e selecione um arquivo .xlsx ou .xls')
+      setError('Informe o nome do dataset e selecione um arquivo .csv, .xlsx ou .xls')
       return
     }
 
@@ -41,22 +70,31 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
     setError(null)
 
     try {
-      const createdResponse = await api.post<DatasetApiResponse>('/datasets/', {
-        name: name.trim(),
-      })
-      const createdDataset = normalizeDataset(createdResponse)
-
       const formData = new FormData()
+      formData.append('name', name.trim())
+      formData.append('instrument_id', selectedInstrumentId)
       formData.append('file', file)
 
-      await api.post(`/datasets/${createdDataset.id}/upload`, formData)
+      const response = await fetch(`${API_BASE_URL}/datasets`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const text = await response.text()
+        setError(text || `Erro ${response.status}`)
+        return
+      }
+
+      const createdResponse: DatasetApiResponse = await response.json()
+      normalizeDataset(createdResponse)
 
       onUploaded()
       resetForm()
       onClose()
     } catch (err) {
       console.error(err)
-      setError(err instanceof Error ? err.message : 'Erro ao enviar dataset')
+      setError('Erro ao conectar com a API. Verifique se o servidor está rodando.')
     } finally {
       setSubmitting(false)
     }
@@ -68,10 +106,10 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl ring-1 ring-slate-100">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">Novo dataset</h3>
-            <p className="text-sm text-slate-600">Crie um registro e envie o arquivo de espectros (.xlsx ou .xls).</p>
-          </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Novo dataset</h3>
+              <p className="text-sm text-slate-600">Crie um registro e envie o arquivo de espectros (.csv, .xlsx ou .xls).</p>
+            </div>
           <button
             type="button"
             onClick={handleClose}
@@ -101,13 +139,37 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
           </div>
 
           <div className="space-y-2">
+            <label htmlFor="dataset-instrument" className="text-sm font-medium text-slate-800">
+              Instrumento
+            </label>
+            <select
+              id="dataset-instrument"
+              value={selectedInstrumentId}
+              onChange={(event) => setSelectedInstrumentId(event.target.value)}
+              disabled={loadingInstruments}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+              required
+            >
+              <option value="" disabled>
+                {loadingInstruments ? 'Carregando instrumentos...' : 'Selecione um instrumento'}
+              </option>
+              {instruments.map((instrument) => (
+                <option key={instrument.id} value={instrument.id}>
+                  {instrument.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500">Selecione o espectrômetro associado a este dataset.</p>
+          </div>
+
+          <div className="space-y-2">
             <label htmlFor="dataset-file" className="text-sm font-medium text-slate-800">
-              Arquivo (.xlsx ou .xls)
+              Arquivo (.csv, .xlsx ou .xls)
             </label>
             <input
               id="dataset-file"
               type="file"
-              accept=".xlsx,.xls"
+              accept=".csv,.xlsx,.xls"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               className="w-full rounded-lg border border-dashed border-slate-300 px-3 py-10 text-sm text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-indigo-700 hover:border-indigo-200"
               required

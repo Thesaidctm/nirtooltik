@@ -1,6 +1,6 @@
 const buildBaseUrl = () => {
-  const fromEnv = import.meta.env?.VITE_API_BASE_URL
-  return fromEnv && typeof fromEnv === 'string' && fromEnv.length > 0 ? fromEnv : 'http://127.0.0.1:8000'
+  const fromEnv = import.meta.env?.VITE_API_URL ?? import.meta.env?.VITE_API_BASE_URL
+  return fromEnv && typeof fromEnv === 'string' && fromEnv.length > 0 ? fromEnv : 'http://localhost:8000'
 }
 
 export const API_BASE_URL = buildBaseUrl()
