@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { API_BASE_URL } from '../api/client'
 import type { Dataset } from '../types/datasets'
 import type { ModelDetail, ModelEvaluationRecord, ModelMetrics, ModelSpec } from '../types/models'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 const resolveModelSpec = (model: ModelDetail | null): ModelSpec | undefined => {
   if (!model) return undefined

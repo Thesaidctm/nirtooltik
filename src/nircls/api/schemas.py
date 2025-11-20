@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -71,6 +72,7 @@ class RunRead(RunBase):
     artifacts: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
     organization_id: Optional[int] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         orm_mode = True

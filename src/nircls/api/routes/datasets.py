@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import os
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ... import i18n
@@ -14,6 +14,37 @@ from ...db import crud
 from ...db.models import Dataset, User
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
+
+
+async def _save_uploaded_dataset(
+    *,
+    dataset: Dataset,
+    upload_file: UploadFile,
+    db: Session,
+    target_cols: Optional[List[str]] = None,
+) -> Dataset:
+    allowed_extensions = {".csv", ".xlsx", ".xls"}
+    _, ext = os.path.splitext(upload_file.filename or "")
+    if ext.lower() not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type. Allowed: .csv, .xlsx, .xls",
+        )
+
+    content = await upload_file.read()
+    if len(content) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty file",
+        )
+
+    return save_dataset_file(
+        db,
+        dataset,
+        upload_file.filename or "dataset",
+        content,
+        target_cols=target_cols,
+    )
 
 @router.get("", response_model=List[DatasetRead])
 def list_all_datasets(
@@ -40,21 +71,50 @@ def get_dataset_detail(
 
 
 @router.post("", response_model=DatasetRead, status_code=status.HTTP_201_CREATED)
-def create_new_dataset(
-    payload: DatasetCreate,
+async def create_new_dataset(
+    name: Optional[str] = Form(None),
+    instrument_id: Optional[int] = Form(None),
+    file: UploadFile | None = File(None),
+    version: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    project_id: Optional[int] = Form(None),
+    target_cols: Optional[List[str]] = Form(None),
+    payload: DatasetCreate | None = Body(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Dataset:
-    return crud.create_dataset(
+    if payload is not None:
+        return crud.create_dataset(
+            db,
+            name=payload.name,
+            version=payload.version,
+            description=payload.description,
+            project_id=payload.project_id,
+            created_by_id=current_user.user_id,
+            storage_path=payload.storage_path,
+            organization_id=current_user.organization_id,
+            instrument_id=payload.instrument_id,
+        )
+
+    if file is None or name is None or instrument_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing required fields to create dataset with file",
+        )
+
+    dataset = crud.create_dataset(
         db,
-        name=payload.name,
-        version=payload.version,
-        description=payload.description,
-        project_id=payload.project_id,
+        name=name,
+        version=version,
+        description=description,
+        project_id=project_id,
         created_by_id=current_user.user_id,
-        storage_path=payload.storage_path,
         organization_id=current_user.organization_id,
-        instrument_id=payload.instrument_id,
+        instrument_id=instrument_id,
+    )
+
+    return await _save_uploaded_dataset(
+        dataset=dataset, upload_file=file, db=db, target_cols=target_cols
     )
 
 
@@ -74,28 +134,6 @@ async def upload_dataset_file(
             detail=i18n.t("datasets.not_found_by_id").format(dataset_id=dataset_id),
         )
 
-    # Validação simples de extensão
-    allowed_extensions = {".csv", ".xlsx"}
-    _, ext = os.path.splitext(file.filename or "")
-    if ext.lower() not in allowed_extensions:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported file type. Allowed: .csv, .xlsx",
-        )
-
-    # Opcional: checar tamanho do arquivo (se o servidor tiver essa info)
-    # Este passo pode depender da infra; aqui podemos apenas ler o conteúdo para um buffer temporário
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Empty file",
-        )
-
-    return save_dataset_file(
-        db,
-        dataset,
-        file.filename or "dataset",
-        content,
-        target_cols=target_cols,
+    return await _save_uploaded_dataset(
+        dataset=dataset, upload_file=file, db=db, target_cols=target_cols
     )
