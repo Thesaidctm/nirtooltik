@@ -21,14 +21,25 @@ def _ensure_admin_role(db: Session) -> Role:
 
 
 def ensure_dev_admin_user(db: Session) -> User:
-    """Ensure an ``admin`` user with password ``admin`` exists in dev environments."""
+    """
+    Ensure an ``admin`` user for development:
+    - username: admin
+    - password: admin
+    - role: admin
+    """
 
     username = "admin"
+    admin_role = _ensure_admin_role(db)
+
     user = crud.get_user_by_username(db, username=username)
     if user:
+        if admin_role not in user.roles:
+            user.roles.append(admin_role)
+        user.hashed_password = hash_password("admin")
+        db.commit()
+        db.refresh(user)
         return user
 
-    admin_role = _ensure_admin_role(db)
     logger.info("Creating default development admin user")
     user = crud.create_user(
         db,
