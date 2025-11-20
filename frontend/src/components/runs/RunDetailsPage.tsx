@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+
+import { api } from '../../api/client'
 import type { Dataset } from '../../types/datasets'
 import type { PlsLvCurvePoint, Run, RunMetricsResponse, RunPlotsResponse } from '../../types/runs'
 
 interface RunDetailsPageProps {
   runId: string
-  apiBaseUrl: string
 }
 
 const formatDate = (value?: string) => {
@@ -25,7 +26,7 @@ const sectionCard = (title: string, children: React.ReactNode) => (
   </div>
 )
 
-const RunDetailsPage = ({ runId, apiBaseUrl }: RunDetailsPageProps) => {
+const RunDetailsPage = ({ runId }: RunDetailsPageProps) => {
   const [run, setRun] = useState<Run | null>(null)
   const [metrics, setMetrics] = useState<RunMetricsResponse | null>(null)
   const [plots, setPlots] = useState<RunPlotsResponse | null>(null)
@@ -45,41 +46,21 @@ const RunDetailsPage = ({ runId, apiBaseUrl }: RunDetailsPageProps) => {
       setLoading(true)
       setError(null)
       try {
-        const [runRes, metricsRes, plotsRes, datasetsRes] = await Promise.all([
-          fetch(`${apiBaseUrl}/runs/${runId}`),
-          fetch(`${apiBaseUrl}/runs/${runId}/metrics`),
-          fetch(`${apiBaseUrl}/runs/${runId}/plots`),
-          fetch(`${apiBaseUrl}/datasets`),
+        const [runData, metricsData, plotsData, datasetData] = await Promise.all([
+          api.get<Run>(`/runs/${runId}`),
+          api.get<RunMetricsResponse | null>(`/runs/${runId}/metrics`).catch(() => null),
+          api.get<RunPlotsResponse | null>(`/runs/${runId}/plots`).catch(() => null),
+          api.get<Dataset[]>(`/datasets`).catch(() => []),
         ])
 
-        if (!runRes.ok) throw new Error('Não foi possível carregar o run')
-        const runData: Run = await runRes.json()
         setRun(runData)
+        if (metricsData) setMetrics(metricsData)
+        if (plotsData) setPlots(plotsData)
+        setDatasets(datasetData)
 
-        if (metricsRes.ok) {
-          const metricsData: RunMetricsResponse = await metricsRes.json()
-          setMetrics(metricsData)
-        }
-
-        if (plotsRes.ok) {
-          const plotsData: RunPlotsResponse = await plotsRes.json()
-          setPlots(plotsData)
-        }
-
-        if (datasetsRes.ok) {
-          const datasetData: Dataset[] = await datasetsRes.json()
-          setDatasets(datasetData)
-        }
-
-        // Try to load optional PLS curve
-        try {
-          const plsRes = await fetch(`${apiBaseUrl}/runs/${runId}/pls-lv-curve`)
-          if (plsRes.ok) {
-            const plsData: PlsLvCurvePoint[] = await plsRes.json()
-            setPlsCurve(plsData)
-          }
-        } catch (plsErr) {
-          console.warn('PLS curve not available', plsErr)
+        const plsData = await api.get<PlsLvCurvePoint[]>(`/runs/${runId}/pls-lv-curve`).catch(() => null)
+        if (plsData) {
+          setPlsCurve(plsData)
         }
       } catch (err) {
         console.error(err)
@@ -90,7 +71,7 @@ const RunDetailsPage = ({ runId, apiBaseUrl }: RunDetailsPageProps) => {
     }
 
     fetchData()
-  }, [apiBaseUrl, runId])
+  }, [runId])
 
   if (loading) {
     return <div className="py-12 text-center text-slate-500">Carregando detalhes...</div>
