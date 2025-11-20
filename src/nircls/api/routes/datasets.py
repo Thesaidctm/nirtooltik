@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ... import i18n
 from ..deps import get_current_user, get_db, is_global_admin
 from ..schemas import DatasetCreate, DatasetRead
-from ...core.services.datasets import save_dataset_file
+from ...core.services.datasets import create_dataset_with_file, save_dataset_file
 from ...db import crud
 from ...db.models import Dataset, User
 
@@ -96,25 +96,22 @@ async def create_new_dataset(
             instrument_id=payload.instrument_id,
         )
 
-    if file is None or name is None or instrument_id is None:
+    if file is None or name is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Missing required fields to create dataset with file",
         )
 
-    dataset = crud.create_dataset(
-        db,
+    return await create_dataset_with_file(
+        db=db,
+        user=current_user,
         name=name,
+        upload_file=file,
+        instrument_id=instrument_id,
         version=version,
         description=description,
         project_id=project_id,
-        created_by_id=current_user.user_id,
-        organization_id=current_user.organization_id,
-        instrument_id=instrument_id,
-    )
-
-    return await _save_uploaded_dataset(
-        dataset=dataset, upload_file=file, db=db, target_cols=target_cols
+        target_cols=target_cols,
     )
 
 
