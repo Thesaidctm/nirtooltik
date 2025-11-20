@@ -19,6 +19,10 @@ def get_role(session: Session, role_id: int) -> Optional[Role]:
     return session.get(Role, role_id)
 
 
+def get_role_by_name(session: Session, *, name: str) -> Optional[Role]:
+    return session.query(Role).filter_by(name=name).first()
+
+
 def update_role(
     session: Session, role_id: int, *, name: Optional[str] = None
 ) -> Optional[Role]:

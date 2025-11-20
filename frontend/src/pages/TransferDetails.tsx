@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { API_BASE_URL } from '../api/client'
+import { api } from '../api/client'
 import type { CalibrationTransfer } from '../types/transfers'
 import { parseSpectraFile, parseSpectraFromText } from '../utils/spectraParsers'
 
@@ -24,11 +24,7 @@ const TransferDetails = () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`${API_BASE_URL}/calibration-transfers/${transferId}`)
-      if (!response.ok) {
-        throw new Error('Não foi possível carregar a transferência')
-      }
-      const data: CalibrationTransfer = await response.json()
+      const data = await api.get<CalibrationTransfer>(`/calibration-transfers/${transferId}`)
       setTransfer(data)
     } catch (err) {
       console.error(err)
@@ -67,17 +63,9 @@ const TransferDetails = () => {
         throw new Error('Não foi possível extrair espectros válidos do arquivo/texto informado')
       }
 
-      const response = await fetch(`${API_BASE_URL}/calibration-transfers/${transferId}/predict`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spectra }),
+      const data = await api.post<{ y_hat: number[] }>(`/calibration-transfers/${transferId}/predict`, {
+        spectra,
       })
-
-      if (!response.ok) {
-        throw new Error('Falha ao realizar predição')
-      }
-
-      const data: { y_hat: number[] } = await response.json()
       setPredictions(data.y_hat ?? [])
     } catch (err) {
       console.error(err)
