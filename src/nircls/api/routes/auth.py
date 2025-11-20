@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -19,17 +20,17 @@ class LoginData(BaseModel):
     password: str
 
 
-@router.post("/login")
-def login(data: LoginData, response: Response, db: Session = Depends(get_db)):
-    """Authenticate user and issue a JWT stored in an HttpOnly cookie."""
-
-    user = db.query(User).filter_by(username=data.username).first()
-    if not user or not verify_password(data.password, user.hashed_password):
+def _authenticate(username: str, password: str, db: Session) -> User:
+    user = db.query(User).filter_by(username=username).first()
+    if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=i18n.t("auth.invalid_credentials"),
         )
+    return user
 
+
+def _issue_token_response(user: User, response: Response) -> dict[str, str]:
     token = create_access_token(subject=str(user.user_id))
     expires = timedelta(seconds=ACCESS_TOKEN_EXPIRE_SECONDS)
     response.set_cookie(
@@ -41,7 +42,27 @@ def login(data: LoginData, response: Response, db: Session = Depends(get_db)):
         secure=True,
         samesite="lax",
     )
-    return {"message": "login successful"}
+    return {"access_token": token, "token_type": "bearer"}
+
+
+@router.post("/login")
+def login(data: LoginData, response: Response, db: Session = Depends(get_db)):
+    """Authenticate user with JSON payload and return a JWT."""
+
+    user = _authenticate(data.username, data.password, db)
+    return _issue_token_response(user, response)
+
+
+@router.post("/auth/token")
+def token(
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
+    """OAuth2-compatible login endpoint returning a bearer token."""
+
+    user = _authenticate(form_data.username, form_data.password, db)
+    return _issue_token_response(user, response)
 
 
 @router.post("/logout")

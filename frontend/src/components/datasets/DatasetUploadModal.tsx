@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { API_BASE_URL } from '../../api/client'
+import { api } from '../../api/client'
 import type { DatasetApiResponse, Instrument } from '../../types/datasets'
 import { normalizeDataset } from '../../types/datasets'
 
@@ -26,11 +26,7 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
     setLoadingInstruments(true)
     setInstrumentsError(null)
     try {
-      const response = await fetch(`${API_BASE_URL}/instruments`)
-      if (!response.ok) {
-        throw new Error(await response.text())
-      }
-      const data: Instrument[] = await response.json()
+      const data = await api.get<Instrument[]>(`/instruments`)
       setInstruments(data)
     } catch (err) {
       console.error(err)
@@ -79,18 +75,7 @@ const DatasetUploadModal = ({ isOpen, onClose, onUploaded }: DatasetUploadModalP
       }
       formData.append('file', file)
 
-      const response = await fetch(`${API_BASE_URL}/datasets`, {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const text = await response.text()
-        setError(text || `Erro ${response.status}`)
-        return
-      }
-
-      const createdResponse: DatasetApiResponse = await response.json()
+      const createdResponse = await api.post<DatasetApiResponse>('/datasets', formData)
       normalizeDataset(createdResponse)
 
       onUploaded()

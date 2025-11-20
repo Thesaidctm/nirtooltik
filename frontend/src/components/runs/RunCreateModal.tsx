@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
+
+import { api } from '../../api/client'
 import type { Dataset } from '../../types/datasets'
 import type { Run } from '../../types/runs'
 
 interface RunCreateModalProps {
   isOpen: boolean
   datasets: Dataset[]
-  apiBaseUrl: string
   onClose: () => void
   onCreated: (run: Run) => void
 }
@@ -20,7 +21,7 @@ const profileModels: Record<ModelProfile, { name: string; params: Record<string,
 
 const stepTitles = ['Dataset', 'Targets', 'Perfil de modelos', 'Configuração de CV']
 
-const RunCreateModal = ({ isOpen, datasets, apiBaseUrl, onClose, onCreated }: RunCreateModalProps) => {
+const RunCreateModal = ({ isOpen, datasets, onClose, onCreated }: RunCreateModalProps) => {
   const [currentStep, setCurrentStep] = useState(0)
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('')
   const [selectedTargets, setSelectedTargets] = useState<string[]>([])
@@ -89,17 +90,7 @@ const RunCreateModal = ({ isOpen, datasets, apiBaseUrl, onClose, onCreated }: Ru
     }
 
     try {
-      const response = await fetch(`${apiBaseUrl}/runs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      if (!response.ok) {
-        throw new Error('Não foi possível criar a calibração')
-      }
-
-      const created: Run = await response.json()
+      const created = await api.post<Run>('/runs', payload)
       onCreated(created)
       onClose()
     } catch (err) {
