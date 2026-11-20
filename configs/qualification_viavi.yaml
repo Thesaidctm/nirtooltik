@@ -1,0 +1,28 @@
+# Exemplo para qualificação de madeiras comerciais — MicroNIR Viavi
+# Executar o adaptador scripts/prepare_viavi_qualification.py primeiro.
+# ATENÇÃO: nome_popular é alvo PROVISÓRIO, não identidade botânica autenticada.
+data:
+  input_path: data/RAW/NIRCLS_VIAVI_modelo_min8grupos.csv
+  target_col: nome_popular
+  group_col: grupo_codigo
+  spectral_range: [908.1, 1676.19999]
+  drop_nans: true
+  out_dir: results/qualificacao_micronir_viavi
+
+preprocess:
+  steps: [SNV]
+  evaluate_individual: false
+
+cv:
+  random_state: 2026
+  cv_method: group
+  inner_folds: 3
+  strategies:
+    - type: kfold
+      n_splits: [4]
+
+models:
+  - name: PLSDA
+    grid:
+      n_components: [2, 4, 6, 8, 12]
+      method: [logreg]
